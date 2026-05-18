@@ -188,19 +188,28 @@ async def _list_allowed_agents(
     return ordered, total
 
 
+async def _fresh_task_read(db: AsyncSession, task_id: str) -> Task | None:
+    """Read a task from DB bypassing the session identity map.
+
+    ``db.get()`` returns the cached object from the session's identity map,
+    so updates committed by a *different* session (e.g. the supervisor) are
+    invisible.  ``expire_all()`` triggers synchronous lazy-loads which raise
+    ``MissingGreenlet`` in async context.  The safe approach is a fresh
+    ``select()`` with ``populate_existing=True``.
+    """
+    result = await db.execute(
+        select(Task).where(Task.id == task_id).execution_options(populate_existing=True)
+    )
+    return result.scalar_one_or_none()
+
+
 async def _wait_for_task_completion(
     db: AsyncSession, task_id: str, max_wait: float = 60.0, poll_interval: float = 1.0,
 ) -> Task | None:
-    """Poll the task until it reaches a terminal state or *max_wait* expires.
-
-    Uses ``db.expire_all()`` before each read to bypass SQLAlchemy's identity
-    map cache so that updates committed by the supervisor in a separate session
-    are visible.
-    """
+    """Poll the task until it reaches a terminal state or *max_wait* expires."""
     deadline = time.monotonic() + max_wait
     while time.monotonic() < deadline:
-        await db.expire_all()
-        task = await db.get(Task, task_id)
+        task = await _fresh_task_read(db, task_id)
         if task is None:
             return None
         if task.status in ("completed", "failed", "cancelled"):
@@ -210,8 +219,7 @@ async def _wait_for_task_completion(
             break
         await asyncio.sleep(min(poll_interval, remaining))
     # One final read
-    await db.expire_all()
-    return await db.get(Task, task_id)
+    return await _fresh_task_read(db, task_id)
 
 # ---------------------------------------------------------------------------
 # Tool dispatch
