@@ -2,6 +2,64 @@
 
 ## Unreleased
 
+## 2026-05-19
+
+### Added
+- **AI Avatar Generation** — agents can generate avatars via HQ Operator using AI image generation
+  - Post-task hook auto-applies AI-generated image from operator workspace to target agent
+  - WebSocket `avatar.updated` event refreshes agent detail page in real-time
+- **Deterministic Avatar Generation** — instant gradient + initials PNG avatar derived from agent name (SHA-256)
+  - 12 color palettes, 256×256 PNG via Pillow, always same avatar for same name
+- **Default Hermes Version for new agents** — set from Settings → Hermes Versions → "Set as default"
+  - New agents created without specifying a version inherit the default
+  - `_resolve_runtime_defaults()` reads `default_hermes_version` from `AppSettings`
+- **`connected_at` counter for all messaging platforms** — tracks days since a channel connected
+  - WhatsApp: tracks since QR pairing (creds.json appeared)
+  - Telegram / MS Teams / Google Chat: tracks since gateway started running
+  - Automatic migration from legacy `whatsapp_paired_at` → `connected_at`
+  - Visible in agent messaging panel (per-channel) and Dashboard → Channels section
+- **Access control for MS Teams & Google Chat gateways**
+  - Allowed users filter: Teams by AAD Object ID, Google Chat by email
+  - `require_mention` support: Teams via `entities[]`, Google Chat via `annotations[]`
+  - DM bypass: personal conversations always pass through
+  - Unauthorized DM behavior: `"pair"` (respond) or `"ignore"` (silence)
+- **Metadata fields for enterprise channels** — App ID, Tenant ID (Teams) and Project ID (Google Chat) configurable in channel form
+- **Dashboard Channels section** — overview table showing all connected channels across agents with platform, status, and days connected
+- **i18n keys for MS Teams & Google Chat** — 20+ new translation keys in English and Spanish
+
+### Changed
+- **MS Teams migrated to native Hermes Agent plugin** (v0.14+)
+  - Removed custom `teams_gateway.py` (−501 lines) — Teams now handled by `plugins/platforms/teams` inside hermes-agent
+  - `hermes_installation.py` writes `platforms.teams` config + `TEAMS_*` env vars
+  - Gains: Adaptive Cards, threading, images, typing indicator, meeting summaries, deduplication
+- **Google Chat secrets now properly decrypted** via `SecretVault` — was reading non-existent `secret.value`
+- **MS Teams secrets now properly decrypted** via `SecretVault` — same fix as Google Chat
+- **EventBroker** — added `subscribe()`/`unsubscribe()` for internal pub/sub alongside WebSocket
+- **MCP `invoke_agent`** — uses `populate_existing=True` fresh query instead of `expire_all()` to avoid `MissingGreenlet`
+- **MCP tool responses** — enriched `text` field with full data for LLM clients that don't read `structuredContent`
+- **ChannelForm** — Telegram-only fields (allowed users, home chat, behavior) hidden from MS Teams & Google Chat
+- **Manual** — MS Teams section updated for native plugin; Google Chat and Teams sections expanded with secret setup + curl tests
+- **Avatar service layer** — `save_avatar_bytes()` reusable function, supervisor no longer duplicates filesystem logic
+- **DashboardPage** — Channels section now shows all connected platforms (not just WhatsApp)
+
+### Fixed
+- **MCP `invoke_agent` response not returned** — SQLAlchemy identity map cache returned stale task in polling loop
+- **MCP `MissingGreenlet`** — `expire_all()` caused synchronous lazy loading in async context
+- **Google Chat webhook 500** — `session_factory` not registered in `app.state`
+- **MS Teams/Google Chat labels showed "Telegram"** — `enableLabelKey`/`saveLabelKey` now platform-specific
+- **Secret filter excluded Teams/Google Chat** — selector now shows secrets with any of the 4 providers
+- **Google Chat hardcoded Spanish strings** — replaced with English-neutral text
+- **`AgentDetailPage`** — WebSocket listener for `avatar.updated` auto-refreshes agent query
+- **Settings update** — invalidates `hermes-versions` query so default badge refreshes
+
+### Removed
+- `teams_gateway.py` — MS Teams now handled by native Hermes Agent plugin
+- Authentik-specific code, configs, and documentation (`docker-compose.authentik.yml`, `authentik_plan.md`, `authentik_pending.md`, `authentik-local/`)
+- Authentik references from `.env`, `.env.example`, `docker-compose.yml`, `config.py`, `auth.py`, `ManualPage.tsx`
+
+### Contributors
+- @ElizabethJMB — ManualPage UI refactor (#4), TasksPage vertical Kanban (#5)
+
 ## 2026-05-14
 
 ### Added
