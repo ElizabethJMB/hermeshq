@@ -266,6 +266,13 @@ const ns: Record<string, string> = {
   "agent.googleChatMetadataHint": "The project ID where the Google Chat API and Service Account are configured. Found in Google Cloud Console → IAM & Admin → Settings.",
   "agent.daysConnected": "Days connected",
   "agent.connectedSince": "Connected since",
+  "agent.fallbackProvider": "Fallback Provider",
+  "agent.fallbackModel": "Fallback Model",
+  "agent.fallbackApiKey": "Fallback API Key",
+  "agent.fallbackBaseUrl": "Fallback Base URL",
+  "agent.fallbackSectionTitle": "Fallback Provider",
+  "agent.fallbackSectionDesc": "When the primary provider fails, the agent will automatically retry with this configuration.",
+  "agent.fallbackHint": "Optional. Tasks that fail with the primary provider will automatically retry using these settings.",
 };
 
 export default ns;

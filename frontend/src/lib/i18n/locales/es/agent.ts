@@ -266,6 +266,13 @@ const ns: Record<string, string> = {
   "agent.googleChatMetadataHint": "El ID del proyecto donde están configurados la Google Chat API y la Service Account. Se encuentra en Google Cloud Console → IAM & Admin → Settings.",
   "agent.daysConnected": "Días conectado",
   "agent.connectedSince": "Conectado desde",
+  "agent.fallbackProvider": "Provider de respaldo",
+  "agent.fallbackModel": "Modelo de respaldo",
+  "agent.fallbackApiKey": "API Key de respaldo",
+  "agent.fallbackBaseUrl": "URL base de respaldo",
+  "agent.fallbackSectionTitle": "Provider de respaldo",
+  "agent.fallbackSectionDesc": "Cuando el provider principal falla, el agente reintentará automáticamente con esta configuración.",
+  "agent.fallbackHint": "Opcional. Las tareas que fallen con el provider principal se reintentarán automáticamente con estos ajustes.",
 };
 
 export default ns;

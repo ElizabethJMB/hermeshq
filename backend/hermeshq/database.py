@@ -151,6 +151,14 @@ def _run_schema_updates(sync_connection) -> None:
     if "integration_configs" not in agent_columns:
         sync_connection.execute(text("ALTER TABLE agents ADD COLUMN integration_configs JSON"))
         sync_connection.execute(text("UPDATE agents SET integration_configs = '{}' WHERE integration_configs IS NULL"))
+    if "fallback_provider" not in agent_columns:
+        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN fallback_provider VARCHAR(64)"))
+    if "fallback_model" not in agent_columns:
+        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN fallback_model VARCHAR(255)"))
+    if "fallback_api_key_ref" not in agent_columns:
+        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN fallback_api_key_ref VARCHAR(128)"))
+    if "fallback_base_url" not in agent_columns:
+        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN fallback_base_url VARCHAR(512)"))
     settings_columns = {column["name"] for column in inspector.get_columns("app_settings")}
     if "app_name" not in settings_columns:
         sync_connection.execute(text("ALTER TABLE app_settings ADD COLUMN app_name VARCHAR(128)"))

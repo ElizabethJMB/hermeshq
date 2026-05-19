@@ -206,6 +206,12 @@ export function AgentDetailPage() {
   const [approvalModeDraft, setApprovalModeDraft] = useState("inherit");
   const [toolProgressModeDraft, setToolProgressModeDraft] = useState("inherit");
   const [gatewayNotificationsModeDraft, setGatewayNotificationsModeDraft] = useState("inherit");
+  const [fallbackDraft, setFallbackDraft] = useState<{
+    provider: string | null;
+    model: string | null;
+    api_key_ref: string | null;
+    base_url: string | null;
+  }>({ provider: null, model: null, api_key_ref: null, base_url: null });
   const [integrationDrafts, setIntegrationDrafts] = useState<Record<string, Record<string, string>>>({});
   const [integrationTestResults, setIntegrationTestResults] = useState<
     Record<string, { success: boolean; message: string; details?: Record<string, unknown> | null }>
@@ -321,7 +327,12 @@ export function AgentDetailPage() {
     setApprovalModeDraft(agent.approval_mode ?? "inherit");
     setToolProgressModeDraft(agent.tool_progress_mode ?? "inherit");
     setGatewayNotificationsModeDraft(agent.gateway_notifications_mode ?? "inherit");
-    const nextIntegrationDrafts: Record<string, Record<string, string>> = {};
+    setFallbackDraft({
+      provider: agent.fallback_provider ?? null,
+      model: agent.fallback_model ?? null,
+      api_key_ref: agent.fallback_api_key_ref ?? null,
+      base_url: agent.fallback_base_url ?? null,
+    });: Record<string, Record<string, string>> = {};
     for (const integration of managedIntegrations ?? []) {
       const currentConfig = (agent.integration_configs?.[integration.slug] as Record<string, unknown> | undefined) ?? {};
       nextIntegrationDrafts[integration.slug] = Object.fromEntries(
@@ -478,6 +489,10 @@ export function AgentDetailPage() {
         approval_mode: approvalModeDraft,
         tool_progress_mode: toolProgressModeDraft,
         gateway_notifications_mode: gatewayNotificationsModeDraft,
+        fallback_provider: fallbackDraft.provider,
+        fallback_model: fallbackDraft.model,
+        fallback_api_key_ref: fallbackDraft.api_key_ref,
+        fallback_base_url: fallbackDraft.base_url,
       },
     });
   }
@@ -833,6 +848,7 @@ export function AgentDetailPage() {
                           ),
                         },
                         { label: t("agents.secretRef"), value: agent.api_key_ref ?? t("agent.none") },
+                        { label: t("agent.fallbackProvider"), value: agent.fallback_provider ? `${agent.fallback_provider} / ${agent.fallback_model ?? "—"}` : t("agent.none") },
                         { label: t("agents.node"), value: agent.node?.name ?? t("agent.localRuntime") },
                       ].map((item) => (
                         <div
@@ -1024,6 +1040,83 @@ export function AgentDetailPage() {
                           ) : (
                             <div className="rounded-2xl border border-[var(--border-visible)] bg-[color-mix(in_srgb,var(--surface)_86%,transparent)] px-4 py-3 text-sm text-[var(--text-display)]">
                               {t(gatewayNotificationsModeOptions.find((option) => option.value === gatewayNotificationsModeDraft)?.labelKey ?? "agent.interactionModeInherit")}
+                            </div>
+                          )}
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <div className="border-b border-[var(--border)] pb-4">
+                        <p className="panel-label">{t("agent.fallbackSectionTitle")}</p>
+                        <h5 className="mt-2 text-base text-[var(--text-display)]">{t("agent.fallbackSectionDesc")}</h5>
+                        <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--text-secondary)]">
+                          {t("agent.fallbackHint")}
+                        </p>
+                      </div>
+                      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                        <label className="panel-field">
+                          <span className="panel-label">{t("agent.fallbackProvider")}</span>
+                          {isAdmin ? (
+                            <input
+                              type="text"
+                              value={fallbackDraft.provider ?? ""}
+                              placeholder={agent.provider || "openrouter"}
+                              onChange={(e) => setFallbackDraft((d) => ({ ...d, provider: e.target.value || null }))}
+                            />
+                          ) : (
+                            <div className="rounded-2xl border border-[var(--border-visible)] bg-[color-mix(in_srgb,var(--surface)_86%,transparent)] px-4 py-3 text-sm text-[var(--text-display)]">
+                              {agent.fallback_provider || "—"}
+                            </div>
+                          )}
+                        </label>
+                        <label className="panel-field">
+                          <span className="panel-label">{t("agent.fallbackModel")}</span>
+                          {isAdmin ? (
+                            <input
+                              type="text"
+                              value={fallbackDraft.model ?? ""}
+                              placeholder={agent.model || "anthropic/claude-sonnet-4"}
+                              onChange={(e) => setFallbackDraft((d) => ({ ...d, model: e.target.value || null }))}
+                            />
+                          ) : (
+                            <div className="rounded-2xl border border-[var(--border-visible)] bg-[color-mix(in_srgb,var(--surface)_86%,transparent)] px-4 py-3 text-sm text-[var(--text-display)]">
+                              {agent.fallback_model || "—"}
+                            </div>
+                          )}
+                        </label>
+                        <label className="panel-field">
+                          <span className="panel-label">{t("agent.fallbackApiKey")}</span>
+                          {isAdmin ? (
+                            <select
+                              value={fallbackDraft.api_key_ref ?? ""}
+                              onChange={(e) => setFallbackDraft((d) => ({ ...d, api_key_ref: e.target.value || null }))}
+                            >
+                              <option value="">{t("agent.none")}</option>
+                              {(secrets ?? []).map((s) => (
+                                <option key={s.id} value={s.name}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <div className="rounded-2xl border border-[var(--border-visible)] bg-[color-mix(in_srgb,var(--surface)_86%,transparent)] px-4 py-3 text-sm text-[var(--text-display)]">
+                              {agent.fallback_api_key_ref || "—"}
+                            </div>
+                          )}
+                        </label>
+                        <label className="panel-field">
+                          <span className="panel-label">{t("agent.fallbackBaseUrl")}</span>
+                          {isAdmin ? (
+                            <input
+                              type="text"
+                              value={fallbackDraft.base_url ?? ""}
+                              placeholder="https://..."
+                              onChange={(e) => setFallbackDraft((d) => ({ ...d, base_url: e.target.value || null }))}
+                            />
+                          ) : (
+                            <div className="rounded-2xl border border-[var(--border-visible)] bg-[color-mix(in_srgb,var(--surface)_86%,transparent)] px-4 py-3 text-sm text-[var(--text-display)]">
+                              {agent.fallback_base_url || "—"}
                             </div>
                           )}
                         </label>
