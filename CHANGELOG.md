@@ -26,6 +26,12 @@
 - **Metadata fields for enterprise channels** — App ID, Tenant ID (Teams) and Project ID (Google Chat) configurable in channel form
 - **Dashboard Channels section** — overview table showing all connected channels across agents with platform, status, and days connected
 - **i18n keys for MS Teams & Google Chat** — 20+ new translation keys in English and Spanish
+- **Fallback Provider (Nivel 2)** — automatic retry with alternate provider on failure
+  - Agent model: `fallback_provider`, `fallback_model`, `fallback_api_key_ref`, `fallback_base_url`
+  - `HermesRuntime.execute()`: catches `RuntimeExecutionError`, resolves fallback API key, retries execution
+  - If fallback also fails, task fails with fallback error message
+  - Frontend: editable "Fallback Provider" section in Runtime Settings with 4 fields
+  - DB migration: auto-adds 4 columns on startup
 
 ### Changed
 - **MS Teams migrated to native Hermes Agent plugin** (v0.14+)

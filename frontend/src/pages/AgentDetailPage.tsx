@@ -332,7 +332,8 @@ export function AgentDetailPage() {
       model: agent.fallback_model ?? null,
       api_key_ref: agent.fallback_api_key_ref ?? null,
       base_url: agent.fallback_base_url ?? null,
-    });: Record<string, Record<string, string>> = {};
+    });
+    const nextIntegrationDrafts: Record<string, Record<string, string>> = {};
     for (const integration of managedIntegrations ?? []) {
       const currentConfig = (agent.integration_configs?.[integration.slug] as Record<string, unknown> | undefined) ?? {};
       nextIntegrationDrafts[integration.slug] = Object.fromEntries(
