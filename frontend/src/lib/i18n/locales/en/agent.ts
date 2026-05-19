@@ -264,6 +264,8 @@ const ns: Record<string, string> = {
   "agent.googleChatMetadata": "Google Cloud Configuration",
   "agent.googleProjectId": "Google Cloud Project ID",
   "agent.googleChatMetadataHint": "The project ID where the Google Chat API and Service Account are configured. Found in Google Cloud Console → IAM & Admin → Settings.",
+  "agent.daysConnected": "Days connected",
+  "agent.connectedSince": "Connected since",
 };
 
 export default ns;

@@ -155,6 +155,12 @@ export function ChannelForm({
 }) {
   const { t } = useI18n();
 
+  const daysConnected = useMemo(() => {
+    if (!runtime?.paired_at) return null;
+    const diff = Date.now() - new Date(runtime.paired_at).getTime();
+    return Math.floor(diff / (1000 * 60 * 60 * 24));
+  }, [runtime?.paired_at]);
+
   const resolvedSecretOptions = useMemo(() => {
     if (form.secret_ref && !secretOptions.includes(form.secret_ref)) {
       return [form.secret_ref, ...secretOptions];
@@ -195,6 +201,12 @@ export function ChannelForm({
               value={pairingStatus ?? t("agent.none")}
               subtle={!pairingStatus}
             />
+            {daysConnected !== null && (
+              <ChannelStat
+                label={t("agent.daysConnected")}
+                value={`${daysConnected}`}
+              />
+            )}
             <ChannelStat
               label={t("agent.allowedUsers")}
               value="—"

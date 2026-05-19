@@ -563,4 +563,5 @@ export interface MessagingChannelRuntime {
   session_path: string | null;
   bridge_log_path: string | null;
   pairing_qr_text: string | null;
+  paired_at: string | null;
 }

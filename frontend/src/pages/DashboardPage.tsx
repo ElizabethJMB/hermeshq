@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 import { useAgents } from "../api/agents";
 import { AgentAvatar } from "../components/AgentAvatar";
-import { useDashboardOverview } from "../api/dashboard";
+import { useDashboardOverview, useDashboardChannels } from "../api/dashboard";
 import { AgentOrgChart } from "../components/AgentOrgChart";
 import { useI18n } from "../lib/i18n";
 import { UserAvatar } from "../components/UserAvatar";
@@ -28,6 +28,7 @@ export function DashboardPage() {
   const { data: agents } = useAgents();
   const realtime = useRealtimeStore((state) => state.events);
   const currentUser = useSessionStore((state) => state.user);
+  const { data: channels } = useDashboardChannels();
   const { t, formatDateTime } = useI18n();
   const liveFeed = realtime.slice(0, 5);
 
@@ -178,6 +179,48 @@ export function DashboardPage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="dashboard-channels-card panel-frame p-6">
+        <div className="flex items-end justify-between gap-4 border-b border-[var(--border)] pb-4">
+          <div>
+            <p className="panel-label">{t("dashboard.channelsTitle")}</p>
+            <h3 className="mt-2 text-2xl text-[var(--text-display)]">{t("dashboard.channelsTitle")}</h3>
+          </div>
+        </div>
+        <div className="mt-4">
+          {channels?.filter((ch) => ch.paired_at).map((channel) => (
+            <div
+              key={`${channel.agent_id}-${channel.platform}`}
+              className="grid gap-3 border-b border-[var(--border)] py-4 md:grid-cols-[1.4fr_1fr_1fr_1fr]"
+            >
+              <div>
+                <p className="panel-label">{channel.agent_slug}</p>
+                <p className="mt-2 text-sm text-[var(--text-display)]">{channel.agent_name}</p>
+              </div>
+              <div>
+                <p className="panel-label">{t("dashboard.platform", { defaultValue: "Platform" })}</p>
+                <p className="mt-2 text-sm text-[var(--text-primary)] capitalize">{channel.platform.replace("_", " ")}</p>
+              </div>
+              <div>
+                <p className="panel-label">{t("dashboard.status")}</p>
+                <p className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-sm uppercase tracking-[0.1em] ${statusBadgeTone(channel.status)}`}>
+                  {channel.status}
+                </p>
+              </div>
+              <div>
+                <p className="panel-label">{t("dashboard.connectedSince")}</p>
+                <p className="mt-2 flex items-center gap-2 text-sm text-[var(--text-primary)]">
+                  <span className="inline-block h-2 w-2 rounded-full bg-[var(--success)]" />
+                  {channel.days_since_paired ?? "—"} {t("dashboard.daysConnected")}
+                </p>
+              </div>
+            </div>
+          ))}
+          {!channels?.filter((ch) => ch.paired_at).length && (
+            <p className="py-4 text-sm text-[var(--text-secondary)]">{t("dashboard.noChannelsFound")}</p>
+          )}
         </div>
       </section>
     </div>

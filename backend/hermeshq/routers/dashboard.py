@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import false, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +8,7 @@ from hermeshq.core.security import get_accessible_agent_ids, get_current_user, i
 from hermeshq.database import get_db_session
 from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
+from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.task import Task
 from hermeshq.models.user import User
 
@@ -148,3 +151,46 @@ async def activity(
         }
         for item in result.scalars().all()
     ]
+
+
+@router.get("/channels")
+async def channels_overview(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> list[dict]:
+    statement = (
+        select(MessagingChannel, Agent)
+        .join(Agent, MessagingChannel.agent_id == Agent.id)
+        .order_by(Agent.name.asc(), MessagingChannel.platform.asc())
+    )
+    if not is_admin(current_user):
+        accessible_ids = await get_accessible_agent_ids(db, current_user)
+        if accessible_ids:
+            statement = statement.where(Agent.id.in_(accessible_ids))
+        else:
+            statement = statement.where(false())
+
+    rows = (await db.execute(statement)).all()
+    channels: list[dict] = []
+    for channel, agent in rows:
+        meta = channel.metadata_json or {}
+        paired_at_str = meta.get("connected_at") or meta.get("whatsapp_paired_at")
+        paired_at: datetime | None = None
+        days_since_paired: int | None = None
+        if paired_at_str:
+            try:
+                paired_at = datetime.fromisoformat(paired_at_str)
+                days_since_paired = (datetime.utcnow() - paired_at).days
+            except (ValueError, TypeError):
+                pass
+        channels.append({
+            "agent_id": agent.id,
+            "agent_name": agent.name,
+            "agent_slug": agent.slug,
+            "platform": channel.platform,
+            "enabled": channel.enabled,
+            "status": channel.status,
+            "paired_at": paired_at.isoformat() if paired_at else None,
+            "days_since_paired": days_since_paired,
+        })
+    return channels

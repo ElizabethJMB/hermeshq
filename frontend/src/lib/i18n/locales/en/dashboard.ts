@@ -20,6 +20,10 @@ const ns: Record<string, string> = {
   "dashboard.status": "Status",
   "dashboard.recentActivity": "Recent activity",
   "dashboard.noMessage": "No message",
+  "dashboard.channelsTitle": "Channels",
+  "dashboard.daysConnected": "days connected",
+  "dashboard.connectedSince": "Connected since",
+  "dashboard.noChannelsFound": "No channels connected yet",
 };
 
 export default ns;
