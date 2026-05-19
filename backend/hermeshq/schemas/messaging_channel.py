@@ -53,3 +53,4 @@ class MessagingChannelRuntimeRead(BaseModel):
     session_path: str | None = None
     bridge_log_path: str | None = None
     pairing_qr_text: str | None = None
+    paired_at: datetime | None = None

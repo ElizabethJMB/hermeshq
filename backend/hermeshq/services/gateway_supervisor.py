@@ -262,6 +262,7 @@ class GatewaySupervisor:
             if not channel:
                 return {"status": "missing", "pid": None, "log_path": None}
             bootstrap = dict((channel.metadata_json or {}).get("bootstrap") or {})
+            connected_at = (channel.metadata_json or {}).get("connected_at")
 
         handle = self.processes.get(agent_id)
         running = bool(handle and handle.process.poll() is None and platform in handle.platforms)
@@ -273,6 +274,15 @@ class GatewaySupervisor:
         status = "running" if running else channel.status
         if platform == "whatsapp" and pairing_status == "waiting_scan":
             status = "pairing"
+
+        # Update connected_at metadata when connection state changes
+        is_connected = False
+        if platform == "whatsapp":
+            is_connected = paired
+        elif platform in ("telegram", "microsoft_teams"):
+            is_connected = running
+        if is_connected or (channel.metadata_json or {}).get("connected_at"):
+            await self._maybe_update_connected_at(agent_id, platform, is_connected)
 
         return {
             "status": status,
@@ -289,7 +299,31 @@ class GatewaySupervisor:
             "session_path": session_path.as_posix() if session_path else None,
             "bridge_log_path": bridge_log_path.as_posix() if bridge_log_path else None,
             "pairing_qr_text": pairing_qr_text,
+            "paired_at": connected_at,
         }
+
+    async def _maybe_update_connected_at(self, agent_id: str, platform: str, connected: bool) -> None:
+        """Track when a messaging channel becomes connected or disconnected via metadata_json.connected_at."""
+        async with self.session_factory() as session:
+            channel = await self._get_channel(session, agent_id, platform)
+            if not channel:
+                return
+            meta = channel.metadata_json or {}
+            # Migrate legacy whatsapp_paired_at → connected_at
+            if "whatsapp_paired_at" in meta and "connected_at" not in meta:
+                meta["connected_at"] = meta.pop("whatsapp_paired_at")
+                channel.metadata_json = meta
+                await session.commit()
+                return
+            has_connected_at = "connected_at" in meta
+            if connected and not has_connected_at:
+                meta["connected_at"] = datetime.utcnow().isoformat()
+                channel.metadata_json = meta
+                await session.commit()
+            elif not connected and has_connected_at:
+                del meta["connected_at"]
+                channel.metadata_json = meta
+                await session.commit()
 
     def _channel_log_details(self, platform: str, channel: MessagingChannel, extra: dict | None = None) -> dict:
         details = {
