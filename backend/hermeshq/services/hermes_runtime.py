@@ -71,7 +71,29 @@ class HermesRuntime:
                 session_id=session_id,
             )
         except RuntimeExecutionError:
-            raise
+            # ── Fallback provider retry ────────────────────────────────
+            if not self._has_fallback(agent):
+                raise
+            try:
+                fallback_api_key = await self._resolve_api_key(agent.fallback_api_key_ref)
+                return await self._run_real(
+                    agent,
+                    task,
+                    stream_callback,
+                    fallback_api_key,
+                    runtime_system_prompt,
+                    runtime_selection.python_bin,
+                    conversation_history=conversation_history,
+                    session_id=session_id,
+                    fallback_override={
+                        "model": agent.fallback_model,
+                        "provider": agent.fallback_provider,
+                        "base_url": agent.fallback_base_url,
+                        "api_key": fallback_api_key,
+                    },
+                )
+            except Exception:
+                raise  # Fallback also failed — raise its error
         except Exception as exc:
             raise RuntimeExecutionError(str(exc)) from exc
 
@@ -85,10 +107,13 @@ class HermesRuntime:
         runtime_python_bin: str,
         conversation_history: list[dict] | None = None,
         session_id: str | None = None,
+        fallback_override: dict | None = None,
     ) -> RuntimeExecutionResult:
         workspace_path = self.installation_manager.resolve_workspace_path(agent.workspace_path)
         hermes_home = self.installation_manager.build_hermes_home(agent.workspace_path)
         process_env = await self.installation_manager.build_process_env(agent)
+        if fallback_override:
+            process_env = {**process_env, **self._fallback_env(agent, fallback_override.get("api_key"))}
         enabled_toolsets, disabled_toolsets = resolve_effective_toolsets(
             agent.runtime_profile,
             agent.enabled_toolsets,
@@ -113,6 +138,11 @@ class HermesRuntime:
             "conversation_history": conversation_history or [],
             "session_id": session_id,
         }
+
+        if fallback_override:
+            for key, value in fallback_override.items():
+                if value is not None:
+                    payload[key] = value
 
         process = await asyncio.create_subprocess_exec(
             runtime_python_bin,
@@ -180,6 +210,24 @@ class HermesRuntime:
             raise
         except Exception as exc:
             raise RuntimeExecutionError(f"Could not resolve secret '{api_key_ref}'") from exc
+
+    def _has_fallback(self, agent: Agent) -> bool:
+        return bool(agent.fallback_provider or agent.fallback_model or agent.fallback_api_key_ref)
+
+    def _fallback_env(self, agent: Agent, fallback_api_key: str | None) -> dict[str, str]:
+        """Build extra env vars for the fallback provider."""
+        env: dict[str, str] = {}
+        if not agent.fallback_provider:
+            return env
+        provider = normalize_runtime_provider(agent.fallback_provider)
+        for env_name in self.installation_manager._provider_env_names(provider):
+            if fallback_api_key:
+                env[env_name] = fallback_api_key
+        if agent.fallback_base_url:
+            base_env = self.installation_manager._provider_base_url_env_name(provider)
+            if base_env:
+                env[base_env] = agent.fallback_base_url
+        return env
 
     def _has_credentials(self, agent: Agent) -> bool:
         if self._provider_uses_sdk_auth(normalize_runtime_provider(agent.provider)):

@@ -117,6 +117,10 @@ export interface Agent {
   provider: string;
   api_key_ref: string | null;
   base_url: string | null;
+  fallback_provider: string | null;
+  fallback_model: string | null;
+  fallback_api_key_ref: string | null;
+  fallback_base_url: string | null;
   system_prompt: string | null;
   workspace_path: string;
   enabled_toolsets: string[];

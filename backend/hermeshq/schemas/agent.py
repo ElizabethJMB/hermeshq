@@ -22,6 +22,10 @@ class AgentCreate(BaseModel):
     provider: str | None = None
     api_key_ref: str | None = None
     base_url: str | None = None
+    fallback_provider: str | None = None
+    fallback_model: str | None = None
+    fallback_api_key_ref: str | None = None
+    fallback_base_url: str | None = None
     system_prompt: str | None = None
     soul_md: str | None = None
     enabled_toolsets: list[str] | None = None
@@ -47,6 +51,10 @@ class AgentUpdate(BaseModel):
     provider: str | None = None
     api_key_ref: str | None = None
     base_url: str | None = None
+    fallback_provider: str | None = None
+    fallback_model: str | None = None
+    fallback_api_key_ref: str | None = None
+    fallback_base_url: str | None = None
     system_prompt: str | None = None
     soul_md: str | None = None
     enabled_toolsets: list[str] | None = None
@@ -79,6 +87,10 @@ class AgentRead(ORMModel):
     provider: str
     api_key_ref: str | None
     base_url: str | None
+    fallback_provider: str | None
+    fallback_model: str | None
+    fallback_api_key_ref: str | None
+    fallback_base_url: str | None
     system_prompt: str | None
     workspace_path: str
     enabled_toolsets: list[str]
@@ -163,6 +175,10 @@ class AgentTemplateOverrides(BaseModel):
     provider: str | None = None
     api_key_ref: str | None = None
     base_url: str | None = None
+    fallback_provider: str | None = None
+    fallback_model: str | None = None
+    fallback_api_key_ref: str | None = None
+    fallback_base_url: str | None = None
     system_prompt: str | None = None
     soul_md: str | None = None
     enabled_toolsets: list[str] | None = None
