@@ -57,6 +57,9 @@ services:
       BRANDING_ROOT: ${BRANDING_ROOT:-/app/workspaces/_branding}
       PTY_SHELL: ${PTY_SHELL:-/bin/sh}
       CORS_ORIGINS: '${CORS_ORIGINS_JSON:-["http://localhost:3420","http://frontend"]}'
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
     volumes:
       - hermeshq_workspaces:/app/workspaces
     extra_hosts:

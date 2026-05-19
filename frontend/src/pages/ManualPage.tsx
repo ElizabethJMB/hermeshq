@@ -360,6 +360,26 @@ const manualContent: Record<"en" | "es", ManualContent> = {
         ],
       },
       {
+        id: "mcp-claude-desktop",
+        eyebrow: "Integraciones",
+        title: "Conectar Claude Desktop vía MCP",
+        summary:
+          "HermesHQ expone un endpoint MCP que permite a Claude Desktop operar agentes directamente desde el cliente de escritorio. La configuración requiere Node.js 18+, el proxy mcp-remote y un token de acceso generado desde Settings → External Access.",
+        audience: "Solo administradores",
+        bullets: [
+          "Prerrequisitos: Node.js 18 o superior instalado, acceso administrador a HermesHQ y conexión a internet en la máquina Windows.",
+          "Instala Claude Desktop desde claude.ai/download. Las versiones no oficiales (como Antigravity) no leen el archivo de configuración MCP correctamente y no son compatibles.",
+          "Genera el token en HermesHQ: ve a Settings → External Access → Crear nuevo acceso MCP, asigna un nombre descriptivo (ej: claude-desktop) y guarda el token de inmediato. Solo se muestra una vez; si se pierde deberás generar uno nuevo. La credencial también provee el endpoint en el formato https://TU-DOMINIO/mcp.",
+          "Instala el proxy con `npm install -g mcp-remote`. Verifica que npx esté disponible con `where.exe npx` — el resultado esperado es algo como C:\\Program Files\\nodejs\\npx.cmd. El archivo proxy.js quedará en C:\\Users\\TU_USUARIO\\AppData\\Roaming\\npm\\node_modules\\mcp-remote\\dist\\proxy.js.",
+          "Edita o crea %APPDATA%\\Claude\\claude_desktop_config.json con el siguiente contenido: { \"mcpServers\": { \"hermeshq\": { \"command\": \"node\", \"args\": [ \"C:\\\\Users\\\\TU_USUARIO\\\\AppData\\\\Roaming\\\\npm\\\\node_modules\\\\mcp-remote\\\\dist\\\\proxy.js\", \"https://TU-DOMINIO/mcp\", \"--header\", \"Authorization:Bearer XXXXXXXXXXXXXXXXXXXX\" ] } } }",
+          "Reemplaza en el archivo: TU_USUARIO por el usuario de Windows (ej: jperez), TU-DOMINIO por el dominio de HermesHQ (ej: hermes.miempresa.io) y XXXXXXXXXXXXXXXXXXXX por el token Bearer generado.",
+          "Usa `node` como comando en lugar de `npx`: Claude Desktop no siempre resuelve npx desde su PATH interno. Llamar directamente al script proxy.js con node es más confiable.",
+          "Reinicia Claude Desktop completamente desde PowerShell con: Get-Process -Name 'claude' -ErrorAction SilentlyContinue | Stop-Process -Force ; Start-Sleep -Seconds 3 ; Start-Process \"$env:LOCALAPPDATA\\AnthropicClaude\\claude.exe\". Cerrar la ventana no es suficiente — el proceso sigue corriendo en la bandeja del sistema.",
+          "Verifica la conexión en Settings → Developer: el servidor hermeshq debe aparecer como connected o running. Abre un chat nuevo y escribe 'Lista los agentes disponibles' para confirmar que la integración funciona.",
+          "Solución de problemas: si el servidor no aparece en Developer, verifica que el JSON sea válido, que la ruta al proxy.js exista y que Claude Desktop se haya cerrado desde la bandeja. Si hay error de conexión al endpoint, confirma que el dominio es accesible, que el token es correcto y que la URL termina en /mcp.",
+        ],
+      },
+      {
         id: "providers-runtime",
         eyebrow: "Inferencia",
         title: "Cómo configurar providers de inferencia",
@@ -821,6 +841,26 @@ const manualContent: Record<"en" | "es", ManualContent> = {
           "You can configure multiple providers simultaneously. Each user is identified by their email (claim `sub`) and associated with the provider they authenticated with.",
           "The provider table in the database allows adding other OIDC providers in the future (Okta, Keycloak, Cognito) without code changes.",
           "The environment variable-based flow continues to work and is compatible with the multi-provider system.",
+        ],
+      },
+      {
+        id: "mcp-claude-desktop",
+        eyebrow: "Integrations",
+        title: "Connect Claude Desktop via MCP",
+        summary:
+          "HermesHQ exposes an MCP endpoint that lets Claude Desktop operate agents directly from the desktop client. Setup requires Node.js 18+, the mcp-remote proxy, and an access token generated from Settings → External Access.",
+        audience: "Admins only",
+        bullets: [
+          "Prerequisites: Node.js 18 or higher installed, administrator access to HermesHQ, and internet connectivity on the Windows machine.",
+          "Install Claude Desktop from claude.ai/download. Unofficial builds (such as Antigravity) do not read the MCP config file correctly and are not supported.",
+          "Generate the token in HermesHQ: go to Settings → External Access → Create new MCP access, assign a descriptive name (e.g. claude-desktop) and save the token immediately. It is shown only once; if lost, you must generate a new one. The credential also provides the endpoint in the format https://YOUR-DOMAIN/mcp.",
+          "Install the proxy with `npm install -g mcp-remote`. Verify npx is available with `where.exe npx` — the expected result is something like C:\\Program Files\\nodejs\\npx.cmd. The proxy.js file will be located at C:\\Users\\YOUR_USER\\AppData\\Roaming\\npm\\node_modules\\mcp-remote\\dist\\proxy.js.",
+          "Edit or create %APPDATA%\\Claude\\claude_desktop_config.json with the following content: { \"mcpServers\": { \"hermeshq\": { \"command\": \"node\", \"args\": [ \"C:\\\\Users\\\\YOUR_USER\\\\AppData\\\\Roaming\\\\npm\\\\node_modules\\\\mcp-remote\\\\dist\\\\proxy.js\", \"https://YOUR-DOMAIN/mcp\", \"--header\", \"Authorization:Bearer XXXXXXXXXXXXXXXXXXXX\" ] } } }",
+          "Replace in the file: YOUR_USER with the Windows username (e.g. jperez), YOUR-DOMAIN with the HermesHQ domain (e.g. hermes.mycompany.io), and XXXXXXXXXXXXXXXXXXXX with the Bearer token generated above.",
+          "Use `node` as the command instead of `npx`: Claude Desktop does not always resolve npx from its internal PATH. Calling the proxy.js script directly with node is more reliable.",
+          "Restart Claude Desktop fully from PowerShell: Get-Process -Name 'claude' -ErrorAction SilentlyContinue | Stop-Process -Force ; Start-Sleep -Seconds 3 ; Start-Process \"$env:LOCALAPPDATA\\AnthropicClaude\\claude.exe\". Closing the window is not enough — the process keeps running in the system tray.",
+          "Verify the connection under Settings → Developer: the hermeshq server should show as connected or running. Open a new chat and type 'List available agents' to confirm the integration is working.",
+          "Troubleshooting: if the server does not appear in Developer, check that the JSON is valid, that the proxy.js path exists, and that Claude Desktop was closed from the system tray. If there is a connection error to the MCP endpoint, confirm the domain is reachable, the token is correct, and the URL ends in /mcp.",
         ],
       },
       {
