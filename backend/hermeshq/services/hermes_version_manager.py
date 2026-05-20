@@ -62,10 +62,32 @@ class HermesVersionManager:
     _RUN_AGENT_HOTFIX_MARKER = "HERMESHQ_OPENAI_COMPAT_UA_HOTFIX"
     _RUN_AGENT_INIT_NEEDLE = """                elif base_url_host_matches(effective_base, "chatgpt.com"):
                     from agent.auxiliary_client import _codex_cloudflare_headers
-                    client_kwargs["default_headers"] = _codex_cloudflare_headers(api_key)"""
+                    client_kwargs["default_headers"] = _codex_cloudflare_headers(api_key)
+                elif "default_headers" not in client_kwargs:
+                    # Fall back to profile.default_headers for providers that
+                    # declare custom headers (e.g. Vercel AI Gateway attribution,
+                    # Kimi User-Agent on non-kimi.com endpoints).
+                    try:
+                        from providers import get_provider_profile as _gpf
+                        _ph = _gpf(self.provider)
+                        if _ph and _ph.default_headers:
+                            client_kwargs["default_headers"] = dict(_ph.default_headers)
+                    except Exception:
+                        pass"""
     _RUN_AGENT_INIT_REPLACEMENT = """                elif base_url_host_matches(effective_base, "chatgpt.com"):
                     from agent.auxiliary_client import _codex_cloudflare_headers
                     client_kwargs["default_headers"] = _codex_cloudflare_headers(api_key)
+                elif "default_headers" not in client_kwargs:
+                    # Fall back to profile.default_headers for providers that
+                    # declare custom headers (e.g. Vercel AI Gateway attribution,
+                    # Kimi User-Agent on non-kimi.com endpoints).
+                    try:
+                        from providers import get_provider_profile as _gpf
+                        _ph = _gpf(self.provider)
+                        if _ph and _ph.default_headers:
+                            client_kwargs["default_headers"] = dict(_ph.default_headers)
+                    except Exception:
+                        pass
                 else:
                     # HERMESHQ_OPENAI_COMPAT_UA_HOTFIX: generic OpenAI-compatible gateways
                     # behind WAF/CDN layers may block the OpenAI SDK default User-Agent.
