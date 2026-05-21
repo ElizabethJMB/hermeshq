@@ -158,6 +158,9 @@ calculate_postgres_tuning() {
     PG_SHARED_BUFFERS=$((pg_ram_mb / 4))
     PG_EFFECTIVE_CACHE=$((pg_ram_mb * 3 / 4))
     PG_MAX_CONNECTIONS=$((SIZING_SEMAPHORE * 2))
+    if [ "$PG_MAX_CONNECTIONS" -lt 50 ]; then
+        PG_MAX_CONNECTIONS=50
+    fi
 }
 
 # ---------------------------------------------------------------------------
