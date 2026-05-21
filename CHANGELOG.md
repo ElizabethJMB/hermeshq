@@ -103,3 +103,23 @@ All notable changes to HermesHQ are documented in this file.
 
 ### Fixed (post-release)
 - `max_connections` PostgreSQL now has a minimum of 50 to prevent "too many clients already" errors on small deployments where `semaphore * 2` would be insufficient (e.g., semaphore=5 → 10 connections, but 9+ are needed by backend pool alone).
+
+## [2026.5.21.2] - 2025-05-21
+
+### Added
+- **Fleet Health Dashboard** (Issue #7): `GET /api/dashboard/health` — agent status breakdown, task outcome summary, recent errors (10s polling)
+- **Task Analytics Dashboard** (Issue #8): `GET /api/dashboard/analytics` — 14-day time series, P50/P95 completion, top failing agents, success rate (30s polling)
+- FleetHealthPanel component — inline status chips, task counts, error list
+- TaskAnalyticsPanel component — CSS bar charts, completion metrics, failing agents table
+- 33 new i18n keys (EN + ES) for dashboard health and analytics
+
+### Fixed
+- Runtime semaphore update without container restart (`update_runtime_setting()` + `supervisor.update_semaphore()`)
+- `Task.created_at` → `Task.queued_at` (model has no `created_at` field)
+- `max_connections` minimum enforced to 50 across all generators (API, install.sh, resize.sh)
+- Removed `bc` dependency from `hermeshq-resize.sh` (pure bash arithmetic)
+- macOS disk detection fix in `install.sh` (`df -g` fallback for Darwin)
+
+### Specs
+- `SPEC_ISSUE_7.md` — Fleet Health Observability Dashboard detailed spec
+- `SPEC_ISSUE_8.md` — Task Analytics Dashboard detailed spec

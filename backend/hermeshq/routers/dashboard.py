@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import false, func, select
+from sqlalchemy import desc, false, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.core.security import get_accessible_agent_ids, get_current_user, is_admin
@@ -194,3 +194,210 @@ async def channels_overview(
             "days_since_paired": days_since_paired,
         })
     return channels
+
+
+@router.get("/health")
+async def fleet_health(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Fleet-wide health: agent status breakdown, task outcomes, recent errors."""
+    accessible_ids = await get_accessible_agent_ids(db, current_user)
+    agent_scope = Agent.id.in_(accessible_ids) if accessible_ids else false()
+    task_scope = Task.agent_id.in_(accessible_ids) if accessible_ids else false()
+
+    # Agent status breakdown
+    by_status = await db.execute(
+        select(Agent.status, func.count())
+        .where(Agent.is_archived.is_(False), agent_scope)
+        .group_by(Agent.status)
+    )
+    status_breakdown = dict(by_status.all())
+
+    # Task outcome summary
+    task_outcomes = await db.execute(
+        select(Task.status, func.count())
+        .where(task_scope)
+        .group_by(Task.status)
+    )
+    task_summary = dict(task_outcomes.all())
+
+    # Recent errors (last 24h)
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    error_rows = (await db.execute(
+        select(
+            ActivityLog.agent_id,
+            ActivityLog.message,
+            ActivityLog.created_at,
+        )
+        .where(
+            ActivityLog.severity == "error",
+            ActivityLog.created_at >= since,
+        )
+        .order_by(ActivityLog.created_at.desc())
+        .limit(10)
+    )).all()
+
+    # Resolve agent names
+    error_agent_ids = {r[0] for r in error_rows if r[0]}
+    agent_names: dict = {}
+    if error_agent_ids:
+        name_rows = await db.execute(
+            select(Agent.id, Agent.name).where(Agent.id.in_(error_agent_ids))
+        )
+        agent_names = dict(name_rows.all())
+
+    return {
+        "status_breakdown": status_breakdown,
+        "task_summary": task_summary,
+        "recent_errors": [
+            {
+                "agent_id": r[0],
+                "agent_name": agent_names.get(r[0], "Unknown"),
+                "message": r[1],
+                "timestamp": r[2].isoformat() if r[2] else None,
+            }
+            for r in error_rows
+        ],
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/analytics")
+async def task_analytics(
+    days: int = 14,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Task analytics: time-series, completion metrics, top failing agents."""
+    accessible_ids = await get_accessible_agent_ids(db, current_user)
+    task_scope = Task.agent_id.in_(accessible_ids) if accessible_ids else false()
+
+    days = max(1, min(days, 90))  # clamp 1-90
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    # --- Daily task counts by status ---
+    daily_rows = (await db.execute(
+        select(
+            func.date_trunc("day", Task.queued_at).label("day"),
+            Task.status,
+            func.count().label("cnt"),
+        )
+        .where(Task.queued_at >= since, task_scope)
+        .group_by("day", Task.status)
+        .order_by("day")
+    )).all()
+
+    # Build time-series: { "2026-05-20": { "completed": 12, "failed": 2, ... } }
+    time_series: dict[str, dict[str, int]] = {}
+    for row in daily_rows:
+        day_key = row[0].strftime("%Y-%m-%d") if row[0] else "unknown"
+        if day_key not in time_series:
+            time_series[day_key] = {}
+        time_series[day_key][row[1]] = row[2]
+
+    # --- Completion metrics (only completed tasks) ---
+    completed_tasks = (await db.execute(
+        select(
+            func.avg(
+                func.extract("epoch", Task.completed_at - Task.started_at)
+            ).label("avg_seconds"),
+        )
+        .where(
+            Task.status == "completed",
+            Task.started_at.isnot(None),
+            Task.completed_at.isnot(None),
+            Task.completed_at >= since,
+            task_scope,
+        )
+    )).one()
+
+    avg_seconds = float(completed_tasks[0] or 0)
+
+    # --- P50 and P95 ---
+    p50_row = (await db.execute(
+        select(
+            func.percentile_cont(0.5).within_group(
+                func.extract("epoch", Task.completed_at - Task.started_at)
+            )
+        )
+        .where(
+            Task.status == "completed",
+            Task.started_at.isnot(None),
+            Task.completed_at.isnot(None),
+            Task.completed_at >= since,
+            task_scope,
+        )
+    )).scalar()
+
+    p95_row = (await db.execute(
+        select(
+            func.percentile_cont(0.95).within_group(
+                func.extract("epoch", Task.completed_at - Task.started_at)
+            )
+        )
+        .where(
+            Task.status == "completed",
+            Task.started_at.isnot(None),
+            Task.completed_at.isnot(None),
+            Task.completed_at >= since,
+            task_scope,
+        )
+    )).scalar()
+
+    # --- Total counts for success rate ---
+    total_in_period = await db.scalar(
+        select(func.count())
+        .select_from(Task)
+        .where(Task.queued_at >= since, task_scope)
+    ) or 0
+    failed_in_period = await db.scalar(
+        select(func.count())
+        .select_from(Task)
+        .where(Task.status == "failed", Task.queued_at >= since, task_scope)
+    ) or 0
+
+    success_rate = ((total_in_period - failed_in_period) / total_in_period * 100) if total_in_period > 0 else 100.0
+
+    # --- Top failing agents (last 7 days) ---
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    top_fail_rows = (await db.execute(
+        select(
+            Task.agent_id,
+            func.count().label("fail_count"),
+        )
+        .where(Task.status == "failed", Task.queued_at >= seven_days_ago, task_scope)
+        .group_by(Task.agent_id)
+        .order_by(func.count().desc())
+        .limit(5)
+    )).all()
+
+    fail_agent_ids = {r[0] for r in top_fail_rows}
+    fail_agent_names: dict = {}
+    if fail_agent_ids:
+        name_rows = await db.execute(
+            select(Agent.id, Agent.name).where(Agent.id.in_(fail_agent_ids))
+        )
+        fail_agent_names = dict(name_rows.all())
+
+    top_failing = [
+        {"agent_id": r[0], "agent_name": fail_agent_names.get(r[0], "Unknown"), "fail_count": r[1]}
+        for r in top_fail_rows
+    ]
+
+    return {
+        "time_series": time_series,
+        "completion_metrics": {
+            "avg_seconds": round(avg_seconds, 1),
+            "p50_seconds": round(float(p50_row or 0), 1),
+            "p95_seconds": round(float(p95_row or 0), 1),
+        },
+        "totals": {
+            "total": total_in_period,
+            "failed": failed_in_period,
+            "success_rate": round(success_rate, 1),
+        },
+        "top_failing_agents": top_failing,
+        "period_days": days,
+    }

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 import { useAgents } from "../api/agents";
 import { AgentAvatar } from "../components/AgentAvatar";
-import { useDashboardOverview, useDashboardChannels } from "../api/dashboard";
+import { useDashboardOverview, useDashboardChannels, useFleetHealth, useTaskAnalytics } from "../api/dashboard";
 import { AgentOrgChart } from "../components/AgentOrgChart";
 import { useI18n } from "../lib/i18n";
 import { UserAvatar } from "../components/UserAvatar";
@@ -21,6 +21,222 @@ function statusBadgeTone(status: string) {
   if (status === "queued" || status === "starting") return "border-[color-mix(in_srgb,var(--warning)_45%,transparent)] bg-[color-mix(in_srgb,var(--warning)_14%,transparent)] text-[var(--warning)]";
   if (status === "error" || status === "failed") return "border-[color-mix(in_srgb,var(--accent)_45%,transparent)] bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]";
   return "border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_76%,transparent)] text-[var(--text-secondary)]";
+}
+
+function FleetHealthPanel() {
+  const { data: health } = useFleetHealth();
+  const { t } = useI18n();
+
+  if (!health) return null;
+
+  const statusColors: Record<string, string> = {
+    running: "text-[var(--success)]",
+    stopped: "text-[var(--text-secondary)]",
+    error: "text-[var(--accent)]",
+    crashed: "text-[var(--accent)]",
+  };
+
+  const taskColors: Record<string, string> = {
+    completed: "text-[var(--success)]",
+    failed: "text-[var(--accent)]",
+    queued: "text-[var(--warning)]",
+    running: "text-[var(--info)]",
+  };
+
+  const totalAgents = Object.values(health.status_breakdown).reduce((a: number, b: number) => a + b, 0);
+
+  return (
+    <div className="panel-frame p-5">
+      <div className="flex items-center justify-between">
+        <p className="panel-label">{t("dashboard.fleetHealth")}</p>
+        <span className="text-xs text-[var(--text-disabled)]">
+          {t("dashboard.lastUpdated")}: {new Date(health.last_updated).toLocaleTimeString()}
+        </span>
+      </div>
+
+      {/* Agent Status Chips */}
+      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div className="dashboard-metric-chip">
+          <p className="panel-label">{t("dashboard.totalAgents")}</p>
+          <p className="mt-1 text-2xl text-[var(--text-display)]">{totalAgents}</p>
+        </div>
+        {Object.entries(health.status_breakdown).map(([status, count]) => (
+          <div key={status} className="dashboard-metric-chip">
+            <p className="panel-label">
+              {status === "running" ? t("dashboard.runningAgents")
+                : status === "stopped" ? t("dashboard.stoppedAgents")
+                : status === "error" ? t("dashboard.errorAgents")
+                : status}
+            </p>
+            <p className={`mt-1 text-2xl ${statusColors[status] || "text-[var(--text-display)]"}`}>
+              {count as number}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* Task Outcomes */}
+      <div className="mt-3 flex flex-wrap gap-4 border-t border-[var(--border)] pt-3">
+        <p className="panel-label self-center">{t("dashboard.taskOutcomes")}:</p>
+        {Object.entries(health.task_summary).map(([status, count]) => (
+          <div key={status} className="flex items-center gap-1">
+            <span className={`text-sm font-medium ${taskColors[status] || ""}`}>
+              {count as number}
+            </span>
+            <span className="text-xs text-[var(--text-disabled)]">
+              {status === "completed" ? t("dashboard.completed")
+                : status === "failed" ? t("dashboard.failed")
+                : status === "queued" ? t("dashboard.queued")
+                : status === "running" ? t("dashboard.runningTasks")
+                : status}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Recent Errors or Healthy Message */}
+      {health.recent_errors.length > 0 ? (
+        <div className="mt-3 border-t border-[var(--border)] pt-3">
+          <p className="panel-label text-[var(--accent)]">
+            {t("dashboard.recentErrors", { count: health.recent_errors.length })}
+          </p>
+          <div className="mt-2 max-h-40 overflow-y-auto">
+            {health.recent_errors.map((err, i) => (
+              <div key={i} className="flex items-start gap-2 py-1 text-sm">
+                <span className="text-[var(--accent)]">⚠</span>
+                <span className="shrink-0 text-[var(--text-disabled)]">
+                  [{err.agent_name}]
+                </span>
+                <span className="text-[var(--text-secondary)] truncate">
+                  {err.message || t("dashboard.noMessage")}
+                </span>
+                <span className="ml-auto shrink-0 text-xs text-[var(--text-disabled)]">
+                  {err.timestamp ? new Date(err.timestamp).toLocaleTimeString() : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="mt-3 border-t border-[var(--border)] pt-3 text-sm text-[var(--success)]">
+          ✅ {t("dashboard.healthyFleet")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TaskAnalyticsPanel() {
+  const { data: analytics } = useTaskAnalytics(14);
+  const { t } = useI18n();
+
+  if (!analytics) return null;
+
+  const days = Object.keys(analytics.time_series).sort();
+  const maxDailyTotal = Math.max(
+    ...days.map((d) => {
+      const dayData = analytics.time_series[d];
+      return (dayData.completed || 0) + (dayData.failed || 0) + (dayData.queued || 0) + (dayData.running || 0);
+    }),
+    1,
+  );
+
+  return (
+    <div className="panel-frame p-5">
+      <div className="flex items-center justify-between">
+        <p className="panel-label">{t("dashboard.taskAnalytics")}</p>
+        <span className="text-xs text-[var(--text-disabled)]">{t("dashboard.last14Days")}</span>
+      </div>
+
+      {/* Bar Chart */}
+      <div className="mt-4">
+        <p className="panel-label mb-2">{t("dashboard.dailyTasks")}</p>
+        <div className="flex items-end gap-[3px] h-28 overflow-x-auto">
+          {days.map((day) => {
+            const d = analytics.time_series[day];
+            const completed = d.completed || 0;
+            const failed = d.failed || 0;
+            const total = completed + failed;
+            const h = Math.max((total / maxDailyTotal) * 100, 2);
+            return (
+              <div key={day} className="flex flex-col items-center gap-0.5 min-w-[18px]" title={`${day}: ${completed} ok, ${failed} fail`}>
+                <div className="flex flex-col-reverse w-full" style={{ height: `${h}%` }}>
+                  <div
+                    className="w-full rounded-t bg-[var(--success)]"
+                    style={{ height: total > 0 ? `${(completed / total) * 100}%` : "100%" }}
+                  />
+                  {failed > 0 && (
+                    <div className="w-full bg-[var(--accent)]" style={{ height: `${(failed / total) * 100}%` }} />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-1 flex gap-4 text-xs text-[var(--text-disabled)]">
+          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded bg-[var(--success)]" /> {t("dashboard.completedTasks")}</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded bg-[var(--accent)]" /> {t("dashboard.failedTasks")}</span>
+        </div>
+      </div>
+
+      {/* Completion Metrics */}
+      <div className="mt-4 grid grid-cols-3 gap-3 border-t border-[var(--border)] pt-3">
+        <div className="text-center">
+          <p className="panel-label">{t("dashboard.avgTime")}</p>
+          <p className="mt-1 text-lg text-[var(--text-display)]">{analytics.completion_metrics.avg_seconds}{t("dashboard.seconds")}</p>
+        </div>
+        <div className="text-center">
+          <p className="panel-label">{t("dashboard.p50Time")}</p>
+          <p className="mt-1 text-lg text-[var(--text-display)]">{analytics.completion_metrics.p50_seconds}{t("dashboard.seconds")}</p>
+        </div>
+        <div className="text-center">
+          <p className="panel-label">{t("dashboard.p95Time")}</p>
+          <p className="mt-1 text-lg text-[var(--text-display)]">{analytics.completion_metrics.p95_seconds}{t("dashboard.seconds")}</p>
+        </div>
+      </div>
+
+      {/* Success Rate */}
+      <div className="mt-3 border-t border-[var(--border)] pt-3">
+        <div className="flex items-center justify-between">
+          <span className="panel-label">{t("dashboard.successRate")}</span>
+          <span className={`text-lg font-medium ${analytics.totals.success_rate >= 95 ? "text-[var(--success)]" : analytics.totals.success_rate >= 80 ? "text-[var(--warning)]" : "text-[var(--accent)]"}`}>
+            {analytics.totals.success_rate}%
+          </span>
+        </div>
+        <div className="mt-1 h-2 rounded-full bg-[var(--border)]">
+          <div
+            className={`h-full rounded-full ${analytics.totals.success_rate >= 95 ? "bg-[var(--success)]" : analytics.totals.success_rate >= 80 ? "bg-[var(--warning)]" : "bg-[var(--accent)]"}`}
+            style={{ width: `${analytics.totals.success_rate}%` }}
+          />
+        </div>
+        <div className="mt-1 flex justify-between text-xs text-[var(--text-disabled)]">
+          <span>{t("dashboard.totalPeriod")}: {analytics.totals.total}</span>
+          <span>{t("dashboard.failedPeriod")}: {analytics.totals.failed}</span>
+        </div>
+      </div>
+
+      {/* Top Failing Agents */}
+      {analytics.top_failing_agents.length > 0 && (
+        <div className="mt-3 border-t border-[var(--border)] pt-3">
+          <p className="panel-label text-[var(--accent)]">{t("dashboard.topFailingAgents")}</p>
+          <div className="mt-2 space-y-1">
+            {analytics.top_failing_agents.map((agent) => (
+              <div key={agent.agent_id} className="flex items-center justify-between text-sm">
+                <span className="text-[var(--text-primary)]">{agent.agent_name}</span>
+                <span className="text-[var(--accent)]">{agent.fail_count} {t("dashboard.failCount")}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {analytics.top_failing_agents.length === 0 && (
+        <p className="mt-3 border-t border-[var(--border)] pt-3 text-sm text-[var(--success)]">
+          ✅ {t("dashboard.noFailingAgents")}
+        </p>
+      )}
+    </div>
+  );
 }
 
 export function DashboardPage() {
@@ -180,6 +396,11 @@ export function DashboardPage() {
             ))}
           </div>
         </div>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-2">
+        <FleetHealthPanel />
+        <TaskAnalyticsPanel />
       </section>
 
       {channels?.filter((ch) => ch.paired_at).length ? (

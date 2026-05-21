@@ -279,7 +279,7 @@ do_agents_mode() {
     [ "$SIZING_DISK" -gt "$SYS_AVAILABLE_DISK_GB" ] && disk_ok="❌"
 
     printf "  System resources:\n"
-    printf "    RAM:  %s GB available → %s needed %s\n" "$(echo "$SYS_AVAILABLE_RAM_MB / 1024" | bc 2>/dev/null || printf '%d' $((SYS_AVAILABLE_RAM_MB / 1024)))" "$needed_ram_fmt" "$ram_ok"
+    printf "    RAM:  %s GB available → %s needed %s\n" "$((SYS_AVAILABLE_RAM_MB / 1024))" "$needed_ram_fmt" "$ram_ok"
     printf "    CPU:  %s cores → %s needed %s\n" "$SYS_CPU_CORES" "$SIZING_CPU" "$cpu_ok"
     printf "    Disk: %s GB → %s GB needed %s\n" "$SYS_AVAILABLE_DISK_GB" "$SIZING_DISK" "$disk_ok"
     printf "\n"
