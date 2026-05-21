@@ -100,3 +100,6 @@ All notable changes to HermesHQ are documented in this file.
 ### Added
 - Concurrency semaphore (max 8) to prevent OOM on mass task submission.
 - Design document `DESIGN_CONCURRENCY_SIZING.md` for configurable concurrency and resource-aware sizing.
+
+### Fixed (post-release)
+- `max_connections` PostgreSQL now has a minimum of 50 to prevent "too many clients already" errors on small deployments where `semaphore * 2` would be insufficient (e.g., semaphore=5 → 10 connections, but 9+ are needed by backend pool alone).
