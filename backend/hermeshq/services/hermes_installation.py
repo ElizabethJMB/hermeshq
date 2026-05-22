@@ -1,7 +1,9 @@
 import json
+import logging
 import os
 import re
 import shutil
+import stat
 from pathlib import Path
 
 import yaml
@@ -28,6 +30,36 @@ from hermeshq.services.hermes_version_manager import HermesRuntimeSelection, Her
 from hermeshq.services.provider_catalog import normalize_runtime_provider
 from hermeshq.services.runtime_profiles import get_runtime_profile
 from hermeshq.services.secret_vault import SecretVault
+
+logger = logging.getLogger(__name__)
+
+# Keys from os.environ that should NEVER leak into agent subprocesses.
+_SENSITIVE_ENV_PREFIXES = (
+    "AWS_", "GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CREDENTIALS",
+    "KUBECONFIG", "DOCKER_", "GITHUB_TOKEN", "GITLAB_TOKEN",
+    "HEROKU_API_KEY", "STRIPE_", "TWILIO_", "SENDGRID_",
+    "DATABASE_URL", "REDIS_URL", "RABBITMQ_", "KAFKA_",
+    "LDAP_", "VAULT_TOKEN", "VAULT_ADDR",
+    "HERMESHQ_",  # our own internal secrets
+)
+
+
+def _protect_file(path: Path) -> None:
+    """Set file permissions to owner-only read/write (0o600) for files containing secrets."""
+    try:
+        path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        logger.warning("Could not set restrictive permissions on %s", path)
+
+
+def _build_safe_env() -> dict[str, str]:
+    """Build a sanitized copy of os.environ with sensitive keys removed."""
+    safe: dict[str, str] = {}
+    for key, value in os.environ.items():
+        if any(key.upper().startswith(prefix) for prefix in _SENSITIVE_ENV_PREFIXES):
+            continue
+        safe[key] = value
+    return safe
 
 
 class HermesInstallationError(RuntimeError):
@@ -93,7 +125,7 @@ class HermesInstallationManager:
         profile = get_runtime_profile(agent.runtime_profile)
         runtime_provider = normalize_runtime_provider(agent.provider)
         effective_base_url = self._effective_provider_base_url(agent)
-        env = {**os.environ, "HERMES_HOME": str(hermes_home), "TERM": "xterm-256color"}
+        env = {**_build_safe_env(), "HERMES_HOME": str(hermes_home), "TERM": "xterm-256color"}
         env["HERMESHQ_AGENT_ID"] = agent.id
         env["HERMESHQ_AGENT_TOKEN"] = create_agent_service_token(agent.id)
         env["HERMESHQ_INTERNAL_API_URL"] = get_settings().internal_api_base_url.rstrip("/")
@@ -926,6 +958,7 @@ class HermesInstallationManager:
             *[f"{key}={self._format_env_value(value)}" for key, value in managed_env.items() if value],
         ]
         env_path.write_text("\n".join(rendered).strip() + "\n", encoding="utf-8")
+        _protect_file(env_path)
 
     def _format_env_value(self, value: str) -> str:
         if re.fullmatch(r"[A-Za-z0-9_./:@,+-]+", value):
@@ -998,6 +1031,7 @@ class HermesInstallationManager:
         runtime_provider = normalize_runtime_provider(agent.provider)
         if not runtime_provider:
             auth_path.write_text(json.dumps(auth_store, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            _protect_file(auth_path)
             return
 
         api_key = await self._resolve_api_key(agent.api_key_ref)
@@ -1027,6 +1061,7 @@ class HermesInstallationManager:
         else:
             credential_pool[runtime_provider] = entries
         auth_path.write_text(json.dumps(auth_store, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        _protect_file(auth_path)
 
     def _uses_custom_openai_provider(self, agent: Agent) -> bool:
         runtime_provider = normalize_runtime_provider(agent.provider)

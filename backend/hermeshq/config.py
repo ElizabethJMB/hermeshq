@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     user_assets_root: Path | None = None
     integration_packages_root: Path | None = None
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3420"]
+    cookie_secure: bool = False
     pty_shell: str = "/bin/sh"
     internal_api_base_url: str = "http://127.0.0.1:8000/api/internal"
     # Max concurrent hermes_task_runner subprocesses.

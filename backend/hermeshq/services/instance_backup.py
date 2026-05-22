@@ -52,6 +52,10 @@ from hermeshq.versioning import get_app_version
 BACKUP_SCHEMA_VERSION = "2026.04.28.1"
 ENCRYPTED_SECRETS_PATH = "secrets/secrets.enc.json"
 
+# Maximum allowed sizes for backup archives to prevent zip bombs.
+MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB
+MAX_ARCHIVE_SINGLE_FILE_SIZE = 500 * 1024 * 1024  # 500 MB
+
 
 class InstanceBackupError(RuntimeError):
     pass
@@ -468,10 +472,22 @@ class InstanceBackupService:
         extracted_root = Path(tempfile.mkdtemp(prefix="hermeshq-restore-"))
         try:
             with zipfile.ZipFile(archive_path, "r") as archive:
+                total_uncompressed = 0
                 for member in archive.infolist():
                     target = (extracted_root / member.filename).resolve()
                     if extracted_root.resolve() not in [target, *target.parents]:
                         raise InstanceBackupError(f"Backup archive contains an invalid path '{member.filename}'")
+                    if member.file_size > MAX_ARCHIVE_SINGLE_FILE_SIZE:
+                        raise InstanceBackupError(
+                            f"Backup entry '{member.filename}' exceeds the single-file limit "
+                            f"({MAX_ARCHIVE_SINGLE_FILE_SIZE // (1024 * 1024)} MB)"
+                        )
+                    total_uncompressed += member.file_size
+                if total_uncompressed > MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE:
+                    raise InstanceBackupError(
+                        f"Backup archive total uncompressed size ({total_uncompressed // (1024 * 1024)} MB) "
+                        f"exceeds the allowed limit ({MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE // (1024 * 1024 * 1024)} GB)"
+                    )
                 archive.extractall(extracted_root)
                 manifest = json.loads((extracted_root / "manifest.json").read_text(encoding="utf-8"))
                 summary = self._summary_from_manifest(manifest)

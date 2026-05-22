@@ -42,6 +42,18 @@ class AppSettingsRead(ORMModel):
     updated_at: datetime
 
 
+class PublicSettingsRead(BaseModel):
+    """Safe subset of settings for unauthenticated access (login page, etc.)."""
+    app_name: str | None
+    app_short_name: str | None
+    theme_mode: Literal["dark", "light", "system", "enterprise", "sixmanager", "sixmanager-light"]
+    default_locale: Literal["en", "es"]
+    logo_url: str | None = None
+    favicon_url: str | None = None
+    has_logo: bool = False
+    has_favicon: bool = False
+
+
 class ResourceStatusResponse(BaseModel):
     """Full resource status for the Settings UI."""
     semaphore: dict
