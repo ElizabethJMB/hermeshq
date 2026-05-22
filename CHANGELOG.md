@@ -2,6 +2,47 @@
 
 All notable changes to HermesHQ are documented in this file.
 
+## [2026.5.22.1] — 2026-05-22
+
+### Security
+
+#### S1 — Cookie `secure` flag configurable via environment variable
+- **`config.py`**: Added `cookie_secure: bool = False` to the `Settings` class. Set `COOKIE_SECURE=true` in production behind TLS to prevent session cookies from being sent over plain HTTP.
+- **`routers/auth.py`**: `_set_auth_cookie()` and `_clear_auth_cookie()` now read `get_settings().cookie_secure` instead of hardcoded `False`.
+
+#### S2 — Restrictive file permissions on files containing secrets
+- **`services/hermes_installation.py`**: Added `_protect_file(path)` helper that sets `chmod 0o600` (owner read/write only) on sensitive files.
+- Applied after every write of `.env` (1 location) and `auth.json` (2 locations) inside agent workspaces, preventing other OS users from reading credentials.
+
+#### S3 — Public settings endpoint no longer exposes sensitive configuration
+- **`schemas/settings.py`**: New `PublicSettingsRead` Pydantic model with only 8 safe fields: `app_name`, `app_short_name`, `theme_mode`, `default_locale`, `logo_url`, `favicon_url`, `has_logo`, `has_favicon`.
+- **`routers/settings.py`**: Added `_settings_to_public_read()` helper. `GET /api/settings/public` now returns `PublicSettingsRead` instead of the full `AppSettingsRead` which previously exposed `default_api_key_ref`, `default_base_url`, `default_provider`, `default_model`, internal `id`, and `app_version`.
+- Frontend is fully backward-compatible — the public response is a subset of the previous one.
+
+#### S4 — Zip bomb protection in backup restore
+- **`services/instance_backup.py`**: Added two constants:
+  - `MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE = 2 GB` — maximum total uncompressed size of a backup archive.
+  - `MAX_ARCHIVE_SINGLE_FILE_SIZE = 500 MB` — maximum size of any single file within an archive.
+- `_load_restore_payload()` now validates per-entry and total sizes **before** calling `extractall()`. Invalid archives raise `InstanceBackupError` with a descriptive message.
+
+#### S5 — Sanitized environment variables in agent subprocesses
+- **`services/hermes_installation.py`**: Added `_build_safe_env()` helper that filters out ~20 sensitive environment variable prefixes (`AWS_`, `HERMESHQ_`, `DATABASE_URL`, `REDIS_URL`, `DOCKER_`, `GITHUB_TOKEN`, `GITLAB_TOKEN`, `KUBECONFIG`, `STRIPE_`, `TWILIO_`, `SENDGRID_`, `VAULT_TOKEN`, `VAULT_ADDR`, etc.) from `os.environ` before passing them to agent subprocesses.
+- `build_process_env()` now uses `_build_safe_env()` instead of the raw `os.environ`, preventing host secrets from leaking into agent runtimes.
+
+### Files Changed
+
+| File | Action |
+|------|--------|
+| `VERSION` | Updated to 2026.5.22.1 |
+| `backend/hermeshq/config.py` | Added `cookie_secure` setting |
+| `backend/hermeshq/routers/auth.py` | Dynamic `secure` flag on cookies |
+| `backend/hermeshq/routers/settings.py` | New public-only endpoint logic |
+| `backend/hermeshq/schemas/settings.py` | New `PublicSettingsRead` schema |
+| `backend/hermeshq/services/hermes_installation.py` | `_protect_file`, `_build_safe_env`, filtered env |
+| `backend/hermeshq/services/instance_backup.py` | Zip bomb size validation |
+
+---
+
 ## [2026.5.21.1] — 2026-05-21
 
 ### Added — Configurable Concurrency & Resource-Aware Sizing

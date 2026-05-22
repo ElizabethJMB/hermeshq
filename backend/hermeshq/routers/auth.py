@@ -76,7 +76,7 @@ def _set_auth_cookie(response: Response, token: str) -> None:
         value=token,
         max_age=COOKIE_MAX_AGE,
         httponly=True,
-        secure=False,  # Set to True when TLS is terminated at nginx/CDN
+        secure=get_settings().cookie_secure,
         samesite="lax",
         path="/",
     )
@@ -89,7 +89,7 @@ def _clear_auth_cookie(response: Response) -> None:
         value="",
         max_age=0,
         httponly=True,
-        secure=False,
+        secure=get_settings().cookie_secure,
         samesite="lax",
         path="/",
     )

@@ -20,6 +20,7 @@ from hermeshq.schemas.settings import (
     AppSettingsUpdate,
     GenerateOverrideRequest,
     GenerateOverrideResponse,
+    PublicSettingsRead,
     ResourceStatusResponse,
     SemaphoreUpdateRequest,
     SemaphoreUpdateResponse,
@@ -78,6 +79,23 @@ def _settings_to_read(item: AppSettings) -> AppSettingsRead:
     )
 
 
+def _settings_to_public_read(item: AppSettings) -> PublicSettingsRead:
+    """Build a safe, unauthenticated subset of settings (no secrets/refs)."""
+    version = int(item.updated_at.timestamp()) if item.updated_at else 0
+    logo_url = f"/api/settings/branding/logo?v={version}" if item.logo_filename else None
+    favicon_url = f"/api/settings/branding/favicon?v={version}" if item.favicon_filename else None
+    return PublicSettingsRead(
+        app_name=item.app_name or settings.app_name,
+        app_short_name=item.app_short_name or (item.app_name or settings.app_name),
+        theme_mode=item.theme_mode or "dark",
+        default_locale=item.default_locale or "en",
+        logo_url=logo_url,
+        favicon_url=favicon_url,
+        has_logo=bool(item.logo_filename),
+        has_favicon=bool(item.favicon_filename),
+    )
+
+
 def _validate_upload(kind: str, file: UploadFile, content: bytes) -> str:
     filename = file.filename or ""
     suffix = Path(filename).suffix.lower()
@@ -126,12 +144,12 @@ async def get_settings(
     return _settings_to_read(item)
 
 
-@router.get("/public", response_model=AppSettingsRead)
+@router.get("/public", response_model=PublicSettingsRead)
 async def get_public_settings(
     db: AsyncSession = Depends(get_db_session),
-) -> AppSettingsRead:
+) -> PublicSettingsRead:
     item = await _get_or_create_settings(db)
-    return _settings_to_read(item)
+    return _settings_to_public_read(item)
 
 
 @router.put("", response_model=AppSettingsRead)
