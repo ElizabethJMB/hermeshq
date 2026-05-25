@@ -85,15 +85,8 @@ async def kapso_whatsapp_webhook(
         logger.warning("Kapso webhook: invalid JSON payload")
         return {"error": "invalid payload"}
 
-    event_type = payload.get("event", "")
-    data = payload.get("data", payload)
-
-    if not event_type:
-        # Kapso v2 format: event type in header
-        event_type = request.headers.get("X-Webhook-Event", "")
-        if not event_type:
-            logger.warning("Kapso webhook: missing event type")
-            return {"status": "ok"}
+    # Normalize to list — Kapso may send a single event (dict) or a batch (list)
+    raw_events: list[dict] = payload if isinstance(payload, list) else [payload]
 
     # Get Kapso gateways from app state
     kapso_gateways = getattr(request.app.state, "kapso_gateways", {})
@@ -109,30 +102,38 @@ async def kapso_whatsapp_webhook(
         verify_webhook_signature,
     )
 
-    # Verify signature — use any gateway's webhook secret if available
-    # (All gateways in this deployment share the same webhook endpoint)
-    webhook_verified = False
-    for gw in kapso_gateways.values():
-        if gw._webhook_secret:
-            if verify_webhook_signature(body, signature, gw._webhook_secret):
-                webhook_verified = True
-                break
-            else:
-                logger.warning("Kapso webhook: signature verification failed")
-                return Response(status_code=401, content="Invalid signature")
+    # Verify signature using raw body (before parsing)
+    if signature:
+        webhook_verified = False
+        for gw in kapso_gateways.values():
+            if gw._webhook_secret:
+                if verify_webhook_signature(body, signature, gw._webhook_secret):
+                    webhook_verified = True
+                    break
+                else:
+                    logger.warning("Kapso webhook: signature verification failed")
+                    return Response(status_code=401, content="Invalid signature")
+        if not webhook_verified:
+            logger.warning(
+                "Kapso webhook: signature present but no webhook_secret configured "
+                "in any gateway — accepting without verification"
+            )
 
-    if not webhook_verified and signature:
-        # Signature was provided but no gateway has a secret configured
-        logger.warning(
-            "Kapso webhook: signature present but no webhook_secret configured "
-            "in any gateway — accepting without verification"
+    # Process each event (single or batch)
+    for event_data in raw_events:
+        event_type = event_data.get("event", "")
+        data = event_data.get("data", event_data)
+
+        if not event_type:
+            event_type = request.headers.get("X-Webhook-Event", "")
+            if not event_type:
+                logger.warning("Kapso webhook: skipping event without type")
+                continue
+
+        await handle_kapso_webhook(
+            event_type=event_type,
+            payload=data if data is not event_data else event_data,
+            gateways=kapso_gateways,
         )
-
-    # Route to the appropriate gateway
-    await handle_kapso_webhook(
-        event_type=event_type,
-        payload=data if data is not payload else payload,
-        gateways=kapso_gateways,
-    )
 
     return {"status": "ok"}
