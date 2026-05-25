@@ -2,6 +2,34 @@
 
 All notable changes to HermesHQ are documented in this file.
 
+## [2026.5.25.2] — 2026-05-25
+
+### Fix: Kapso webhook batch payload support
+
+#### Problem
+Kapso dashboard can send webhook events as a JSON array (batch/buffering mode,
+e.g. 5-second window or up to 50 messages per batch). The webhook handler assumed
+`payload` was always a `dict` and called `.get()` on it, causing:
+
+```
+AttributeError: 'list' object has no attribute 'get'
+```
+
+This resulted in HTTP 500 responses and Kapso marking deliveries as "Fallido".
+
+#### Fix
+- **`routers/webhooks.py`**: The `kapso_whatsapp_webhook` endpoint now normalizes
+  the parsed payload to a `list[dict]` regardless of whether Kapso sends a single
+  event (`{...}`) or a batch (`[{...}, {...}]`). Each event is processed individually
+  through `handle_kapso_webhook`.
+
+#### Tested
+- ✅ Single event (dict payload) → 200 OK
+- ✅ Batch events (list of 2 dicts) → 200 OK
+- ✅ Nested data with header event type → 200 OK
+- ✅ Zero errors / zero tracebacks in backend logs
+
+
 ## [2026.5.25.1] — 2026-05-25
 
 ### Fix: Provider env var routing — OPENAI_BASE_URL leak to non-OpenAI providers
