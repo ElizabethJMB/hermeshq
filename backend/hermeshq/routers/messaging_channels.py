@@ -17,7 +17,7 @@ from hermeshq.services.hermes_installation import HermesInstallationError
 from hermeshq.models.activity import ActivityLog
 
 router = APIRouter(prefix="/agents/{agent_id}/channels", tags=["messaging-channels"])
-SUPPORTED_PLATFORMS = {"telegram", "whatsapp", "microsoft_teams", "google_chat"}
+SUPPORTED_PLATFORMS = {"telegram", "whatsapp", "microsoft_teams", "google_chat", "kapso_whatsapp"}
 
 
 async def _get_or_create_channel(
@@ -222,6 +222,49 @@ async def upsert_channel(
                 status_code=400,
                 detail=f"Google Chat service account secret '{normalized_secret_ref}' was not found",
             )
+
+    if platform == "kapso_whatsapp":
+        if payload.enabled and not normalized_secret_ref:
+            await _log_channel_event(
+                db,
+                agent,
+                f"{event_prefix}.config_rejected",
+                f"{agent.name} {platform} configuration rejected",
+                severity="warning",
+                details=_channel_details(platform, normalized_secret_ref, {"reason": "missing_secret_ref"}),
+            )
+            await db.commit()
+            raise HTTPException(status_code=400, detail="Kapso API key secret is required")
+        if (
+            normalized_secret_ref
+            and not secret_exists
+            and (payload.enabled or normalized_secret_ref != previous_secret_ref)
+        ):
+            await _log_channel_event(
+                db,
+                agent,
+                f"{event_prefix}.config_rejected",
+                f"{agent.name} {platform} configuration rejected",
+                severity="warning",
+                details=_channel_details(platform, normalized_secret_ref, {"reason": "secret_not_found"}),
+            )
+            await db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Kapso API key secret '{normalized_secret_ref}' was not found",
+            )
+        incoming_meta = payload.metadata_json if isinstance(payload.metadata_json, dict) else {}
+        if payload.enabled and not incoming_meta.get("kapso_phone_number_id"):
+            await _log_channel_event(
+                db,
+                agent,
+                f"{event_prefix}.config_rejected",
+                f"{agent.name} {platform} configuration rejected",
+                severity="warning",
+                details=_channel_details(platform, normalized_secret_ref, {"reason": "missing_phone_number_id"}),
+            )
+            await db.commit()
+            raise HTTPException(status_code=400, detail="kapso_phone_number_id is required in metadata_json")
 
     channel.enabled = bool(payload.enabled)
     channel.mode = payload.mode or "bidirectional"

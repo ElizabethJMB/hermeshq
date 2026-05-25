@@ -144,13 +144,14 @@ function RuntimeSummary({
 // Platform configuration descriptors
 // ---------------------------------------------------------------------------
 
-type PlatformSlug = "telegram" | "whatsapp" | "microsoft_teams" | "google_chat";
+type PlatformSlug = "telegram" | "whatsapp" | "microsoft_teams" | "google_chat" | "kapso_whatsapp";
 
 const COPY_KEYS: Record<PlatformSlug, string> = {
   telegram: "agent.telegramCopy",
   whatsapp: "agent.whatsappCopy",
   microsoft_teams: "agent.teamsCopy",
   google_chat: "agent.googleChatCopy",
+  kapso_whatsapp: "agent.kapsoWhatsAppCopy",
 };
 
 const PLATFORM_CONFIGS: Record<PlatformSlug, PlatformConfig> = {
@@ -166,6 +167,7 @@ const PLATFORM_CONFIGS: Record<PlatformSlug, PlatformConfig> = {
     showBehavior: true,
     showTeamsMetadata: false,
     showGoogleChatMetadata: false,
+    showKapsoMetadata: false,
     homeChatIdPlaceholder: "-1001234567890",
     enableLabelKey: "agent.enableTelegram",
     saveLabelKey: "agent.saveTelegram",
@@ -183,6 +185,7 @@ const PLATFORM_CONFIGS: Record<PlatformSlug, PlatformConfig> = {
     showBehavior: true,
     showTeamsMetadata: false,
     showGoogleChatMetadata: false,
+    showKapsoMetadata: false,
     homeChatIdPlaceholder: "56912345678@s.whatsapp.net",
     enableLabelKey: "agent.enableWhatsapp",
     saveLabelKey: "agent.saveWhatsapp",
@@ -200,6 +203,7 @@ const PLATFORM_CONFIGS: Record<PlatformSlug, PlatformConfig> = {
     showBehavior: true,
     showTeamsMetadata: true,
     showGoogleChatMetadata: false,
+    showKapsoMetadata: false,
     homeChatIdPlaceholder: "",
     enableLabelKey: "agent.enableTeams",
     saveLabelKey: "agent.saveTeams",
@@ -217,9 +221,28 @@ const PLATFORM_CONFIGS: Record<PlatformSlug, PlatformConfig> = {
     showBehavior: true,
     showTeamsMetadata: false,
     showGoogleChatMetadata: true,
+    showKapsoMetadata: false,
     homeChatIdPlaceholder: "",
     enableLabelKey: "agent.enableGoogleChat",
     saveLabelKey: "agent.saveGoogleChat",
+    stoppedLabelKey: "agent.gatewayStopped",
+  },
+  kapso_whatsapp: {
+    platform: "kapso_whatsapp",
+    label: "Kapso WhatsApp",
+    copy: "",
+    showSecretRef: true,
+    showWhatsappMode: false,
+    showQrSection: false,
+    showAllowedUsers: true,
+    showHomeChat: false,
+    showBehavior: true,
+    showTeamsMetadata: false,
+    showGoogleChatMetadata: false,
+    showKapsoMetadata: true,
+    homeChatIdPlaceholder: "",
+    enableLabelKey: "agent.enableKapsoWhatsApp",
+    saveLabelKey: "agent.saveKapsoWhatsApp",
     stoppedLabelKey: "agent.gatewayStopped",
   },
 };
@@ -228,13 +251,14 @@ const PLATFORM_CONFIGS: Record<PlatformSlug, PlatformConfig> = {
 // Main component
 // ---------------------------------------------------------------------------
 
-const ALL_PLATFORMS: PlatformSlug[] = ["telegram", "whatsapp", "microsoft_teams", "google_chat"];
+const ALL_PLATFORMS: PlatformSlug[] = ["telegram", "whatsapp", "microsoft_teams", "google_chat", "kapso_whatsapp"];
 
 const PLATFORM_LABELS: Record<PlatformSlug, string> = {
   telegram: "Telegram",
   whatsapp: "WhatsApp",
   microsoft_teams: "MS Teams",
   google_chat: "Google Chat",
+  kapso_whatsapp: "Kapso WA",
 };
 
 export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isAdmin: boolean }) {
@@ -252,6 +276,9 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
   const { data: gchat } = useMessagingChannel(agentId, "google_chat");
   const { data: gchatRuntime } = useMessagingChannelRuntime(agentId, "google_chat");
   const { data: gchatLogs } = useMessagingChannelLogs(agentId, "google_chat");
+  const { data: kapso } = useMessagingChannel(agentId, "kapso_whatsapp");
+  const { data: kapsoRuntime } = useMessagingChannelRuntime(agentId, "kapso_whatsapp");
+  const { data: kapsoLogs } = useMessagingChannelLogs(agentId, "kapso_whatsapp");
 
   const { data: secrets } = useSecrets(isAdmin);
   const updateChannel = useUpdateMessagingChannel();
@@ -260,12 +287,13 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
   const [submitErrors, setSubmitErrors] = useState<Record<string, string | null>>({});
 
   // Per-platform dirty refs and forms
-  const dirtyRefs = useRef<Record<PlatformSlug, boolean>>({ telegram: false, whatsapp: false, microsoft_teams: false, google_chat: false });
+  const dirtyRefs = useRef<Record<PlatformSlug, boolean>>({ telegram: false, whatsapp: false, microsoft_teams: false, google_chat: false, kapso_whatsapp: false });
   const [forms, setForms] = useState<Record<PlatformSlug, ChannelFormState>>({
     telegram: defaultFormState,
     whatsapp: defaultFormState,
     microsoft_teams: defaultFormState,
     google_chat: defaultFormState,
+    kapso_whatsapp: defaultFormState,
   });
   const [selectedPlatform, setSelectedPlatform] = useState<PlatformSlug>("telegram");
   const whatsappQrSvg = useMemo(
@@ -277,13 +305,13 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
 
   // Channel data map for generic access
   const channelData: Record<PlatformSlug, MessagingChannel | undefined> = {
-    telegram, whatsapp, microsoft_teams: teams, google_chat: gchat,
+    telegram, whatsapp, microsoft_teams: teams, google_chat: gchat, kapso_whatsapp: kapso,
   };
   const runtimeData: Record<PlatformSlug, MessagingChannelRuntime | undefined> = {
-    telegram: telegramRuntime, whatsapp: whatsappRuntime, microsoft_teams: teamsRuntime, google_chat: gchatRuntime,
+    telegram: telegramRuntime, whatsapp: whatsappRuntime, microsoft_teams: teamsRuntime, google_chat: gchatRuntime, kapso_whatsapp: kapsoRuntime,
   };
   const logsData: Record<PlatformSlug, string | undefined> = {
-    telegram: telegramLogs, whatsapp: whatsappLogs, microsoft_teams: teamsLogs, google_chat: gchatLogs,
+    telegram: telegramLogs, whatsapp: whatsappLogs, microsoft_teams: teamsLogs, google_chat: gchatLogs, kapso_whatsapp: kapsoLogs,
   };
 
   // Generic sync effect for all platforms
@@ -304,11 +332,13 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
         teams_app_id: String(ch.metadata_json?.app_id ?? ""),
         teams_tenant_id: String(ch.metadata_json?.tenant_id ?? ""),
         google_project_id: String(ch.metadata_json?.project_id ?? ""),
+        kapso_phone_number_id: String(ch.metadata_json?.kapso_phone_number_id ?? ""),
+        kapso_webhook_secret: String(ch.metadata_json?.kapso_webhook_secret ?? ""),
       };
       setForms((prev) => (prev[p] === newForm ? prev : { ...prev, [p]: newForm }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [telegram, whatsapp, teams, gchat]);
+  }, [telegram, whatsapp, teams, gchat, kapso]);
 
   // Secret options
   const secretOptions = useMemo(
@@ -372,6 +402,13 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
         payload.metadata_json = {
           ...(channelData[platform]?.metadata_json ?? {}),
           project_id: form.google_project_id || undefined,
+        };
+      }
+      if (platform === "kapso_whatsapp") {
+        payload.metadata_json = {
+          ...(channelData[platform]?.metadata_json ?? {}),
+          kapso_phone_number_id: form.kapso_phone_number_id || undefined,
+          kapso_webhook_secret: form.kapso_webhook_secret || undefined,
         };
       }
       await updateChannel.mutateAsync({ agentId, platform, payload });
