@@ -948,6 +948,20 @@ class HermesInstallationManager:
             env_map = integration.get("env_map") or {}
             managed_keys.update(value for value in env_map.values() if value)
 
+        # Also clean up any keys that appear duplicated in the existing file
+        # (these are residue from the previous append-only bug)
+        if env_path.exists():
+            existing_lines = env_path.read_text(encoding="utf-8").splitlines()
+            key_counts: dict[str, int] = {}
+            for raw_line in existing_lines:
+                stripped = raw_line.strip()
+                if stripped and not stripped.startswith("#") and "=" in stripped:
+                    key = stripped.split("=", 1)[0].strip()
+                    key_counts[key] = key_counts.get(key, 0) + 1
+            for key, count in key_counts.items():
+                if count > 1:
+                    managed_keys.add(key)
+
         preserved_lines: list[str] = []
         if env_path.exists():
             for raw_line in env_path.read_text(encoding="utf-8").splitlines():
