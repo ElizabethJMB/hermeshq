@@ -144,7 +144,11 @@ class HermesInstallationManager:
             provider_base_url_env = self._provider_base_url_env_name(runtime_provider)
             if provider_base_url_env:
                 env[provider_base_url_env] = effective_base_url
-            env["OPENAI_BASE_URL"] = effective_base_url
+            # Only set OPENAI_BASE_URL when the provider actually uses it
+            # (openai, openai-codex, gemini). Providers like kimi-coding,
+            # zai, openrouter have their own dedicated base_url env vars.
+            if runtime_provider in ("openai", "openai-codex", "gemini"):
+                env["OPENAI_BASE_URL"] = effective_base_url
         managed_env = await self._build_managed_env_map(agent) if include_channels else {}
         for key, value in managed_env.items():
             env[key] = value
@@ -832,7 +836,8 @@ class HermesInstallationManager:
             provider_base_url_env = self._provider_base_url_env_name(runtime_provider)
             if provider_base_url_env:
                 managed[provider_base_url_env] = effective_base_url
-            managed["OPENAI_BASE_URL"] = effective_base_url
+            if runtime_provider in ("openai", "openai-codex", "gemini"):
+                managed["OPENAI_BASE_URL"] = effective_base_url
 
         channels = await self._load_messaging_channels(agent.id)
         managed["WHATSAPP_ENABLED"] = "false"
@@ -903,7 +908,8 @@ class HermesInstallationManager:
         return managed
 
     def _merge_env_file(self, env_path: Path, managed_env: dict[str, str]) -> None:
-        managed_keys = {
+        # Keys managed by the integration system — these get stripped and rewritten
+        managed_keys: set[str] = {
             "OPENAI_BASE_URL",
             "TELEGRAM_BOT_TOKEN",
             "TELEGRAM_ALLOWED_USERS",
@@ -923,21 +929,21 @@ class HermesInstallationManager:
             "TEAMS_HOME_CHANNEL",
             "TEAMS_HOME_CHANNEL_NAME",
             "TEAMS_REQUIRE_MENTION",
-            *self._provider_env_names("zai"),
-            *self._provider_env_names("openrouter"),
-            *self._provider_env_names("anthropic"),
-            *self._provider_env_names("openai"),
         }
-        provider_base_envs = {
-            key
-            for key in (
-                self._provider_base_url_env_name("zai"),
-                self._provider_base_url_env_name("openrouter"),
-                self._provider_base_url_env_name("openai"),
-            )
-            if key
-        }
-        managed_keys.update(provider_base_envs)
+        # Add all known provider API key env vars
+        for provider in (
+            "zai", "openrouter", "anthropic", "openai",
+            "openai-codex", "kimi-coding", "gemini", "bedrock",
+        ):
+            managed_keys.update(self._provider_env_names(provider))
+        # Add all known provider base URL env vars
+        for provider in (
+            "zai", "openrouter", "openai",
+            "openai-codex", "kimi-coding", "gemini", "bedrock",
+        ):
+            base_env = self._provider_base_url_env_name(provider)
+            if base_env:
+                managed_keys.add(base_env)
         for integration in list_managed_integrations():
             env_map = integration.get("env_map") or {}
             managed_keys.update(value for value in env_map.values() if value)

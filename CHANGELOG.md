@@ -2,6 +2,35 @@
 
 All notable changes to HermesHQ are documented in this file.
 
+## [2026.5.25.1] — 2026-05-25
+
+### Fix: Provider env var routing — OPENAI_BASE_URL leak to non-OpenAI providers
+
+#### Problem
+When an agent used a non-OpenAI provider (kimi-coding, zai, openrouter, anthropic, bedrock),
+`OPENAI_BASE_URL` was always set alongside the provider's dedicated base URL env var.
+This caused auxiliary clients in Hermes Agent to route API calls to the wrong endpoint
+when fallback triggered (e.g. kimi-coding auxiliary client sending requests to z.ai endpoint).
+
+Additionally, `_merge_env_file` had hardcoded `managed_keys` that only covered zai, openrouter,
+anthropic and openai — missing kimi-coding, gemini, bedrock, and openai-codex. This caused
+`.env` files to accumulate duplicate entries on every sync (e.g. 8x KIMI_API_KEY lines).
+
+#### Fix
+- **`hermes_installation.py`** — `build_process_env()` and `_build_managed_env_map()`:
+  `OPENAI_BASE_URL` is now only set for providers that actually use it
+  (`openai`, `openai-codex`, `gemini`). All other providers use their dedicated base URL env var.
+- **`hermes_installation.py`** — `_merge_env_file()`: `managed_keys` is now built dynamically
+  from all known providers (8 providers) instead of hardcoded 4. This prevents duplicate entries.
+- All 58 agent `.env` files were resynced to remove duplicates and leaked `OPENAI_BASE_URL` entries.
+
+#### Verified
+- ✅ kimi-coding agent `.env`: only `KIMI_*` vars, no `OPENAI_BASE_URL`
+- ✅ zai agent `.env`: only `GLM_*` vars, no `OPENAI_BASE_URL`
+- ✅ All 58 `.env` files clean: zero duplicates, zero leaks
+- ✅ User-custom entries (non-managed keys) preserved correctly
+
+
 ## [2026.5.22.3] — 2026-05-25
 
 ### Feature: Kapso WhatsApp Channel Integration
