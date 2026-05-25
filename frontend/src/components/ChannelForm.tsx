@@ -31,6 +31,9 @@ export type ChannelFormState = {
   teams_tenant_id: string;
   // Google Chat metadata
   google_project_id: string;
+  // Kapso WhatsApp metadata
+  kapso_phone_number_id: string;
+  kapso_webhook_secret: string;
 };
 
 export const defaultFormState: ChannelFormState = {
@@ -46,6 +49,8 @@ export const defaultFormState: ChannelFormState = {
   teams_app_id: "",
   teams_tenant_id: "",
   google_project_id: "",
+  kapso_phone_number_id: "",
+  kapso_webhook_secret: "",
 };
 
 export type PlatformConfig = {
@@ -71,6 +76,8 @@ export type PlatformConfig = {
   showTeamsMetadata: boolean;
   /** Whether to show Google Chat metadata fields (project_id) */
   showGoogleChatMetadata: boolean;
+  /** Whether to show Kapso WhatsApp metadata fields (phone_number_id, webhook_secret) */
+  showKapsoMetadata: boolean;
   /** Placeholder for home_chat_id field */
   homeChatIdPlaceholder: string;
   /** i18n key for the enable checkbox label */
@@ -264,7 +271,9 @@ export function ChannelForm({
                         ? t("agent.selectTeamsSecret")
                         : config.platform === "google_chat"
                           ? t("agent.selectGoogleChatSecret")
-                          : t("agent.selectTelegramSecret")}
+                          : config.platform === "kapso_whatsapp"
+                            ? t("agent.selectKapsoSecret")
+                            : t("agent.selectTelegramSecret")}
                     </option>
                     {resolvedSecretOptions.map((option) => (
                       <option key={option} value={option}>
@@ -278,7 +287,9 @@ export function ChannelForm({
                     ? t("agent.teamsSecretHint")
                     : config.platform === "google_chat"
                       ? t("agent.googleChatSecretHint")
-                      : t("agent.telegramSecretHint")}
+                      : config.platform === "kapso_whatsapp"
+                        ? t("agent.kapsoSecretHint")
+                        : t("agent.telegramSecretHint")}
                 </p>
               </div>
             )}
@@ -353,6 +364,39 @@ export function ChannelForm({
             </div>
             )}
 
+            {/* Kapso WhatsApp metadata (Phone Number ID + Webhook Secret) */}
+            {config.showKapsoMetadata && (
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+              <p className="panel-label">{t("agent.kapsoWhatsAppMetadata")}</p>
+              <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                <label className="panel-field">
+                  <span className="panel-label">{t("agent.kapsoPhoneNumberId")}</span>
+                  <input
+                    value={form.kapso_phone_number_id}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, kapso_phone_number_id: event.target.value }))
+                    }
+                    placeholder="123456789012345"
+                  />
+                </label>
+                <label className="panel-field">
+                  <span className="panel-label">{t("agent.kapsoWebhookSecret")}</span>
+                  <input
+                    type="password"
+                    value={form.kapso_webhook_secret}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, kapso_webhook_secret: event.target.value }))
+                    }
+                    placeholder="whsec_..."
+                  />
+                </label>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
+                {t("agent.kapsoWhatsAppMetadataHint")}
+              </p>
+            </div>
+            )}
+
             {/* Allowed users — only for platforms that need it */}
             {config.showAllowedUsers && (
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
@@ -363,7 +407,9 @@ export function ChannelForm({
                     ? t("agent.allowedTeamsUsers")
                     : config.platform === "google_chat"
                       ? t("agent.allowedGoogleChatUsers")
-                      : t("agent.allowedUsers")}
+                      : config.platform === "kapso_whatsapp"
+                        ? t("agent.allowedKapsoUsers")
+                        : t("agent.allowedUsers")}
               </p>
               <label className="panel-field mt-3">
                 <span className="panel-label">{t("agent.allowedUsers")}</span>
@@ -380,7 +426,9 @@ export function ChannelForm({
                         ? "8a8f1234-5678-abcd-ef01-234567890abc\n..."
                         : config.platform === "google_chat"
                           ? "user@company.com\nadmin@company.com"
-                          : "56912345678@s.whatsapp.net"
+                          : config.platform === "kapso_whatsapp"
+                            ? "+56912345678\n+56987654321"
+                            : "56912345678@s.whatsapp.net"
                   }
                 />
               </label>

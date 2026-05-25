@@ -171,6 +171,7 @@ async def lifespan(app: FastAPI):
     # Expose individual gateway maps for webhook routing
     app.state.session_factory = AsyncSessionLocal
     app.state.google_chat_gateways = app.state.enterprise_gateways.google_chat_gateways
+    app.state.kapso_gateways = app.state.enterprise_gateways.kapso_gateways
     app.state.comms_router = CommsRouter(AsyncSessionLocal, app.state.event_broker)
     async def log_terminal_activity(agent_id: str, event_type: str, message: str, details: dict) -> None:
         async with AsyncSessionLocal() as session:

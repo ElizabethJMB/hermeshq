@@ -2,6 +2,37 @@
 
 All notable changes to HermesHQ are documented in this file.
 
+## [2026.5.22.3] — 2026-05-25
+
+### Feature: Kapso WhatsApp Channel Integration
+
+New WhatsApp channel powered by the official Meta Cloud API via Kapso platform.
+
+#### Backend
+- **`services/kapso_whatsapp_gateway.py`** (NEW — 574 lines): Full gateway adapter running as asyncio task (no subprocess). Handles incoming webhooks, creates Tasks for agents, sends replies via Kapso REST API. Includes HMAC-SHA256 webhook signature verification, allowed-user access control, and delivery status tracking.
+- **`services/enterprise_gateway_manager.py`**: Added `kapso_gateways` registry alongside `google_chat_gateways`. Bootstrap, lifecycle, and status for `kapso_whatsapp` platform.
+- **`services/gateway_supervisor.py`**: Delegates `kapso_whatsapp` to EnterpriseGatewayManager (same pattern as Google Chat — no subprocess).
+- **`routers/webhooks.py`**: New `POST /webhooks/kapso-whatsapp` endpoint with signature verification and event routing.
+- **`routers/messaging_channels.py`**: `kapso_whatsapp` added to supported platforms with validation (secret_ref required, kapso_phone_number_id required in metadata_json).
+- **`main.py`**: Exposes `kapso_gateways` on `app.state` for webhook routing.
+
+#### Frontend
+- **`AgentMessagingPanel.tsx`**: New "Kapso WA" tab with full CRUD hooks and save logic.
+- **`ChannelForm.tsx`**: New Kapso metadata fields (Phone Number ID, Webhook Secret) and platform-specific labels/placeholders.
+- **i18n (EN/ES)**: 16 new translation keys for Kapso WhatsApp channel.
+
+#### Key Design Decisions
+- Coexists with existing Baileys WhatsApp (`"whatsapp"` legacy channel). Agents can use either or both.
+- No subprocess overhead — runs as lightweight asyncio coroutine within the backend process.
+- Credentials stored encrypted via SecretVault (same pattern as Google Chat).
+- `metadata_json` holds `kapso_phone_number_id` and `kapso_webhook_secret` per channel.
+
+#### Tested
+- 14/14 functional tests passed (CRUD, validation, webhook, API connectivity, lifecycle).
+- TypeScript compiles with zero errors.
+- Backend starts cleanly with zero errors in logs.
+
+
 ## [2026.5.22.2] — 2026-05-22
 
 ### Stability & Architecture (Priority 2)

@@ -1,7 +1,7 @@
 """
 Enterprise Gateway Manager.
 
-Manages Google Chat gateway instances
+Manages Google Chat and Kapso WhatsApp gateway instances
 alongside the existing Hermes Agent gateway supervisor.
 
 These gateways run as async tasks (not subprocesses) and connect
@@ -22,10 +22,13 @@ from hermeshq.services.secret_vault import SecretVault
 
 logger = logging.getLogger(__name__)
 
+# Platforms managed by this manager (not by the subprocess GatewaySupervisor)
+ENTERPRISE_PLATFORMS = {"google_chat", "kapso_whatsapp"}
+
 
 class EnterpriseGatewayManager:
     """
-    Manages lifecycle of Google Chat gateways.
+    Manages lifecycle of Google Chat and Kapso WhatsApp gateways.
 
     Unlike the Hermes Agent gateway supervisor which launches
     subprocess processes, this manager runs gateway adapters
@@ -44,8 +47,9 @@ class EnterpriseGatewayManager:
         self.event_broker = event_broker
         self.secret_vault = secret_vault
 
-        # Enterprise gateways — currently only Google Chat (Teams is handled by hermes-agent)
+        # Enterprise gateways — keyed by agent_id
         self.google_chat_gateways: dict[str, object] = {}
+        self.kapso_gateways: dict[str, object] = {}
 
     # ---- bootstrap ----
 
@@ -54,7 +58,7 @@ class EnterpriseGatewayManager:
         async with self.session_factory() as session:
             result = await session.execute(
                 select(MessagingChannel).where(
-                    MessagingChannel.platform.in_(["google_chat"]),
+                    MessagingChannel.platform.in_(ENTERPRISE_PLATFORMS),
                     MessagingChannel.enabled == True,  # noqa: E712
                 )
             )
@@ -81,6 +85,8 @@ class EnterpriseGatewayManager:
         """Start a gateway for the given agent and platform."""
         if platform == "google_chat":
             await self._start_google_chat(agent_id)
+        elif platform == "kapso_whatsapp":
+            await self._start_kapso_whatsapp(agent_id)
         else:
             raise ValueError(f"Unsupported enterprise platform: {platform}")
 
@@ -88,15 +94,20 @@ class EnterpriseGatewayManager:
         """Stop a gateway for the given agent and platform."""
         if platform == "google_chat":
             await self._stop_google_chat(agent_id)
+        elif platform == "kapso_whatsapp":
+            await self._stop_kapso_whatsapp(agent_id)
 
     async def stop_all(self, agent_id: str) -> None:
         """Stop all enterprise gateways for an agent."""
         await self._stop_google_chat(agent_id)
+        await self._stop_kapso_whatsapp(agent_id)
 
     async def shutdown(self) -> None:
         """Shut down all enterprise gateways."""
         for agent_id in list(self.google_chat_gateways.keys()):
             await self._stop_google_chat(agent_id)
+        for agent_id in list(self.kapso_gateways.keys()):
+            await self._stop_kapso_whatsapp(agent_id)
 
     # ---- Google Chat ----
 
@@ -122,12 +133,38 @@ class EnterpriseGatewayManager:
             await gw.stop()
             logger.info("Stopped Google Chat gateway for agent %s", agent_id)
 
+    # ---- Kapso WhatsApp ----
+
+    async def _start_kapso_whatsapp(self, agent_id: str) -> None:
+        if agent_id in self.kapso_gateways:
+            return
+        from hermeshq.services.kapso_whatsapp_gateway import KapsoWhatsAppGateway
+
+        gw = KapsoWhatsAppGateway(
+            agent_id=agent_id,
+            session_factory=self.session_factory,
+            supervisor=self.supervisor,
+            event_broker=self.event_broker,
+            secret_vault=self.secret_vault,
+        )
+        await gw.start()
+        self.kapso_gateways[agent_id] = gw
+        logger.info("Started Kapso WhatsApp gateway for agent %s", agent_id)
+
+    async def _stop_kapso_whatsapp(self, agent_id: str) -> None:
+        gw = self.kapso_gateways.pop(agent_id, None)
+        if gw:
+            await gw.stop()
+            logger.info("Stopped Kapso WhatsApp gateway for agent %s", agent_id)
+
     # ---- status ----
 
     def get_status(self, agent_id: str, platform: str) -> dict:
         """Get the status of a gateway."""
         if platform == "google_chat":
             running = agent_id in self.google_chat_gateways
+        elif platform == "kapso_whatsapp":
+            running = agent_id in self.kapso_gateways
         else:
             running = False
         return {
