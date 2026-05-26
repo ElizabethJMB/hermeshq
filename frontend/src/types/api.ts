@@ -172,6 +172,10 @@ export interface AppSettings {
   default_base_url: string | null;
   default_hermes_version: string | null;
   default_tui_skin: string | null;
+  resend_api_key: string | null;
+  from_email: string | null;
+  from_name: string | null;
+  public_base_url: string | null;
   tui_skin_filename: string | null;
   logo_url: string | null;
   favicon_url: string | null;
