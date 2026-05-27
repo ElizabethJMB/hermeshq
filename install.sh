@@ -698,7 +698,7 @@ write_env_file() {
   cors_json=$(printf '["http://%s:%s","http://localhost:%s","http://frontend"]' "$install_host" "$FRONTEND_PORT" "$FRONTEND_PORT")
   # URL-encode the password to handle special characters safely
   local encoded_password
-  encoded_password="$(python3 -c "import urllib.parse; print(urllib.parse.quote('${db_password}', safe=''))")"
+  encoded_password="$(printf '%s' "$db_password" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip(), safe=''))")"
   database_url="postgresql+asyncpg://${POSTGRES_USER}:${encoded_password}@postgres:5432/${POSTGRES_DB}"
 
   cat >"$INSTALL_DIR/.env" <<EOF

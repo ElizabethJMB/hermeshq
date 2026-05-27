@@ -19,25 +19,21 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Use run_sync to create all tables from the SQLAlchemy metadata.
-    # This is safe for both fresh installs (creates tables) and existing
-    # databases (create_all is a no-op for tables that already exist).
-    # Alembic will stamp this revision as applied after the tables exist.
+    # Use the synchronous connection from op.get_bind() to create all tables
+    # from the SQLAlchemy declarative metadata.  This is safe for both fresh
+    # installs (creates tables) and existing databases (create_all is a no-op
+    # for tables that already exist).
     from hermeshq.models.base import Base
     import hermeshq.models  # noqa: F401 — registers all models on Base.metadata
 
-    def _create_all(connection):
-        Base.metadata.create_all(bind=connection)
-
-    op.get_bind().run_sync(_create_all)
+    connection = op.get_bind()
+    Base.metadata.create_all(bind=connection)
 
 
 def downgrade() -> None:
-    # Drop all tables in reverse order (for complete teardown)
+    # Drop all tables (for complete teardown — use with caution)
     from hermeshq.models.base import Base
     import hermeshq.models  # noqa: F401
 
-    def _drop_all(connection):
-        Base.metadata.drop_all(bind=connection)
-
-    op.get_bind().run_sync(_drop_all)
+    connection = op.get_bind()
+    Base.metadata.drop_all(bind=connection)
