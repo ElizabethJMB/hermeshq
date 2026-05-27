@@ -100,6 +100,7 @@ async def create_agent(
         tool_progress_mode=None,
         gateway_notifications_mode=None,
         model=runtime_defaults["model"],
+        use_provider_default=payload.use_provider_default,
         provider=runtime_defaults["provider"],
         api_key_ref=runtime_defaults["api_key_ref"],
         base_url=runtime_defaults["base_url"],
@@ -219,6 +220,11 @@ async def update_agent(
     )
     unique_slug = await ensure_unique_agent_slug(db, resolved_slug, exclude_agent_id=agent_id)
 
+    # If user explicitly sets a model without also toggling use_provider_default,
+    # assume they want a custom model (use_provider_default=False).
+    # If they set use_provider_default=True explicitly, keep agent.model as fallback.
+    if "model" in update_data and "use_provider_default" not in update_data:
+        agent.use_provider_default = False
     for field, value in update_data.items():
         if field == "integration_configs":
             continue

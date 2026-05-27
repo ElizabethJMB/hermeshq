@@ -121,11 +121,12 @@ class HermesRuntime:
         )
         runtime_provider = self.installation_manager._model_provider_for_agent(agent)
         effective_base_url = self.installation_manager._effective_provider_base_url(agent)
+        effective_model = await self._resolve_effective_model(agent, runtime_provider)
         payload = {
             "task_id": str(task.id),
             "prompt": task.prompt,
             "system_override": task.system_override,
-            "model": agent.model,
+            "model": effective_model,
             "provider": runtime_provider,
             "base_url": effective_base_url,
             "api_key": api_key,
@@ -300,3 +301,29 @@ class HermesRuntime:
                     }
                 )
         return extracted
+
+    async def _resolve_effective_model(self, agent: Agent, runtime_provider: str | None) -> str:
+        """Resolve the effective model for an agent.
+
+        If use_provider_default is True, look up the provider's default_model.
+        Otherwise fall back to agent.model.
+        """
+        if not getattr(agent, "use_provider_default", False):
+            return agent.model or "anthropic/claude-sonnet-4"
+
+        async with self.session_factory() as db:
+            from hermeshq.models.provider import ProviderDefinition
+            from sqlalchemy import select
+
+            # Find the provider definition matching the agent's runtime provider
+            result = await db.execute(
+                select(ProviderDefinition).where(
+                    ProviderDefinition.runtime_provider == (runtime_provider or "")
+                )
+            )
+            provider = result.scalar_one_or_none()
+            if provider and provider.default_model:
+                return provider.default_model
+
+        # Fallback to agent.model if no provider default found
+        return agent.model or "anthropic/claude-sonnet-4"
