@@ -566,7 +566,9 @@ import string
 upper = secrets.choice(string.ascii_uppercase)
 lower = secrets.choice(string.ascii_lowercase)
 digit = secrets.choice(string.digits)
-special = secrets.choice("!@#$%^&*()-_=+")
+# Avoid characters that break URI parsing (@, :, /, #, ?) and shell metacharacters
+safe_special = "!%-_.~"
+special = secrets.choice(safe_special)
 rest = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
 password = list(upper + lower + digit + special + rest)
 secrets.SystemRandom().shuffle(password)
@@ -694,7 +696,10 @@ write_env_file() {
   admin_password="${ADMIN_PASSWORD:-$(random_password)}"
   api_base="${VITE_API_BASE_URL:-/api}"
   cors_json=$(printf '["http://%s:%s","http://localhost:%s","http://frontend"]' "$install_host" "$FRONTEND_PORT" "$FRONTEND_PORT")
-  database_url="postgresql+asyncpg://${POSTGRES_USER}:${db_password}@postgres:5432/${POSTGRES_DB}"
+  # URL-encode the password to handle special characters safely
+  local encoded_password
+  encoded_password="$(python3 -c "import urllib.parse; print(urllib.parse.quote('${db_password}', safe=''))")"
+  database_url="postgresql+asyncpg://${POSTGRES_USER}:${encoded_password}@postgres:5432/${POSTGRES_DB}"
 
   cat >"$INSTALL_DIR/.env" <<EOF
 POSTGRES_DB=${POSTGRES_DB}
