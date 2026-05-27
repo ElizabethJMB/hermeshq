@@ -289,6 +289,11 @@ const ns: Record<string, string> = {
   "agent.fallbackSectionTitle": "Provider de respaldo",
   "agent.fallbackSectionDesc": "Cuando el provider principal falla, el agente reintentará automáticamente con esta configuración.",
   "agent.fallbackHint": "Opcional. Las tareas que fallen con el provider principal se reintentarán automáticamente con estos ajustes.",
+  "agent.modelSource": "Origen del modelo",
+  "agent.modelSourceDesc": "Controla si este agente usa el modelo por defecto del provider o uno personalizado.",
+  "agent.useProviderDefault": "Usar modelo por defecto del provider",
+  "agent.useProviderDefaultYes": "Sí — seguir el default del provider",
+  "agent.useProviderDefaultNo": "No — usar modelo personalizado",
 };
 
 export default ns;

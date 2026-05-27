@@ -114,6 +114,7 @@ export interface Agent {
   tool_progress_mode: string | null;
   gateway_notifications_mode: string | null;
   model: string;
+  use_provider_default: boolean;
   provider: string;
   api_key_ref: string | null;
   base_url: string | null;

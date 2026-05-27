@@ -82,6 +82,7 @@ async def bootstrap_system_operator(
         existing.runtime_profile = "technical"
         existing.provider = default_provider
         existing.model = default_model
+        existing.use_provider_default = True
         existing.api_key_ref = default_api_key_ref or None
         existing.base_url = default_base_url or None
         existing.hermes_version = default_hermes_version or None

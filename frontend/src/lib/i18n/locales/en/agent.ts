@@ -289,6 +289,11 @@ const ns: Record<string, string> = {
   "agent.fallbackSectionTitle": "Fallback Provider",
   "agent.fallbackSectionDesc": "When the primary provider fails, the agent will automatically retry with this configuration.",
   "agent.fallbackHint": "Optional. Tasks that fail with the primary provider will automatically retry using these settings.",
+  "agent.modelSource": "Model Source",
+  "agent.modelSourceDesc": "Control whether this agent uses the provider's default model or a custom one.",
+  "agent.useProviderDefault": "Use provider default model",
+  "agent.useProviderDefaultYes": "Yes — follow provider default",
+  "agent.useProviderDefaultNo": "No — use custom model",
 };
 
 export default ns;

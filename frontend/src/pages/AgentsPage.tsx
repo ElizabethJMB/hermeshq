@@ -26,6 +26,7 @@ const emptyForm = {
   tool_progress_mode: "inherit",
   gateway_notifications_mode: "inherit",
   model: "",
+  use_provider_default: true,
   provider: "",
   api_key_ref: "",
   base_url: "",
@@ -183,6 +184,7 @@ export function AgentsPage() {
       tool_progress_mode: "inherit",
       gateway_notifications_mode: "inherit",
       model: settings?.default_model ?? "",
+      use_provider_default: true,
       provider: settings?.default_provider ?? "",
       api_key_ref: settings?.default_api_key_ref ?? "",
       base_url: settings?.default_base_url ?? "",
@@ -498,10 +500,25 @@ export function AgentsPage() {
 
           <label className="panel-field">
             <span className="panel-label">{t("agents.model")}</span>
+            {form.use_provider_default ? (
+              <div className="rounded-2xl border border-[var(--border-visible)] bg-[color-mix(in_srgb,var(--surface)_86%,transparent)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+                {t("agent.useProviderDefaultYes")}
+              </div>
+            ) : (
+              <input
+                value={form.model}
+                onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))}
+                placeholder={settings?.default_model ?? "Uses global default"}
+              />
+            )}
+          </label>
+
+          <label className="panel-field">
+            <span className="panel-label">{t("agent.useProviderDefault")}</span>
             <input
-              value={form.model}
-              onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))}
-              placeholder={settings?.default_model ?? "Uses global default"}
+              type="checkbox"
+              checked={form.use_provider_default}
+              onChange={(event) => setForm((current) => ({ ...current, use_provider_default: event.target.checked }))}
             />
           </label>
 

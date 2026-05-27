@@ -206,6 +206,8 @@ export function AgentDetailPage() {
   const [approvalModeDraft, setApprovalModeDraft] = useState("inherit");
   const [toolProgressModeDraft, setToolProgressModeDraft] = useState("inherit");
   const [gatewayNotificationsModeDraft, setGatewayNotificationsModeDraft] = useState("inherit");
+  const [useProviderDefaultDraft, setUseProviderDefaultDraft] = useState(true);
+  const [customModelDraft, setCustomModelDraft] = useState("");
   const [fallbackDraft, setFallbackDraft] = useState<{
     provider: string | null;
     model: string | null;
@@ -333,6 +335,8 @@ export function AgentDetailPage() {
       api_key_ref: agent.fallback_api_key_ref ?? null,
       base_url: agent.fallback_base_url ?? null,
     });
+    setUseProviderDefaultDraft(agent.use_provider_default ?? true);
+    setCustomModelDraft(agent.model ?? "");
     const nextIntegrationDrafts: Record<string, Record<string, string>> = {};
     for (const integration of managedIntegrations ?? []) {
       const currentConfig = (agent.integration_configs?.[integration.slug] as Record<string, unknown> | undefined) ?? {};
@@ -490,6 +494,8 @@ export function AgentDetailPage() {
         approval_mode: approvalModeDraft,
         tool_progress_mode: toolProgressModeDraft,
         gateway_notifications_mode: gatewayNotificationsModeDraft,
+        use_provider_default: useProviderDefaultDraft,
+        ...(useProviderDefaultDraft ? {} : { model: customModelDraft }),
         fallback_provider: fallbackDraft.provider,
         fallback_model: fallbackDraft.model,
         fallback_api_key_ref: fallbackDraft.api_key_ref,
@@ -732,7 +738,7 @@ export function AgentDetailPage() {
               <h3 className="mt-2 text-2xl text-[var(--text-display)]">{t("agent.runtimeSettings")}</h3>
             </div>
             <div className="text-right">
-              <p className="panel-label">{agent.provider} / {agent.model}</p>
+              <p className="panel-label">{agent.provider} / {agent.use_provider_default ? "provider default" : agent.model}</p>
               <p className="mt-2 font-mono text-xs uppercase tracking-[0.1em] text-[var(--text-secondary)]">
                 {sectionState.configuration ? "Collapse" : "Expand"}
               </p>
@@ -839,7 +845,7 @@ export function AgentDetailPage() {
                     <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                       {[
                         { label: t("agents.provider"), value: agent.provider },
-                        { label: t("agents.model"), value: agent.model },
+                        { label: t("agents.model"), value: agent.use_provider_default ? `${agent.model} (provider default)` : agent.model },
                         { label: t("agents.runtimeProfile"), value: currentRuntimeCapabilityProfile?.name ?? agent.runtime_profile },
                         {
                           label: t("agent.effectiveHermesVersion"),
@@ -1044,6 +1050,48 @@ export function AgentDetailPage() {
                             </div>
                           )}
                         </label>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <div className="border-b border-[var(--border)] pb-4">
+                        <p className="panel-label">{t("agent.modelSource")}</p>
+                        <h5 className="mt-2 text-base text-[var(--text-display)]">{t("agent.modelSourceDesc")}</h5>
+                      </div>
+                      <div className="mt-4">
+                        <label className="panel-field">
+                          <span className="panel-label">{t("agent.useProviderDefault")}</span>
+                          {isAdmin ? (
+                            <select
+                              value={useProviderDefaultDraft ? "true" : "false"}
+                              onChange={(event) => setUseProviderDefaultDraft(event.target.value === "true")}
+                            >
+                              <option value="true">{t("agent.useProviderDefaultYes")}</option>
+                              <option value="false">{t("agent.useProviderDefaultNo")}</option>
+                            </select>
+                          ) : (
+                            <div className="rounded-2xl border border-[var(--border-visible)] bg-[color-mix(in_srgb,var(--surface)_86%,transparent)] px-4 py-3 text-sm text-[var(--text-display)]">
+                              {useProviderDefaultDraft ? t("agent.useProviderDefaultYes") : t("agent.useProviderDefaultNo")}
+                            </div>
+                          )}
+                        </label>
+                        {!useProviderDefaultDraft && (
+                          <label className="panel-field mt-4">
+                            <span className="panel-label">{t("agents.model")}</span>
+                            {isAdmin ? (
+                              <input
+                                type="text"
+                                value={customModelDraft}
+                                placeholder="anthropic/claude-sonnet-4"
+                                onChange={(event) => setCustomModelDraft(event.target.value)}
+                              />
+                            ) : (
+                              <div className="rounded-2xl border border-[var(--border-visible)] bg-[color-mix(in_srgb,var(--surface)_86%,transparent)] px-4 py-3 text-sm text-[var(--text-display)]">
+                                {customModelDraft}
+                              </div>
+                            )}
+                          </label>
+                        )}
                       </div>
                     </div>
 

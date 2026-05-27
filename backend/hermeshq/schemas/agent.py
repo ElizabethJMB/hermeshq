@@ -19,6 +19,7 @@ class AgentCreate(BaseModel):
     tool_progress_mode: str | None = None
     gateway_notifications_mode: str | None = None
     model: str | None = None
+    use_provider_default: bool = True
     provider: str | None = None
     api_key_ref: str | None = None
     base_url: str | None = None
@@ -48,6 +49,7 @@ class AgentUpdate(BaseModel):
     tool_progress_mode: str | None = None
     gateway_notifications_mode: str | None = None
     model: str | None = None
+    use_provider_default: bool | None = None
     provider: str | None = None
     api_key_ref: str | None = None
     base_url: str | None = None
@@ -84,6 +86,7 @@ class AgentRead(ORMModel):
     tool_progress_mode: str | None
     gateway_notifications_mode: str | None
     model: str
+    use_provider_default: bool = True
     provider: str
     api_key_ref: str | None
     base_url: str | None
@@ -172,6 +175,7 @@ class AgentTemplateOverrides(BaseModel):
     tool_progress_mode: str | None = None
     gateway_notifications_mode: str | None = None
     model: str | None = None
+    use_provider_default: bool | None = None
     provider: str | None = None
     api_key_ref: str | None = None
     base_url: str | None = None

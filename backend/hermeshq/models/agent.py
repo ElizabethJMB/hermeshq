@@ -25,6 +25,7 @@ class Agent(TimestampMixin, Base):
     tool_progress_mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
     gateway_notifications_mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
     model: Mapped[str] = mapped_column(String(255), default="anthropic/claude-sonnet-4")
+    use_provider_default: Mapped[bool] = mapped_column(Boolean, default=True)
     provider: Mapped[str] = mapped_column(String(64), default="openrouter")
     api_key_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
