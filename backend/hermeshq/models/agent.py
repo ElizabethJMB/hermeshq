@@ -57,7 +57,7 @@ class Agent(TimestampMixin, Base):
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archive_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     supervisor_agent_id: Mapped[str | None] = mapped_column(
-        ForeignKey("agents.id"), nullable=True
+        ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
     )
     team_tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     total_tasks: Mapped[int] = mapped_column(Integer, default=0)
