@@ -1,3 +1,4 @@
+import hmac
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -36,7 +37,7 @@ async def _get_internal_agent(
     if not agent_id or not agent_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing agent credentials")
     expected = create_agent_service_token(agent_id)
-    if agent_token != expected:
+    if not hmac.compare_digest(agent_token, expected):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid agent credentials")
     agent = await db.get(Agent, agent_id)
     if not agent or agent.is_archived:
