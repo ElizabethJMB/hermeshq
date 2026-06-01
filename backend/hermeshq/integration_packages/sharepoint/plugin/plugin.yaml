@@ -1,0 +1,9 @@
+name: hermeshq-sharepoint
+version: "1.0.0"
+description: SharePoint tools using delegated Microsoft 365 user permissions
+author: HermesHQ
+provides_tools:
+  - sharepoint_list_sites
+  - sharepoint_list_files
+  - sharepoint_get_file
+  - sharepoint_search
