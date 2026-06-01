@@ -369,12 +369,11 @@ async def stream(websocket: WebSocket) -> None:
             except Exception:
                 pass
     except WebSocketDisconnect:
-        broker.disconnect(websocket)
+        pass
     except Exception as exc:
         logger.warning("WebSocket stream unexpected error: %s", exc)
-        broker.disconnect(websocket)
     finally:
-        # Ensure connection is cleaned up on any exit path
+        # Single cleanup point for all exit paths
         broker.disconnect(websocket)
 
 
