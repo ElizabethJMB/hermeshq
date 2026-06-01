@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
@@ -27,15 +28,10 @@ def _get_m365_token(user_id: str) -> tuple[str | None, str]:
     agent_token = os.environ.get("HERMESHQ_AGENT_TOKEN", "")
     if not base_url or not agent_id or not agent_token:
         return None, "HermesHQ internal control no configurado"
-
     url = f"{base_url}/m365/agent-token?user_id={user_id}"
     req = urllib.request.Request(
-        url,
-        method="GET",
-        headers={
-            "X-HermesHQ-Agent-ID": agent_id,
-            "X-HermesHQ-Agent-Token": agent_token,
-        },
+        url, method="GET",
+        headers={"X-HermesHQ-Agent-ID": agent_id, "X-HermesHQ-Agent-Token": agent_token},
     )
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
@@ -56,13 +52,8 @@ def _graph(method: str, path: str, access_token: str, payload: dict | None = Non
     url = f"{GRAPH_BASE}{path}"
     data = json.dumps(payload).encode("utf-8") if payload else None
     req = urllib.request.Request(
-        url,
-        data=data,
-        method=method.upper(),
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        },
+        url, data=data, method=method.upper(),
+        headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -85,48 +76,43 @@ def _auth_error(detail: str) -> str:
 
 # ── Tool handlers ─────────────────────────────────────────────────────────────
 
-def _list_sites_tool(args: dict, **_kwargs) -> str:
-    user_id = _task_user_id()
-    if not user_id:
-        return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
-    token, err = _get_m365_token(user_id)
-    if not token:
-        return _auth_error(err)
-    search = str(args.get("search") or "").strip()
-    if search:
-        path = f"/sites?search={search}"
-    else:
-        path = "/sites?search=*"
-    result = _graph("GET", path, token)
-    if "error" in result:
-        return json.dumps({"success": False, "error": result["error"]})
-    sites = result.get("value", [])
-    simplified = [{"id": s.get("id"), "name": s.get("displayName"), "url": s.get("webUrl")} for s in sites]
-    return json.dumps({"success": True, "count": len(simplified), "sites": simplified}, ensure_ascii=False)
-
-
 def _list_files_tool(args: dict, **_kwargs) -> str:
+    """List files using Files.Read.All - works with OneDrive and SharePoint."""
     user_id = _task_user_id()
     if not user_id:
         return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
     token, err = _get_m365_token(user_id)
     if not token:
         return _auth_error(err)
-    site_id = str(args.get("site_id") or "").strip()
-    folder_path = str(args.get("folder_path") or "").strip("/")
-    if not site_id:
-        return json.dumps({"success": False, "error": "Se requiere site_id."})
-    if folder_path:
-        path = f"/sites/{site_id}/drive/root:/{folder_path}:/children"
+
+    site_url = str(args.get("site_url") or "").strip().rstrip("/")
+    folder_path = str(args.get("folder_path") or "").strip().strip("/")
+
+    if site_url:
+        # Access a specific SharePoint site by URL
+        # GET /sites/{hostname}:/{site-path}
+        parsed = urllib.parse.urlparse(site_url)
+        hostname = parsed.netloc
+        site_path = parsed.path.rstrip("/") or "/"
+        base_path = f"/sites/{hostname}:{site_path}:/drive/root"
     else:
-        path = f"/sites/{site_id}/drive/root/children"
+        # Default: user's OneDrive root
+        base_path = "/me/drive/root"
+
+    if folder_path:
+        path = f"{base_path}:/{folder_path}:/children"
+    else:
+        path = f"{base_path}/children"
+
     result = _graph("GET", path, token)
     if "error" in result:
         return json.dumps({"success": False, "error": result["error"]})
     items = result.get("value", [])
     simplified = [
-        {"id": i.get("id"), "name": i.get("name"), "type": "folder" if "folder" in i else "file",
-         "size": i.get("size"), "url": i.get("webUrl")}
+        {"id": i.get("id"), "name": i.get("name"),
+         "type": "folder" if "folder" in i else "file",
+         "size": i.get("size"), "url": i.get("webUrl"),
+         "modified": i.get("lastModifiedDateTime")}
         for i in items
     ]
     return json.dumps({"success": True, "count": len(simplified), "items": simplified}, ensure_ascii=False)
@@ -139,14 +125,46 @@ def _get_file_tool(args: dict, **_kwargs) -> str:
     token, err = _get_m365_token(user_id)
     if not token:
         return _auth_error(err)
-    site_id = str(args.get("site_id") or "").strip()
-    item_id = str(args.get("item_id") or "").strip()
-    if not site_id or not item_id:
-        return json.dumps({"success": False, "error": "Se requieren site_id e item_id."})
-    result = _graph("GET", f"/sites/{site_id}/drive/items/{item_id}", token)
+
+    file_path = str(args.get("file_path") or "").strip().strip("/")
+    site_url = str(args.get("site_url") or "").strip().rstrip("/")
+
+    if not file_path:
+        return json.dumps({"success": False, "error": "Se requiere file_path."})
+
+    if site_url:
+        parsed = urllib.parse.urlparse(site_url)
+        hostname = parsed.netloc
+        site_path = parsed.path.rstrip("/") or "/"
+        path = f"/sites/{hostname}:{site_path}:/drive/root:/{file_path}"
+    else:
+        path = f"/me/drive/root:/{file_path}"
+
+    result = _graph("GET", path, token)
     if "error" in result:
         return json.dumps({"success": False, "error": result["error"]})
     return json.dumps({"success": True, "item": result}, ensure_ascii=False)
+
+
+def _list_drives_tool(args: dict, **_kwargs) -> str:
+    """List accessible drives (OneDrive + SharePoint document libraries)."""
+    user_id = _task_user_id()
+    if not user_id:
+        return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
+    token, err = _get_m365_token(user_id)
+    if not token:
+        return _auth_error(err)
+
+    result = _graph("GET", "/me/drives", token)
+    if "error" in result:
+        return json.dumps({"success": False, "error": result["error"]})
+    drives = result.get("value", [])
+    simplified = [
+        {"id": d.get("id"), "name": d.get("name"),
+         "type": d.get("driveType"), "url": d.get("webUrl")}
+        for d in drives
+    ]
+    return json.dumps({"success": True, "count": len(simplified), "drives": simplified}, ensure_ascii=False)
 
 
 def _search_tool(args: dict, **_kwargs) -> str:
@@ -156,15 +174,19 @@ def _search_tool(args: dict, **_kwargs) -> str:
     token, err = _get_m365_token(user_id)
     if not token:
         return _auth_error(err)
+
     query = str(args.get("query") or "").strip()
     if not query:
         return json.dumps({"success": False, "error": "Se requiere query."})
+    count = min(int(args.get("count") or 10), 25)
+
     payload = {
         "requests": [{
-            "entityTypes": ["driveItem", "listItem"],
+            "entityTypes": ["driveItem"],
             "query": {"queryString": query},
             "from": 0,
-            "size": min(int(args.get("count") or 10), 25),
+            "size": count,
+            "fields": ["id", "name", "webUrl", "lastModifiedDateTime", "size", "parentReference"],
         }]
     }
     result = _graph("POST", "/search/query", token, payload)
@@ -172,8 +194,15 @@ def _search_tool(args: dict, **_kwargs) -> str:
         return json.dumps({"success": False, "error": result["error"]})
     hits = []
     for resp in result.get("value", []):
-        for hit_container in resp.get("hitsContainers", []):
-            hits.extend(hit_container.get("hits", []))
+        for hc in resp.get("hitsContainers", []):
+            for hit in hc.get("hits", []):
+                resource = hit.get("resource", {})
+                hits.append({
+                    "name": resource.get("name"),
+                    "url": resource.get("webUrl"),
+                    "modified": resource.get("lastModifiedDateTime"),
+                    "size": resource.get("size"),
+                })
     return json.dumps({"success": True, "count": len(hits), "hits": hits}, ensure_ascii=False)
 
 
@@ -181,39 +210,33 @@ def _search_tool(args: dict, **_kwargs) -> str:
 
 def register(ctx):
     ctx.register_tool(
-        name="sharepoint_list_sites",
+        name="sharepoint_list_drives",
         toolset=TOOLSET,
         schema={
-            "name": "sharepoint_list_sites",
-            "description": "Lista sitios SharePoint accesibles por el usuario.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "search": {"type": "string", "description": "Filtro por nombre de sitio (opcional)"},
-                },
-            },
+            "name": "sharepoint_list_drives",
+            "description": "Lista las unidades de almacenamiento accesibles: OneDrive personal y bibliotecas de documentos de SharePoint.",
+            "parameters": {"type": "object", "properties": {}},
         },
-        handler=_list_sites_tool,
-        description="Listar sitios SharePoint",
-        emoji="🏢",
+        handler=_list_drives_tool,
+        description="Listar drives disponibles (OneDrive + SharePoint)",
+        emoji="🗄️",
     )
     ctx.register_tool(
         name="sharepoint_list_files",
         toolset=TOOLSET,
         schema={
             "name": "sharepoint_list_files",
-            "description": "Lista archivos y carpetas en un sitio SharePoint.",
+            "description": "Lista archivos y carpetas en OneDrive o en un sitio SharePoint específico.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "site_id": {"type": "string", "description": "ID del sitio SharePoint"},
+                    "site_url": {"type": "string", "description": "URL del sitio SharePoint (opcional, ej: https://empresa.sharepoint.com/sites/Marketing). Si no se indica, usa el OneDrive del usuario."},
                     "folder_path": {"type": "string", "description": "Ruta de carpeta (opcional, ej: 'Documents/Projects')"},
                 },
-                "required": ["site_id"],
             },
         },
         handler=_list_files_tool,
-        description="Listar archivos en SharePoint",
+        description="Listar archivos en SharePoint/OneDrive",
         emoji="📁",
     )
     ctx.register_tool(
@@ -221,18 +244,18 @@ def register(ctx):
         toolset=TOOLSET,
         schema={
             "name": "sharepoint_get_file",
-            "description": "Obtiene información de un archivo o carpeta en SharePoint por su ID.",
+            "description": "Obtiene información de un archivo por su ruta en OneDrive o SharePoint.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "site_id": {"type": "string", "description": "ID del sitio SharePoint"},
-                    "item_id": {"type": "string", "description": "ID del archivo o carpeta"},
+                    "file_path": {"type": "string", "description": "Ruta del archivo (ej: 'Documents/informe.pdf')"},
+                    "site_url": {"type": "string", "description": "URL del sitio SharePoint (opcional)"},
                 },
-                "required": ["site_id", "item_id"],
+                "required": ["file_path"],
             },
         },
         handler=_get_file_tool,
-        description="Obtener archivo de SharePoint",
+        description="Obtener archivo de SharePoint/OneDrive",
         emoji="📄",
     )
     ctx.register_tool(
@@ -240,7 +263,7 @@ def register(ctx):
         toolset=TOOLSET,
         schema={
             "name": "sharepoint_search",
-            "description": "Busca archivos y documentos en SharePoint usando Microsoft Search.",
+            "description": "Busca archivos y documentos en SharePoint y OneDrive usando Microsoft Search.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -251,6 +274,6 @@ def register(ctx):
             },
         },
         handler=_search_tool,
-        description="Buscar en SharePoint",
+        description="Buscar archivos en SharePoint/OneDrive",
         emoji="🔍",
     )
