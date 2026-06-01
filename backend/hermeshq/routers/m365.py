@@ -295,6 +295,17 @@ class AgentScopesUpdate(BaseModel):
     allowed_scopes: list[str] | None
 
 
+# Mapping: which scopes activate which delegated integration
+_SCOPE_TO_INTEGRATION: dict[str, str] = {
+    "Mail.Read": "ms365-mail",
+    "Mail.Send": "ms365-mail",
+    "Calendars.Read": "ms365-calendar",
+    "Calendars.ReadWrite": "ms365-calendar",
+    "Sites.Read.All": "sharepoint",
+    "Sites.ReadWrite.All": "sharepoint",
+}
+
+
 @router.put("/me/agents/{agent_id}/scopes", response_model=AgentM365ScopesRead)
 async def update_agent_m365_scopes(
     agent_id: str,
@@ -302,7 +313,9 @@ async def update_agent_m365_scopes(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> AgentM365ScopesRead:
+    from hermeshq.models.agent import Agent
     from hermeshq.models.agent_assignment import AgentAssignment
+
     result = await db.execute(
         select(AgentAssignment).where(
             AgentAssignment.user_id == current_user.id,
@@ -313,6 +326,22 @@ async def update_agent_m365_scopes(
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found.")
     assignment.m365_allowed_scopes = payload.allowed_scopes
+
+    # Auto-enable delegated M365 integrations based on the scopes granted
+    agent = await db.get(Agent, agent_id)
+    if agent:
+        scopes = payload.allowed_scopes or []
+        activated_integrations = {_SCOPE_TO_INTEGRATION[s] for s in scopes if s in _SCOPE_TO_INTEGRATION}
+        current_configs = dict(agent.integration_configs or {})
+        changed = False
+        for integration_slug in activated_integrations:
+            if integration_slug not in current_configs:
+                current_configs[integration_slug] = {}
+                changed = True
+                logger.info("Auto-enabled delegated integration '%s' for agent %s based on M365 scopes", integration_slug, agent_id)
+        if changed:
+            agent.integration_configs = current_configs
+
     await db.commit()
     return {"allowed_scopes": assignment.m365_allowed_scopes}
 
