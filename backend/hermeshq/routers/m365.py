@@ -296,13 +296,16 @@ class AgentScopesUpdate(BaseModel):
 
 
 # Mapping: which scopes activate which delegated integration
+# Keys must match the actual Azure AD granted permissions
 _SCOPE_TO_INTEGRATION: dict[str, str] = {
     "Mail.Read": "ms365-mail",
     "Mail.Send": "ms365-mail",
     "Calendars.Read": "ms365-calendar",
     "Calendars.ReadWrite": "ms365-calendar",
-    "Sites.Read.All": "sharepoint",
-    "Sites.ReadWrite.All": "sharepoint",
+    "Files.Read.All": "sharepoint",     # Delegated access to SharePoint/OneDrive files
+    "Chat.Read": "ms365-teams",
+    "Chat.ReadWrite": "ms365-teams",
+    "Team.ReadBasic.All": "ms365-teams",
 }
 
 
