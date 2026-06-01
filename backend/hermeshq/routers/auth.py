@@ -57,16 +57,18 @@ def _check_login_rate_limit(ip_address: str) -> None:
     """Rate limit login attempts per IP address."""
     now = time.monotonic()
     cutoff = now - _LOGIN_WINDOW_SECONDS
-    attempts = _LOGIN_RATE_LIMITS[ip_address]
-    # Evict old entries
-    _LOGIN_RATE_LIMITS[ip_address] = [t for t in attempts if t > cutoff]
+    # Evict old entries for this IP
+    _LOGIN_RATE_LIMITS[ip_address] = [t for t in _LOGIN_RATE_LIMITS[ip_address] if t > cutoff]
     if len(_LOGIN_RATE_LIMITS[ip_address]) >= _LOGIN_MAX_ATTEMPTS:
-        from fastapi import HTTPException, status
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many login attempts. Please try again later.",
         )
     _LOGIN_RATE_LIMITS[ip_address].append(now)
+    # Evict stale IPs to prevent unbounded memory growth (keep only IPs active in last window)
+    stale_ips = [ip for ip, times in _LOGIN_RATE_LIMITS.items() if not times]
+    for ip in stale_ips:
+        del _LOGIN_RATE_LIMITS[ip]
 
 
 logger = logging.getLogger(__name__)
