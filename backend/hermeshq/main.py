@@ -3,6 +3,7 @@ import base64
 import contextlib
 import json
 import logging
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +48,22 @@ DEFAULT_ENABLED_INTEGRATION_PACKAGES = (
 
 
 async def bootstrap_defaults() -> None:
+    import secrets as _secrets
+
+    # Generate random admin password if not set
+    admin_password = settings.admin_password
+    if not admin_password or not admin_password.strip():
+        admin_password = _secrets.token_urlsafe(16)
+        msg = f"
+{'='*60}
+HermesHQ admin credentials
+  username: {settings.admin_username}
+  password: {admin_password}
+{'='*60}
+"
+        sys.stderr.write(msg)
+        sys.stderr.flush()
+
     async with AsyncSessionLocal() as session:
         user_result = await session.execute(select(User).where(User.username == settings.admin_username))
         admin_user = user_result.scalar_one_or_none()
@@ -55,7 +72,7 @@ async def bootstrap_defaults() -> None:
                 User(
                     username=settings.admin_username,
                     display_name=settings.admin_display_name,
-                    password_hash=hash_password(settings.admin_password),
+                    password_hash=hash_password(admin_password),
                     role="admin",
                     is_active=True,
                 )
