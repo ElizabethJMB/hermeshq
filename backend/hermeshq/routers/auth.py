@@ -57,16 +57,18 @@ def _check_login_rate_limit(ip_address: str) -> None:
     """Rate limit login attempts per IP address."""
     now = time.monotonic()
     cutoff = now - _LOGIN_WINDOW_SECONDS
-    attempts = _LOGIN_RATE_LIMITS[ip_address]
-    # Evict old entries
-    _LOGIN_RATE_LIMITS[ip_address] = [t for t in attempts if t > cutoff]
+    # Evict old entries for this IP
+    _LOGIN_RATE_LIMITS[ip_address] = [t for t in _LOGIN_RATE_LIMITS[ip_address] if t > cutoff]
     if len(_LOGIN_RATE_LIMITS[ip_address]) >= _LOGIN_MAX_ATTEMPTS:
-        from fastapi import HTTPException, status
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many login attempts. Please try again later.",
         )
     _LOGIN_RATE_LIMITS[ip_address].append(now)
+    # Evict stale IPs to prevent unbounded memory growth (keep only IPs active in last window)
+    stale_ips = [ip for ip, times in _LOGIN_RATE_LIMITS.items() if not times]
+    for ip in stale_ips:
+        del _LOGIN_RATE_LIMITS[ip]
 
 
 logger = logging.getLogger(__name__)
@@ -217,8 +219,15 @@ def _build_frontend_redirect(request: Request, *, token: str | None = None, auth
     host = forwarded_host or request.headers.get("host") or request.url.netloc
     scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
     base_url = f"{scheme}://{host}/"
-    query = urlencode({k: v for k, v in {"token": token, "auth_error": auth_error}.items() if v})
-    return f"{base_url}?{query}" if query else base_url
+    if token:
+        # Successful auth: redirect to root with token so App.tsx can detect it
+        query = urlencode({"token": token})
+        return f"{base_url}?{query}"
+    if auth_error:
+        # Failed auth: redirect to /login so LoginPage.tsx can display the error
+        query = urlencode({"auth_error": auth_error})
+        return f"{base_url}login?{query}"
+    return base_url
 
 
 def _create_oidc_state() -> str:
@@ -480,7 +489,7 @@ async def login(payload: LoginRequest, response: Response, request: Request, db:
     user = result.scalar_one_or_none()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token, expires_at = create_access_token(user.id, subject_kind="id")
+    token, expires_at = create_access_token(user.id, subject_kind="id", role=user.role or "user")
     _set_auth_cookie(response, token)
     return TokenResponse(access_token=token, expires_at=expires_at)
 
@@ -495,7 +504,7 @@ async def refresh_token(
     The client calls this before the existing token expires to extend
     the session without requiring a full re-login.
     """
-    token, expires_at = create_access_token(current_user.id, subject_kind="id")
+    token, expires_at = create_access_token(current_user.id, subject_kind="id", role=current_user.role or "user")
     _set_auth_cookie(response, token)
     return TokenResponse(access_token=token, expires_at=expires_at)
 
@@ -690,7 +699,7 @@ async def oidc_callback(
             _build_frontend_redirect(request, auth_error="This HermesHQ user is inactive"),
             status_code=status.HTTP_302_FOUND,
         )
-    token, _ = create_access_token(local_user.id, subject_kind="id")
+    token, _ = create_access_token(local_user.id, subject_kind="id", role=local_user.role or "user")
     redirect = RedirectResponse(_build_frontend_redirect(request, token=token), status_code=status.HTTP_302_FOUND)
     _set_auth_cookie(redirect, token)
     return redirect
