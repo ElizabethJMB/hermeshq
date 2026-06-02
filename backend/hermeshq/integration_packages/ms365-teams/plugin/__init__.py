@@ -27,7 +27,7 @@ def _get_m365_token(user_id: str) -> tuple[str | None, str]:
     agent_token = os.environ.get("HERMESHQ_AGENT_TOKEN", "")
     if not base_url or not agent_id or not agent_token:
         return None, "HermesHQ internal control no configurado"
-    url = f"{base_url}/m365/agent-token?user_id={user_id}"
+    url = f"{base_url}/control/m365/agent-token?user_id={user_id}"
     req = urllib.request.Request(
         url, method="GET",
         headers={"X-HermesHQ-Agent-ID": agent_id, "X-HermesHQ-Agent-Token": agent_token},

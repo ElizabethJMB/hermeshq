@@ -828,3 +828,18 @@ async def control_delete_scheduled_task(
         target_agent_id=target_agent_id,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ─── M365 delegated token for plugins ──────────────────────────────────────
+
+@router.get("/m365/agent-token", include_in_schema=False)
+async def internal_get_m365_agent_token(
+    request: Request,
+    user_id: str,
+    current_agent: Agent = Depends(_get_control_agent),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Called by M365 managed integration plugins to get a delegated access token
+    for the user on whose behalf the task is running."""
+    from hermeshq.routers.m365 import get_agent_m365_token
+    return await get_agent_m365_token(request, user_id, db)
