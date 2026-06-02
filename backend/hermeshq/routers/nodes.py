@@ -6,6 +6,7 @@ import psutil
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from hermeshq.core.pagination import PaginatedResponse, PaginationParams, paginate
 from hermeshq.core.security import require_admin
 from hermeshq.database import get_db_session
 from hermeshq.models.node import Node
@@ -27,13 +28,14 @@ def _is_local_node(node: Node) -> bool:
     return node.node_type == "local"
 
 
-@router.get("", response_model=list[NodeRead])
+@router.get("", response_model=PaginatedResponse[NodeRead])
 async def list_nodes(
+    pagination: PaginationParams = Depends(),
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
-) -> list[NodeRead]:
-    result = await db.execute(select(Node).order_by(Node.created_at.asc()))
-    return [NodeRead.model_validate(node) for node in result.scalars().all()]
+) -> PaginatedResponse[NodeRead]:
+    statement = select(Node).order_by(Node.created_at.asc())
+    return await paginate(statement, db, pagination, NodeRead.model_validate)
 
 
 @router.post("", response_model=NodeRead)
