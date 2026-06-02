@@ -431,7 +431,7 @@ class GatewayProcessManager:
         if log_mgr:
             log_mgr.cleanup_stale_gateway_pid(agent.workspace_path)
 
-        log_path = self._gateway_log_path(agent.workspace_path)
+        log_path = self.gateway_log_path(agent.workspace_path)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_handle = log_path.open("a", encoding="utf-8")
         process = subprocess.Popen(
@@ -494,7 +494,7 @@ class GatewayProcessManager:
         if return_code is None:
             return
 
-        log_tail = self._read_log_tail(Path(handle.log_path), lines=80).lower()
+        log_tail = self.read_log_tail(Path(handle.log_path), lines=80).lower()
         if "pid file race lost to another gateway instance" in log_tail:
             raise ValueError("PID file race lost to another gateway instance")
         if "whatsapp bridge process exited unexpectedly" in log_tail:
@@ -581,12 +581,8 @@ class GatewayProcessManager:
 
     # ── Path helpers ────────────────────────────────────────────────────────
 
-    @staticmethod
-    def _gateway_log_path(workspace_path: str) -> Path:
-        from hermeshq.config import get_settings
-        settings = get_settings()
-        base = settings.data_dir
-        return Path(base) / "workspaces" / workspace_path / "gateway.log"
+    def gateway_log_path(self, workspace_path: str) -> Path:
+        return self.installation_manager.build_hermes_home(workspace_path) / "logs" / "gateway.log"
 
     @staticmethod
     def _read_log_tail(path: Path, lines: int = 120) -> str:
