@@ -7,6 +7,7 @@ import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -380,12 +381,7 @@ async def stream(websocket: WebSocket) -> None:
             accessible_agent_ids = await get_accessible_agent_ids(session, user)
 
     # Build a lightweight user-like object for the broker subscription
-    class _TokenUser:
-        id = user_id
-        role = user_role
-        is_active = True
-
-    user = _TokenUser()
+    user = SimpleNamespace(id=user_id, role=user_role, is_active=True)
 
     # If we already accepted (message-based auth), don't accept again.
     if websocket.client_state.name == "CONNECTED":

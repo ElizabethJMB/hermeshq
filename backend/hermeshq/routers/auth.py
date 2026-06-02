@@ -504,7 +504,7 @@ async def refresh_token(
     The client calls this before the existing token expires to extend
     the session without requiring a full re-login.
     """
-    token, expires_at = create_access_token(current_user.id, subject_kind="id")
+    token, expires_at = create_access_token(current_user.id, subject_kind="id", role=current_user.role or "user")
     _set_auth_cookie(response, token)
     return TokenResponse(access_token=token, expires_at=expires_at)
 

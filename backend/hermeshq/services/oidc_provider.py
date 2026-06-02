@@ -164,20 +164,20 @@ async def exchange_code_and_get_claims(
 
         claims: dict = {}
 
-        logger.warning("🔑 token_payload keys: %s", list(token_payload.keys()))
+        logger.debug("OIDC token_payload keys: %s", list(token_payload.keys()))
 
         # Validate id_token if present
         id_token = token_payload.get("id_token")
         if id_token and isinstance(id_token, str):
             claims = await _validate_id_token(id_token, provider, discovery)
-            logger.warning("🪪 id_token claims keys: %s", list(claims.keys()))
+            logger.debug("OIDC id_token claims keys: %s", list(claims.keys()))
         else:
-            logger.warning("⚠️ No id_token in token response")
+            logger.debug("OIDC: no id_token in token response")
 
         # Fetch userinfo for additional claims
         access_token = token_payload.get("access_token")
         userinfo_endpoint = discovery.get("userinfo_endpoint")
-        logger.warning("🌐 userinfo_endpoint: %s, has access_token: %s", userinfo_endpoint, bool(access_token))
+        logger.debug("OIDC userinfo_endpoint: %s, has access_token: %s", userinfo_endpoint, bool(access_token))
         if userinfo_endpoint and access_token:
             try:
                 ui_resp = await client.get(
@@ -186,14 +186,14 @@ async def exchange_code_and_get_claims(
                 )
                 ui_resp.raise_for_status()
                 userinfo = ui_resp.json()
-                logger.warning("👤 userinfo keys: %s, sub=%s, email=%s", list(userinfo.keys()), userinfo.get("sub"), userinfo.get("email"))
+                logger.debug("OIDC userinfo keys: %s", list(userinfo.keys()))
                 claims = {**claims, **userinfo}
             except Exception as exc:
-                logger.warning("❌ Failed to fetch userinfo from %s: %s", provider.slug, exc, exc_info=True)
+                logger.warning("Failed to fetch OIDC userinfo from %s: %s", provider.slug, exc, exc_info=True)
         else:
-            logger.warning("⚠️ Skipping userinfo: endpoint=%s, token=%s", bool(userinfo_endpoint), bool(access_token))
+            logger.debug("OIDC skipping userinfo: endpoint=%s, token=%s", bool(userinfo_endpoint), bool(access_token))
 
-        logger.warning("📋 Final claims keys: %s, sub=%s, email=%s", list(claims.keys()), claims.get("sub"), claims.get("email"))
+        logger.debug("OIDC final claims keys: %s", list(claims.keys()))
 
         if not claims.get("sub"):
             raise ValueError("OIDC claims did not include 'sub'")
