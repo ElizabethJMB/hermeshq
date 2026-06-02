@@ -89,7 +89,7 @@ class GatewaySupervisor:
         async with self.session_factory() as session:
             result = await session.execute(
                 select(Agent).where(
-                    Agent.archived.is_(True) == False,  # noqa: E712
+                    Agent.is_archived.is_(False),
                     Agent.status != "stopped",
                 )
             )
