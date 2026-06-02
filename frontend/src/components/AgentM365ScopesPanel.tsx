@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react";
+import { useMe } from "../api/auth";
 import { useAgentM365Scopes, useMyM365Status, useUpdateAgentM365Scopes } from "../api/m365";
+import { useSessionStore } from "../stores/sessionStore";
 
 const SHAREPOINT_SCOPE = "Files.Read.All";
 
 export function AgentM365ScopesPanel({ agentId }: { agentId: string }) {
-  const { data: status } = useMyM365Status();
+  const token = useSessionStore((s) => s.token);
+  const { data: me } = useMe(Boolean(token));
+  const isAdmin = me?.role === "admin";
+
+  const { data: status, isLoading: statusLoading } = useMyM365Status();
   const { data: scopeData, isLoading } = useAgentM365Scopes(status?.connected ? agentId : null);
   const update = useUpdateAgentM365Scopes(agentId);
 
@@ -19,7 +25,22 @@ export function AgentM365ScopesPanel({ agentId }: { agentId: string }) {
     }
   }, [scopeData]);
 
-  if (!status?.connected || (!isLoading && !scopeData && status?.connected)) {
+  // Loading state
+  if (statusLoading) {
+    return <p className="text-sm text-[var(--text-secondary)]">Cargando...</p>;
+  }
+
+  // Admin without M365 connected: show informational message instead of "connect your account"
+  if (!status?.connected) {
+    if (isAdmin) {
+      return (
+        <p className="text-sm text-[var(--text-secondary)]">
+          Los permisos Microsoft 365 son configurados por cada usuario desde{" "}
+          <a href="/account" className="text-[var(--accent)] underline">Mi cuenta</a>.
+          {" "}Cada usuario asignado a este agente puede elegir qué permisos M365 otorgarle.
+        </p>
+      );
+    }
     return (
       <p className="text-sm text-[var(--text-secondary)]">
         Conecta tu cuenta Microsoft 365 en{" "}

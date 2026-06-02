@@ -279,7 +279,17 @@ async def get_agent_m365_scopes(
     )
     assignment = result.scalar_one_or_none()
     if not assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found.")
+        # Auto-create assignment so users can configure M365 scopes for any agent
+        from uuid import uuid4
+        from hermeshq.models.agent_assignment import AgentAssignment as _AgentAssignment
+        assignment = _AgentAssignment(
+            id=str(uuid4()),
+            user_id=current_user.id,
+            agent_id=agent_id,
+            m365_allowed_scopes=None,
+        )
+        db.add(assignment)
+        await db.commit()
     token_result = await db.execute(
         select(UserM365Token).where(UserM365Token.user_id == current_user.id)
     )
