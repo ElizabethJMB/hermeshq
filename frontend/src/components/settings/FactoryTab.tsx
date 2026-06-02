@@ -1,19 +1,26 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import type { UseMutationResult, QueryClient } from "@tanstack/react-query";
 
 import { useIntegrationDraftFile } from "../../api/integrationFactory";
 import { useI18n } from "../../lib/i18n";
+import type {
+  IntegrationDraft,
+  IntegrationDraftFileContent,
+  IntegrationDraftValidation,
+  IntegrationDraftPublishResult,
+} from "../../types/api";
 
 interface FactoryTabProps {
-  integrationDrafts: any[] | undefined;
-  createIntegrationDraft: any;
-  updateIntegrationDraft: any;
-  deleteIntegrationDraft: any;
-  saveIntegrationDraftFile: any;
-  deleteIntegrationDraftFile: any;
-  validateIntegrationDraft: any;
-  publishIntegrationDraft: any;
-  integrationDraftFiles: any;
-  queryClient: any;
+  integrationDrafts: IntegrationDraft[] | undefined;
+  createIntegrationDraft: UseMutationResult<IntegrationDraft, Error, { slug: string; name: string; description?: string; template: "rest-api" | "empty"; version?: string }>;
+  updateIntegrationDraft: UseMutationResult<IntegrationDraft, Error, { draftId: string; name?: string; description?: string; version?: string; notes?: string }>;
+  deleteIntegrationDraft: UseMutationResult<string, Error, string>;
+  saveIntegrationDraftFile: UseMutationResult<IntegrationDraft, Error, { draftId: string; path: string; content: string }>;
+  deleteIntegrationDraftFile: UseMutationResult<IntegrationDraft, Error, { draftId: string; path: string }>;
+  validateIntegrationDraft: UseMutationResult<IntegrationDraftValidation, Error, string>;
+  publishIntegrationDraft: UseMutationResult<IntegrationDraftPublishResult, Error, string>;
+  integrationDraftFiles: IntegrationDraftFileContent | undefined;
+  queryClient: QueryClient;
 }
 
 export default function FactoryTab({
