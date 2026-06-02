@@ -48,7 +48,7 @@ def _get_m365_token(user_id: str) -> tuple[str | None, str]:
 
 
 def _graph(method: str, path: str, access_token: str, payload: dict | None = None) -> dict:
-    url = f"{GRAPH_BASE}{path}"
+    url = f"{GRAPH_BASE}{path}".replace(" ", "%20")
     data = json.dumps(payload).encode("utf-8") if payload else None
     req = urllib.request.Request(
         url, data=data, method=method.upper(),
