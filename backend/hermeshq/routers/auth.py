@@ -485,6 +485,21 @@ async def login(payload: LoginRequest, response: Response, request: Request, db:
     return TokenResponse(access_token=token, expires_at=expires_at)
 
 
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(
+    response: Response,
+    current_user: User = Depends(get_current_user),
+) -> TokenResponse:
+    """Issue a fresh JWT for the currently authenticated user.
+
+    The client calls this before the existing token expires to extend
+    the session without requiring a full re-login.
+    """
+    token, expires_at = create_access_token(current_user.id, subject_kind="id")
+    _set_auth_cookie(response, token)
+    return TokenResponse(access_token=token, expires_at=expires_at)
+
+
 @router.get("/oidc/login", include_in_schema=False)
 async def oidc_login(request: Request, provider: str | None = None, db: AsyncSession = Depends(get_db_session)) -> RedirectResponse:
     requested_provider = (provider or "").strip().lower()
