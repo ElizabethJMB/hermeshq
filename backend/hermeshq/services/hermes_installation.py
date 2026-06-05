@@ -180,6 +180,12 @@ class HermesInstallationManager:
             # zai, openrouter have their own dedicated base_url env vars.
             if runtime_provider in ("openai", "openai-codex", "gemini"):
                 env["OPENAI_BASE_URL"] = effective_base_url
+                # Also inject OPENAI_API_KEY so the gateway's auxiliary
+                # clients (vision, compression, etc.) can resolve credentials
+                # from the environment.  For OAuth-based providers (real
+                # Codex) api_key is None so this is a no-op.
+                if api_key and "OPENAI_API_KEY" not in env:
+                    env["OPENAI_API_KEY"] = api_key
         managed_env = await self._build_managed_env_map(agent) if include_channels else {}
         for key, value in managed_env.items():
             env[key] = value
