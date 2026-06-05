@@ -186,6 +186,13 @@ class HermesInstallationManager:
                 # Codex) api_key is None so this is a no-op.
                 if api_key and "OPENAI_API_KEY" not in env:
                     env["OPENAI_API_KEY"] = api_key
+                    # Gateway vision/compression tools resolve credentials
+                    # via AUXILIARY_{TASK}_* env vars.  Seed them from the
+                    # agent's main provider so multimodal models (e.g.
+                    # stepfun/step-3.7-flash) work out of the box.
+                    for _aux_task in ("vision", "compression", "web_extract"):
+                        env.setdefault(f"AUXILIARY_{_aux_task.upper()}_API_KEY", api_key)
+                        env.setdefault(f"AUXILIARY_{_aux_task.upper()}_BASE_URL", effective_base_url)
         managed_env = await self._build_managed_env_map(agent) if include_channels else {}
         for key, value in managed_env.items():
             env[key] = value
