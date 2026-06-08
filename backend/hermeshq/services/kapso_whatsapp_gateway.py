@@ -40,6 +40,7 @@ from hermeshq.models.agent import Agent
 from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.secret import Secret
 from hermeshq.models.task import Task
+from hermeshq.services.channel_user_resolver import resolve_channel_user
 from hermeshq.services.secret_vault import SecretVault
 
 logger = logging.getLogger(__name__)
@@ -400,6 +401,8 @@ class KapsoWhatsAppGateway:
         allowed = config.get("allowed_user_ids", [])
         unauthorized_behavior = config.get("unauthorized_dm_behavior", "pair")
 
+        logger.debug("Kapso access check: sender_wa_id=%s sender_phone=%s allowed=%s",
+                     sender_wa_id, sender_phone, allowed)
         if allowed:
             # Check if sender matches any allowed user
             matched = False
@@ -435,6 +438,14 @@ class KapsoWhatsAppGateway:
                 kapso_mark_read(self._api_key, self._phone_number_id, message_id)
             )
 
+        # Resolve HermesHQ user from the sender's Kapso ID (kapso_id stores the WA phone number)
+        hermeshq_user_id: str | None = None
+        if sender_wa_id:
+            async with self.session_factory() as session:
+                resolved = await resolve_channel_user(session, "kapso_whatsapp", sender_wa_id)
+                if resolved:
+                    hermeshq_user_id = resolved.id
+
         # Create task for the agent
         task_id = await self._create_task(
             prompt=text_content,
@@ -443,6 +454,7 @@ class KapsoWhatsAppGateway:
             message_id=message_id,
             conversation_id=conversation_id,
             msg_type=msg_type,
+            hermeshq_user_id=hermeshq_user_id,
         )
 
         if task_id:
@@ -459,6 +471,7 @@ class KapsoWhatsAppGateway:
         message_id: str,
         conversation_id: str,
         msg_type: str,
+        hermeshq_user_id: str | None = None,
     ) -> str | None:
         """Create a Task and submit it to the supervisor."""
         task_id = str(uuid.uuid4())
@@ -480,12 +493,17 @@ class KapsoWhatsAppGateway:
                 status="queued",
                 metadata_json={
                     "source": "kapso_whatsapp",
+                    "platform": "kapso_whatsapp",
                     "sender_wa_id": sender_wa_id,
                     "sender_username": sender_username,
                     "kapso_message_id": message_id,
                     "kapso_conversation_id": conversation_id,
                     "msg_type": msg_type,
                     "kapso_phone_number_id": self._phone_number_id,
+                    "hermeshq_user_id": hermeshq_user_id,
+                    # thread_user_id allows M365 plugins to identify the user
+                    # and retrieve their OAuth token for Graph API calls.
+                    "thread_user_id": hermeshq_user_id,
                 },
             )
             session.add(task)
@@ -568,8 +586,12 @@ async def handle_kapso_webhook(
         phone_number_id = conversation.get("phone_number_id", "")
 
     if not phone_number_id:
-        logger.warning("Kapso webhook: no phone_number_id in payload")
+        logger.warning("Kapso webhook: no phone_number_id in payload — full payload keys: %s", list(payload.keys()))
         return
+
+    logger.debug("Kapso webhook: phone_number_id=%s, registered gateways: %s",
+                 phone_number_id,
+                 {aid: gw._phone_number_id for aid, gw in gateways.items()})
 
     # Find the gateway for this phone number
     for agent_id, gateway in gateways.items():
