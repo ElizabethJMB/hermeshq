@@ -15,6 +15,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -153,6 +154,74 @@ async def kapso_mark_read(
     except Exception:
         logger.debug("Failed to mark message %s as read", message_id, exc_info=True)
         return None
+
+
+_WA_MAX_CHARS = 4000  # WhatsApp hard limit is 4096 — use 4000 for safety margin
+
+
+def _split_message(text: str) -> list[str]:
+    """
+    Split a long message into chunks of at most _WA_MAX_CHARS characters.
+
+    Strategy (in order):
+      1. Split on double newlines (paragraphs) — preferred break point.
+      2. If a paragraph is still too long, split on single newlines.
+      3. If a line is still too long, split on sentence boundaries (. ! ?).
+      4. Hard-split anything that remains.
+    """
+    if len(text) <= _WA_MAX_CHARS:
+        return [text]
+
+    chunks: list[str] = []
+    current = ""
+
+    def flush(chunk: str) -> None:
+        chunk = chunk.strip()
+        if chunk:
+            chunks.append(chunk)
+
+    def add_segment(segment: str) -> None:
+        nonlocal current
+        if not segment:
+            return
+        if len(current) + len(segment) + 1 <= _WA_MAX_CHARS:
+            current = (current + "\n" + segment).lstrip("\n")
+        else:
+            flush(current)
+            current = segment
+
+    # Walk paragraph by paragraph
+    for para in re.split(r"\n{2,}", text):
+        if len(para) <= _WA_MAX_CHARS:
+            add_segment(para)
+            continue
+        # Paragraph too long — split on single newlines
+        for line in para.split("\n"):
+            if len(line) <= _WA_MAX_CHARS:
+                add_segment(line)
+                continue
+            # Line too long — split on sentence boundaries
+            for sentence in re.split(r"(?<=[.!?])\s+", line):
+                if len(sentence) <= _WA_MAX_CHARS:
+                    add_segment(sentence)
+                else:
+                    # Hard split
+                    for i in range(0, len(sentence), _WA_MAX_CHARS):
+                        add_segment(sentence[i: i + _WA_MAX_CHARS])
+
+    flush(current)
+    return chunks or [text[:_WA_MAX_CHARS]]
+
+
+async def kapso_send_text_chunked(
+    api_key: str,
+    phone_number_id: str,
+    to: str,
+    text: str,
+) -> None:
+    """Send a (possibly long) text, splitting it into WhatsApp-safe chunks."""
+    for chunk in _split_message(text):
+        await kapso_send_text(api_key, phone_number_id, to, chunk)
 
 
 def verify_webhook_signature(
@@ -432,11 +501,14 @@ class KapsoWhatsAppGateway:
                         logger.exception("Failed to send unauthorized reply")
                 return
 
-        # Mark message as read
+        # Mark message as read and send acknowledgment
         if message_id:
             asyncio.create_task(
                 kapso_mark_read(self._api_key, self._phone_number_id, message_id)
             )
+        asyncio.create_task(
+            kapso_send_text(self._api_key, self._phone_number_id, sender_wa_id, "⏳")
+        )
 
         # Resolve HermesHQ user from the sender's Kapso ID (kapso_id stores the WA phone number)
         hermeshq_user_id: str | None = None
@@ -547,7 +619,7 @@ class KapsoWhatsAppGateway:
             if not response_text:
                 return
             try:
-                await kapso_send_text(
+                await kapso_send_text_chunked(
                     api_key=self._api_key,
                     phone_number_id=self._phone_number_id,
                     to=delivery["sender_wa_id"],
