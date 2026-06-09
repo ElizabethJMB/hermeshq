@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from hermeshq.database import get_db_session
+import hmac as _hmac
+
 from hermeshq.core.security import create_agent_service_token
 from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
@@ -90,7 +92,7 @@ async def _load_internal_system_agent(
     if not service_agent_id or not service_agent_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing agent credentials")
     expected = create_agent_service_token(service_agent_id)
-    if service_agent_token != expected:
+    if not _hmac.compare_digest(service_agent_token, expected):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid agent credentials")
     agent = await db.get(Agent, service_agent_id)
     if not agent or agent.is_archived:
