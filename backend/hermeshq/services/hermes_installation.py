@@ -623,7 +623,11 @@ class HermesInstallationManager:
                 installed.append(cached)
                 continue
 
-            bundle = await self._fetch_skill_bundle(identifier, enabled_integration_slugs)
+            try:
+                bundle = await self._fetch_skill_bundle(identifier, enabled_integration_slugs)
+            except HermesInstallationError as exc:
+                logger.warning("Skipping skill '%s': %s", identifier, exc)
+                continue
             desired_names.add(bundle["name"])
             target_dir = managed_root / bundle["name"]
             if target_dir.exists():
