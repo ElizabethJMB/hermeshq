@@ -55,10 +55,10 @@ async def bootstrap_defaults() -> None:
     admin_password = settings.admin_password
     if not admin_password or not admin_password.strip():
         admin_password = _secrets.token_urlsafe(16)
-        sep = "=" * 60
-        msg = f"\n{sep}\nHermesHQ admin credentials\n  username: {settings.admin_username}\n  password: {admin_password}\n{sep}\n"
-        sys.stderr.write(msg)
-        sys.stderr.flush()
+        logger.warning(
+            "⚠️ ADMIN_PASSWORD was not set — auto-generated a secure password. "
+            "Set ADMIN_PASSWORD in your environment to control this value."
+        )
 
     async with AsyncSessionLocal() as session:
         user_result = await session.execute(select(User).where(User.username == settings.admin_username))
