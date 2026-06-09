@@ -220,6 +220,10 @@ class HermesInstallationManager:
         env = await self.build_process_env(agent, include_channels=False)
         for key, value in (await self._build_managed_env_map(agent, platform)).items():
             env[key] = value
+        # WhatsApp pairing requires scanning a QR code — give enough time for the
+        # user to open the app and scan before the gateway times out.
+        if platform == "whatsapp" or (platform is None and env.get("WHATSAPP_ENABLED") == "true"):
+            env.setdefault("HERMES_GATEWAY_PLATFORM_CONNECT_TIMEOUT", "120")
         return env
 
     async def get_runtime_system_prompt(self, agent: Agent) -> str:
