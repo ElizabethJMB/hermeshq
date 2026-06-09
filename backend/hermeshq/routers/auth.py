@@ -214,8 +214,33 @@ def _build_oidc_post_logout_redirect_uri(request: Request) -> str:
     return _build_frontend_redirect(request, auth_error=None)
 
 
+def _validate_redirect_host(forwarded_host: str) -> bool:
+    """Validate that an X-Forwarded-Host header matches an allowed origin.
+
+    Uses the configured cors_origins list as the trusted-host whitelist.
+    Only the hostname (without port) is checked so that different ports on
+    the same domain are still accepted.
+    """
+    from urllib.parse import urlparse as _urlparse
+
+    allowed_hosts: set[str] = set()
+    for origin in get_settings().cors_origins:
+        try:
+            parsed = _urlparse(origin)
+            if parsed.hostname:
+                allowed_hosts.add(parsed.hostname)
+        except Exception:
+            continue
+    # Extract hostname from the forwarded value (may include port)
+    candidate = forwarded_host.split(":")[0]
+    return candidate in allowed_hosts
+
+
 def _build_frontend_redirect(request: Request, *, token: str | None = None, auth_error: str | None = None) -> str:
     forwarded_host = request.headers.get("x-forwarded-host")
+    if forwarded_host and not _validate_redirect_host(forwarded_host):
+        logger.warning("Rejected X-Forwarded-Host %r — not in allowed origins", forwarded_host)
+        forwarded_host = None
     host = forwarded_host or request.headers.get("host") or request.url.netloc
     scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
     base_url = f"{scheme}://{host}/"
