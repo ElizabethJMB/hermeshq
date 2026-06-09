@@ -69,7 +69,9 @@ class Settings(BaseSettings):
 
     def model_post_init(self, __context) -> None:
         if self.jwt_secret in ("", "change-me"):
-            logger.warning("⚠️ JWT_SECRET is not set or using default value. This is insecure for production!")
+            import secrets as _secrets
+            self.jwt_secret = _secrets.token_urlsafe(32)
+            logger.warning("⚠️ JWT_SECRET was not set — auto-generated a secure random secret. Set JWT_SECRET in your environment for production.")
         if self.admin_password in ("", "admin123"):
             logger.warning("⚠️ ADMIN_PASSWORD is not set or using default value. This is insecure for production!")
         self.workspaces_root = self.workspaces_root.resolve()
