@@ -329,6 +329,8 @@ async def delete_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     if agent.is_archived:
+        await db.delete(agent)
+        await db.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     active_task_ids = list(
