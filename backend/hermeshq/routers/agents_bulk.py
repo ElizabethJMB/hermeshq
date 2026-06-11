@@ -28,6 +28,7 @@ from hermeshq.routers.agents_shared import (
     _load_enabled_integration_slugs,
 )
 from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug
+from hermeshq.services.audit import record_audit, extract_ip
 from hermeshq.services.task_board import next_board_order, runtime_status_to_board_column
 
 logger = logging.getLogger(__name__)
@@ -234,6 +235,20 @@ async def bulk_config_update(
     if not submitted_agent_ids:
         raise HTTPException(status_code=400, detail="No valid agents were available for bulk config update")
 
+    await db.commit()
+
+    # Record audit entry for the bulk config change
+    await record_audit(
+        db,
+        action="agent.bulk_config",
+        target_type="agent",
+        actor_id=current_user.id,
+        actor_username=current_user.username,
+        actor_role=current_user.role,
+        ip_address=extract_ip(request),
+        new_value=update_data,
+        details={"agent_count": len(submitted_agent_ids), "agent_ids": submitted_agent_ids},
+    )
     await db.commit()
 
     # Sync installations for updated agents
