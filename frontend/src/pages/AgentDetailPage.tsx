@@ -344,8 +344,16 @@ export function AgentDetailPage() {
     setUseProviderDefaultDraft(agent.use_provider_default ?? true);
     setCustomModelDraft(agent.model ?? "");
     setAuxiliaryDraft(agent.auxiliary_models ?? {});
+    setNameTouched(false);
+    setSlugTouched(false);
+  }, [agent]);
+
+  useEffect(() => {
+    if (!agent || !managedIntegrations) {
+      return;
+    }
     const nextIntegrationDrafts: Record<string, Record<string, string>> = {};
-    for (const integration of managedIntegrations ?? []) {
+    for (const integration of managedIntegrations) {
       const currentConfig = (agent.integration_configs?.[integration.slug] as Record<string, unknown> | undefined) ?? {};
       nextIntegrationDrafts[integration.slug] = Object.fromEntries(
         integration.fields.map((field) => {
@@ -358,8 +366,6 @@ export function AgentDetailPage() {
     setIntegrationDrafts(nextIntegrationDrafts);
     setIntegrationTestResults({});
     setIntegrationActionResults({});
-    setNameTouched(false);
-    setSlugTouched(false);
   }, [agent, managedIntegrations]);
 
   useEffect(() => {
