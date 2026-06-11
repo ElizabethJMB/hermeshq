@@ -2,11 +2,13 @@
 import pytest
 from unittest.mock import MagicMock
 
+from hermeshq.models.agent import Agent
 from hermeshq.services.provider_catalog import (
     BUILTIN_PROVIDERS,
     normalize_runtime_provider,
     seed_provider_defaults,
 )
+from hermeshq.services.hermes_version_manager import HermesRuntimeSelection
 
 
 # ── Helpers ──────────────────────────────────────────────────
