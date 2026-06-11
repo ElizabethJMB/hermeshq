@@ -367,9 +367,13 @@ def _skill_bundle_from_dir(skill_dir: Path, identifier: str) -> dict | None:
 
 
 def _safe_extract_tar(archive: tarfile.TarFile, destination: Path) -> None:
+    dest_resolved = destination.resolve()
     for member in archive.getmembers():
+        # Reject symlinks and hard links that could escape the destination
+        if member.issym() or member.islnk():
+            raise ValueError("Integration package archive contains symbolic or hard links which are not allowed")
         target = (destination / member.name).resolve()
-        if destination.resolve() not in target.parents and target != destination.resolve():
+        if dest_resolved not in target.parents and target != dest_resolved:
             raise ValueError("Integration package archive contains unsafe paths")
     archive.extractall(destination)
 
