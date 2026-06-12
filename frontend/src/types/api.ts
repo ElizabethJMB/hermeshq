@@ -185,6 +185,8 @@ export interface AppSettings {
   from_name: string | null;
   public_base_url: string | null;
   mfa_email_enabled: boolean;
+  teams_bot_url: string | null;
+  teams_bot_admin_key_ref: string | null;
   tui_skin_filename: string | null;
   logo_url: string | null;
   favicon_url: string | null;

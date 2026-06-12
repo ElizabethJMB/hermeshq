@@ -28,9 +28,10 @@ export type ChannelFormState = {
   free_response_chat_ids: string;
   unauthorized_dm_behavior: string;
   whatsapp_mode: string;
-  // Teams metadata
-  teams_app_id: string;
-  teams_tenant_id: string;
+  // Teams bridge metadata
+  teams_hermes_id: string;
+  teams_hermes_desc: string;
+  teams_bot_url: string;
   // Google Chat metadata
   google_project_id: string;
   // Kapso WhatsApp metadata
@@ -48,8 +49,9 @@ export const defaultFormState: ChannelFormState = {
   free_response_chat_ids: "",
   unauthorized_dm_behavior: "pair",
   whatsapp_mode: "self-chat",
-  teams_app_id: "",
-  teams_tenant_id: "",
+  teams_hermes_id: "",
+  teams_hermes_desc: "",
+  teams_bot_url: "",
   google_project_id: "",
   kapso_phone_number_id: "",
   kapso_webhook_secret: "",
@@ -74,8 +76,10 @@ export type PlatformConfig = {
   showHomeChat: boolean;
   /** Whether to show the behavior settings (unauthorized DM + require mention) */
   showBehavior: boolean;
-  /** Whether to show Teams metadata fields (app_id, tenant_id) */
+  /** Whether to show Teams bridge metadata fields (hermes_id, bot_url, etc.) */
   showTeamsMetadata: boolean;
+  /** Callback to provision Teams token from relay bot */
+  onProvisionTeamsToken?: () => void;
   /** Whether to show Google Chat metadata fields (project_id) */
   showGoogleChatMetadata: boolean;
   /** Whether to show Kapso WhatsApp metadata fields (phone_number_id, webhook_secret) */
@@ -371,32 +375,53 @@ export function ChannelForm({
               </div>
             )}
 
-            {/* Teams metadata (App ID + Tenant ID) */}
+            {/* Teams bridge metadata (hermes_id, hermes_desc, bot_url) */}
             {config.showTeamsMetadata && (
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-              <p className="panel-label">{t("agent.teamsMetadata")}</p>
+              <div className="flex items-center justify-between">
+                <p className="panel-label">{t("agent.teamsMetadata")}</p>
+                {config.onProvisionTeamsToken && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={config.onProvisionTeamsToken}
+                  >
+                    {t("agent.teamsProvisionToken")}
+                  </button>
+                )}
+              </div>
               <div className="mt-3 grid gap-4 lg:grid-cols-2">
                 <label className="panel-field">
-                  <span className="panel-label">{t("agent.teamsAppId")}</span>
+                  <span className="panel-label">{t("agent.teamsHermesId")}</span>
                   <input
-                    value={form.teams_app_id}
+                    value={form.teams_hermes_id}
                     onChange={(event) =>
-                      setForm((current) => ({ ...current, teams_app_id: event.target.value }))
+                      setForm((current) => ({ ...current, teams_hermes_id: event.target.value }))
                     }
-                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    placeholder="agent-slug"
                   />
                 </label>
                 <label className="panel-field">
-                  <span className="panel-label">{t("agent.teamsTenantId")}</span>
+                  <span className="panel-label">{t("agent.teamsHermesDesc")}</span>
                   <input
-                    value={form.teams_tenant_id}
+                    value={form.teams_hermes_desc}
                     onChange={(event) =>
-                      setForm((current) => ({ ...current, teams_tenant_id: event.target.value }))
+                      setForm((current) => ({ ...current, teams_hermes_desc: event.target.value }))
                     }
-                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (optional)"
+                    placeholder="Hermes de Marketing"
                   />
                 </label>
               </div>
+              <label className="panel-field mt-3">
+                <span className="panel-label">{t("agent.teamsBotUrl")}</span>
+                <input
+                  value={form.teams_bot_url}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, teams_bot_url: event.target.value }))
+                  }
+                  placeholder="https://teams-bot.mycompany.com"
+                />
+              </label>
               <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
                 {t("agent.teamsMetadataHint")}
               </p>

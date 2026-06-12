@@ -118,7 +118,7 @@ class GatewayProcessManager:
         log_mgr,  # GatewayLogManager — avoid circular import
     ) -> None:
         """Start a gateway channel (must be called with agent lock held)."""
-        if platform in ("google_chat", "kapso_whatsapp"):
+        if platform in ("google_chat", "kapso_whatsapp", "microsoft_teams"):
             await self._start_enterprise_channel(agent_id, platform)
             return
 
@@ -263,7 +263,7 @@ class GatewayProcessManager:
         platform: str,
     ) -> None:
         """Stop a gateway channel (must be called with agent lock held)."""
-        if platform in ("google_chat", "kapso_whatsapp"):
+        if platform in ("google_chat", "kapso_whatsapp", "microsoft_teams"):
             await self._stop_enterprise_channel(agent_id, platform)
             return
 

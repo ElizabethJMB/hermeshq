@@ -1,13 +1,11 @@
 """
 Enterprise Gateway Manager.
 
-Manages Google Chat and Kapso WhatsApp gateway instances
+Manages Google Chat, Kapso WhatsApp, and Microsoft Teams gateway instances
 alongside the existing Hermes Agent gateway supervisor.
 
 These gateways run as async tasks (not subprocesses) and connect
 directly to the respective platform APIs.
-
-Note: Microsoft Teams is now handled natively by hermes-agent.
 """
 
 import asyncio
@@ -23,12 +21,12 @@ from hermeshq.services.secret_vault import SecretVault
 logger = logging.getLogger(__name__)
 
 # Platforms managed by this manager (not by the subprocess GatewaySupervisor)
-ENTERPRISE_PLATFORMS = {"google_chat", "kapso_whatsapp"}
+ENTERPRISE_PLATFORMS = {"google_chat", "kapso_whatsapp", "microsoft_teams"}
 
 
 class EnterpriseGatewayManager:
     """
-    Manages lifecycle of Google Chat and Kapso WhatsApp gateways.
+    Manages lifecycle of Google Chat, Kapso WhatsApp, and Microsoft Teams gateways.
 
     Unlike the Hermes Agent gateway supervisor which launches
     subprocess processes, this manager runs gateway adapters
@@ -50,6 +48,7 @@ class EnterpriseGatewayManager:
         # Enterprise gateways — keyed by agent_id
         self.google_chat_gateways: dict[str, object] = {}
         self.kapso_gateways: dict[str, object] = {}
+        self.teams_gateways: dict[str, object] = {}
 
     # ---- bootstrap ----
 
@@ -87,6 +86,8 @@ class EnterpriseGatewayManager:
             await self._start_google_chat(agent_id)
         elif platform == "kapso_whatsapp":
             await self._start_kapso_whatsapp(agent_id)
+        elif platform == "microsoft_teams":
+            await self._start_teams_bridge(agent_id)
         else:
             raise ValueError(f"Unsupported enterprise platform: {platform}")
 
@@ -96,11 +97,14 @@ class EnterpriseGatewayManager:
             await self._stop_google_chat(agent_id)
         elif platform == "kapso_whatsapp":
             await self._stop_kapso_whatsapp(agent_id)
+        elif platform == "microsoft_teams":
+            await self._stop_teams_bridge(agent_id)
 
     async def stop_all(self, agent_id: str) -> None:
         """Stop all enterprise gateways for an agent."""
         await self._stop_google_chat(agent_id)
         await self._stop_kapso_whatsapp(agent_id)
+        await self._stop_teams_bridge(agent_id)
 
     async def shutdown(self) -> None:
         """Shut down all enterprise gateways."""
@@ -108,6 +112,8 @@ class EnterpriseGatewayManager:
             await self._stop_google_chat(agent_id)
         for agent_id in list(self.kapso_gateways.keys()):
             await self._stop_kapso_whatsapp(agent_id)
+        for agent_id in list(self.teams_gateways.keys()):
+            await self._stop_teams_bridge(agent_id)
 
     # ---- Google Chat ----
 
@@ -159,12 +165,40 @@ class EnterpriseGatewayManager:
 
     # ---- status ----
 
+    # ---- Microsoft Teams bridge ----
+
+    async def _start_teams_bridge(self, agent_id: str) -> None:
+        if agent_id in self.teams_gateways:
+            return
+        from hermeshq.services.teams_bridge_gateway import TeamsBridgeGateway
+
+        gw = TeamsBridgeGateway(
+            agent_id=agent_id,
+            session_factory=self.session_factory,
+            supervisor=self.supervisor,
+            event_broker=self.event_broker,
+            secret_vault=self.secret_vault,
+        )
+        await gw.start()
+        self.teams_gateways[agent_id] = gw
+        logger.info("Started Teams bridge gateway for agent %s", agent_id)
+
+    async def _stop_teams_bridge(self, agent_id: str) -> None:
+        gw = self.teams_gateways.pop(agent_id, None)
+        if gw:
+            await gw.stop()
+            logger.info("Stopped Teams bridge gateway for agent %s", agent_id)
+
+    # ---- status ----
+
     def get_status(self, agent_id: str, platform: str) -> dict:
         """Get the status of a gateway."""
         if platform == "google_chat":
             running = agent_id in self.google_chat_gateways
         elif platform == "kapso_whatsapp":
             running = agent_id in self.kapso_gateways
+        elif platform == "microsoft_teams":
+            running = agent_id in self.teams_gateways
         else:
             running = False
         return {

@@ -8,6 +8,7 @@ import {
   useMessagingChannelRuntime,
   useUpdateMessagingChannel,
 } from "../api/messagingChannels";
+import { apiClient } from "../api/client";
 import { useSecrets } from "../api/secrets";
 import { useI18n } from "../lib/i18n";
 import type { MessagingChannel, MessagingChannelRuntime } from "../types/api";
@@ -329,8 +330,9 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
         free_response_chat_ids: formatList(ch.free_response_chat_ids),
         unauthorized_dm_behavior: ch.unauthorized_dm_behavior ?? "pair",
         whatsapp_mode: p === "whatsapp" ? getWhatsappMode(ch) : "self-chat",
-        teams_app_id: String(ch.metadata_json?.app_id ?? ""),
-        teams_tenant_id: String(ch.metadata_json?.tenant_id ?? ""),
+        teams_hermes_id: String(ch.metadata_json?.hermes_id ?? ""),
+        teams_hermes_desc: String(ch.metadata_json?.hermes_desc ?? ""),
+        teams_bot_url: String(ch.metadata_json?.bot_url ?? ""),
         google_project_id: String(ch.metadata_json?.project_id ?? ""),
         kapso_phone_number_id: String(ch.metadata_json?.kapso_phone_number_id ?? ""),
         kapso_webhook_secret: String(ch.metadata_json?.kapso_webhook_secret ?? ""),
@@ -394,8 +396,9 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
       if (platform === "microsoft_teams") {
         payload.metadata_json = {
           ...(channelData[platform]?.metadata_json ?? {}),
-          app_id: form.teams_app_id || undefined,
-          tenant_id: form.teams_tenant_id || undefined,
+          hermes_id: form.teams_hermes_id || undefined,
+          hermes_desc: form.teams_hermes_desc || undefined,
+          bot_url: form.teams_bot_url || undefined,
         };
       }
       if (platform === "google_chat") {
@@ -447,6 +450,28 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
     }
   }
 
+  async function provisionTeamsToken() {
+    clearError("microsoft_teams");
+    try {
+      const { data } = await apiClient.post<{ hermes_id: string; secret_ref: string }>(
+        `/agents/${agentId}/channels/microsoft_teams/provision-token`,
+      );
+      setForms((prev) => ({
+        ...prev,
+        microsoft_teams: {
+          ...prev.microsoft_teams,
+          secret_ref: data.secret_ref,
+          teams_hermes_id: data.hermes_id,
+        },
+      }));
+    } catch (error) {
+      setSubmitErrors((current) => ({
+        ...current,
+        microsoft_teams: describeError(error, t("agent.teamsConfigSaveFailed")),
+      }));
+    }
+  }
+
   // Build platform tab data
   const platforms = ALL_PLATFORMS.map((p) => ({
     platform: p,
@@ -455,8 +480,11 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
   }));
 
   // Active platform data (generic)
-  const activeConfig = { ...PLATFORM_CONFIGS[selectedPlatform] };
+  const activeConfig: PlatformConfig = { ...PLATFORM_CONFIGS[selectedPlatform] };
   activeConfig.copy = t(COPY_KEYS[selectedPlatform]);
+  if (selectedPlatform === "microsoft_teams") {
+    activeConfig.onProvisionTeamsToken = provisionTeamsToken;
+  }
   const activeForm = forms[selectedPlatform];
   const activeSetForm = (update: React.SetStateAction<ChannelFormState>) => {
     dirtyRefs.current[selectedPlatform] = true;

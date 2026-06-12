@@ -22,6 +22,8 @@ class AppSettingsUpdate(BaseModel):
     from_name: str | None = None
     public_base_url: str | None = None
     mfa_email_enabled: bool | None = None
+    teams_bot_url: str | None = None
+    teams_bot_admin_key_ref: str | None = None
 
 
 class AppSettingsRead(ORMModel):
@@ -42,6 +44,8 @@ class AppSettingsRead(ORMModel):
     from_name: str | None = None
     public_base_url: str | None = None
     mfa_email_enabled: bool = False
+    teams_bot_url: str | None = None
+    teams_bot_admin_key_ref: str | None = None
     tui_skin_filename: str | None = None
     logo_url: str | None = None
     favicon_url: str | None = None

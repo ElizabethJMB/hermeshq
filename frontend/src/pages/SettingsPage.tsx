@@ -64,14 +64,15 @@ const AuthenticationTab = lazy(() => import("../components/settings/Authenticati
 const EmailTab = lazy(() => import("../components/settings/EmailTab").then((m) => ({ default: m.EmailTab })));
 const ResourcesTab = lazy(() => import("../components/settings/ResourcesTab"));
 const M365Tab = lazy(() => import("../components/settings/M365Tab").then((m) => ({ default: m.default })));
+const TeamsTab = lazy(() => import("../components/settings/TeamsTab").then((m) => ({ default: m.TeamsTab })));
 
-type SettingsTab = "general" | "runtime" | "providers" | "integrations" | "factory" | "externalAccess" | "hermesVersions" | "secrets" | "templates" | "authentication" | "email" | "resources" | "m365";
+type SettingsTab = "general" | "runtime" | "providers" | "integrations" | "factory" | "externalAccess" | "hermesVersions" | "secrets" | "templates" | "authentication" | "email" | "resources" | "m365" | "teams";
 
 const SETTINGS_TAB_STORAGE_KEY = "hermeshq.settings.activeTab";
 
 const ALL_TABS: SettingsTab[] = [
   "general", "runtime", "providers", "integrations",
-  "factory", "externalAccess", "hermesVersions", "secrets", "templates", "authentication", "email", "resources", "m365",
+  "factory", "externalAccess", "hermesVersions", "secrets", "templates", "authentication", "email", "resources", "m365", "teams",
 ];
 
 function LoadingFallback() {
@@ -166,6 +167,7 @@ export function SettingsPage() {
     { id: "email", label: "Email", copy: "Configure Resend for transactional emails (password reset, notifications)." },
     { id: "resources", label: t("settings.tabResources"), copy: t("settings.tabResourcesCopy") },
     { id: "m365", label: "Microsoft 365", copy: "Configura la app Azure AD para autenticación delegada. Cada usuario conecta su propia cuenta M365." },
+    { id: "teams", label: "Teams Bot", copy: "Configura el bot relay de Microsoft Teams para esta instancia." },
   ];
 
   const activeTabMeta = settingsTabs.find((tab) => tab.id === activeTab) ?? settingsTabs[0];
@@ -287,6 +289,9 @@ export function SettingsPage() {
           )}
           {activeTab === "m365" && isAdmin && (
             <M365Tab />
+          )}
+          {activeTab === "teams" && isAdmin && (
+            <TeamsTab />
           )}
         </Suspense>
       </div>

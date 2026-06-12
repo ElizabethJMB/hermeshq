@@ -1,5 +1,7 @@
 import logging
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +19,8 @@ from hermeshq.schemas.messaging_channel import (
 )
 from hermeshq.services.hermes_installation import HermesInstallationError
 from hermeshq.models.activity import ActivityLog
+from hermeshq.models.app_settings import AppSettings
+from hermeshq.services.secret_vault import SecretVault
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents/{agent_id}/channels", tags=["messaging-channels"])
@@ -410,3 +414,103 @@ async def get_channel_logs(
         raise HTTPException(status_code=404, detail="Unsupported platform")
     logs = await request.app.state.gateway_supervisor.tail_log(agent_id, platform)
     return {"platform": platform, "content": logs}
+
+
+class TeamsProvisionResponse(BaseModel):
+    hermes_id: str
+    secret_ref: str
+
+
+@router.post("/microsoft_teams/provision-token", response_model=TeamsProvisionResponse)
+async def provision_teams_token(
+    agent_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> TeamsProvisionResponse:
+    """
+    Call the relay bot's admin provisioning endpoint to generate a BOT_TOKEN
+    for this agent, then store it in the vault and update the channel config.
+
+    Requires teams_bot_url and teams_bot_admin_key_ref to be set in instance settings.
+    """
+    await ensure_agent_access(db, current_user, agent_id)
+    if not is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Only admins can provision Teams tokens")
+
+    # Load instance-level Teams bot config
+    settings_row = await db.get(AppSettings, "default")
+    if not settings_row or not settings_row.teams_bot_url:
+        raise HTTPException(status_code=400, detail="Teams bot URL not configured in instance settings")
+    if not settings_row.teams_bot_admin_key_ref:
+        raise HTTPException(status_code=400, detail="Teams bot admin key not configured in instance settings")
+
+    # Resolve admin key from vault
+    secret_vault: SecretVault = request.app.state.secret_vault
+    admin_key_secret = await db.execute(
+        select(Secret).where(Secret.name == settings_row.teams_bot_admin_key_ref)
+    )
+    admin_key_row = admin_key_secret.scalar_one_or_none()
+    if not admin_key_row:
+        raise HTTPException(status_code=400, detail=f"Admin key secret '{settings_row.teams_bot_admin_key_ref}' not found")
+    admin_key = secret_vault.decrypt(admin_key_row.value_enc)
+
+    # Load agent to build hermes_id and description
+    agent = await db.get(Agent, agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    hermes_id = agent.slug or agent.id
+    hermes_desc = agent.friendly_name or agent.name or hermes_id
+    bot_url = settings_row.teams_bot_url.rstrip("/")
+
+    # Call relay bot to provision token
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{bot_url}/api/admin/tokens",
+                json={"hermes_id": hermes_id, "description": hermes_desc},
+                headers={"X-Admin-Key": admin_key},
+            )
+        if resp.status_code == 401:
+            raise HTTPException(status_code=400, detail="Teams bot rejected the admin key")
+        if resp.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"Teams bot provisioning failed: HTTP {resp.status_code}")
+        data = resp.json()
+        bot_token = data.get("token")
+        if not bot_token:
+            raise HTTPException(status_code=400, detail="Teams bot returned no token")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not reach Teams bot: {exc}") from exc
+
+    # Store token in vault
+    secret_ref = f"teams-token-{hermes_id}"
+    existing = await db.execute(select(Secret).where(Secret.name == secret_ref))
+    existing_secret = existing.scalar_one_or_none()
+    encrypted = secret_vault.encrypt(bot_token)
+    if existing_secret:
+        existing_secret.value_enc = encrypted
+    else:
+        new_secret = Secret(name=secret_ref, value_enc=encrypted)
+        db.add(new_secret)
+
+    # Update channel metadata
+    channel_result = await db.execute(
+        select(MessagingChannel).where(
+            MessagingChannel.agent_id == agent_id,
+            MessagingChannel.platform == "microsoft_teams",
+        )
+    )
+    channel = channel_result.scalar_one_or_none()
+    if channel:
+        meta = dict(channel.metadata_json or {})
+        meta["hermes_id"] = hermes_id
+        meta["hermes_desc"] = hermes_desc
+        meta["bot_url"] = bot_url
+        channel.metadata_json = meta
+        channel.secret_ref = secret_ref
+
+    await db.commit()
+    return TeamsProvisionResponse(hermes_id=hermes_id, secret_ref=secret_ref)

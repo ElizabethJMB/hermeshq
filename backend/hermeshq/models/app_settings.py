@@ -30,3 +30,5 @@ class AppSettings(TimestampMixin, Base):
     m365_tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     m365_enabled_scopes: Mapped[list[str]] = mapped_column(JSON, default=list)
     mfa_email_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    teams_bot_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    teams_bot_admin_key_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
