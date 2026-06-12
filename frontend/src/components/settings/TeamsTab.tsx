@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSettings, useUpdateSettings } from "../../api/settings";
 import { useSecrets } from "../../api/secrets";
-import { useSessionStore } from "../../store/session";
+import { useSessionStore } from "../../stores/sessionStore";
 
 export function TeamsTab() {
   const { data: settings, isLoading } = useSettings();
