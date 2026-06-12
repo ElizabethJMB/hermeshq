@@ -38,6 +38,21 @@ def main() -> int:
 
     os.chdir(payload["cwd"])
 
+    # ── Auxiliary client env injection ─────────────────────────
+    # When HermesHQ passes explicit api_key + base_url, the main agent
+    # client is constructed directly. But the auxiliary clients (vision,
+    # compression, etc.) resolve credentials independently via env vars.
+    # Inject the agent's credentials so auxiliary tasks can use them too.
+    _api_key = payload.get("api_key")
+    _base_url = payload.get("base_url")
+    if _api_key and _base_url:
+        os.environ.setdefault("OPENAI_API_KEY", _api_key)
+        os.environ.setdefault("OPENAI_BASE_URL", _base_url)
+        for _task in ("vision", "compression", "session_search", "web_extract"):
+            os.environ.setdefault(f"AUXILIARY_{_task.upper()}_API_KEY", _api_key)
+            os.environ.setdefault(f"AUXILIARY_{_task.upper()}_BASE_URL", _base_url)
+    # ── End auxiliary client env injection ─────────────────────
+
     # ── Attachment enrichment ──────────────────────────────────
     task_metadata = payload.get("metadata", {})
     attachments = task_metadata.get("attachments", [])
