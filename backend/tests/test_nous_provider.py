@@ -239,6 +239,7 @@ class TestNousProviderEnvFallbacks:
         source = inspect.getsource(HermesInstallationManager._provider_base_url_env_name)
         assert "NOUS_BASE_URL" in source
 
+    @pytest.mark.asyncio
     async def test_build_process_env_sets_provider_api_key(self, monkeypatch):
         """build_process_env should use provider env names when an API key is resolved."""
         from hermeshq.services.hermes_installation import HermesInstallationManager
