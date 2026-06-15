@@ -515,10 +515,18 @@ class GatewayProcessManager:
         raise ValueError(f"Gateway exited during startup with code {return_code}")
 
     async def _terminate_handle(self, handle: GatewayProcessHandle) -> None:
+        # Cancel and await all background tasks to prevent fire-and-forget
+        # that could lead to double-close of log_handle or use-after-free.
+        tasks_to_await: list[asyncio.Task] = []
         if handle.monitor_task:
             handle.monitor_task.cancel()
+            tasks_to_await.append(handle.monitor_task)
         for task in handle.activity_tasks.values():
             task.cancel()
+            tasks_to_await.append(task)
+        # Wait for all tasks to actually finish (suppressing CancelledError)
+        if tasks_to_await:
+            await asyncio.gather(*tasks_to_await, return_exceptions=True)
         if handle.process.poll() is None:
             handle.process.terminate()
             try:
