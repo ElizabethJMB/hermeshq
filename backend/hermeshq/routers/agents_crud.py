@@ -220,7 +220,7 @@ async def update_agent(
         if restricted_fields:
             raise HTTPException(
                 status_code=403,
-                detail=f"Users cannot modify: {', '.join(restricted_fields)}",
+                detail="You don't have permission to modify some of the selected fields.",
             )
     if "supervisor_agent_id" in update_data:
         await _validate_supervisor(db, agent_id, update_data.get("supervisor_agent_id"))

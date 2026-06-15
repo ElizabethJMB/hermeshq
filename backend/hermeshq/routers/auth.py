@@ -538,6 +538,13 @@ async def _fetch_jwks(jwks_uri: str) -> list[dict]:
 
 
 async def _extract_id_token_claims(token_response: dict) -> dict:
+    """Validate and extract claims from an OIDC id_token.
+
+    Returns {} if no id_token is present.  Raises ValueError if an id_token
+    exists but cannot be validated (signature failure, bad issuer, etc.)
+    so the caller can reject the authentication rather than silently
+    falling back to unverified userinfo claims.
+    """
     id_token = token_response.get("id_token")
     if not isinstance(id_token, str) or not id_token.strip():
         return {}
@@ -569,11 +576,11 @@ async def _extract_id_token_claims(token_response: dict) -> dict:
                 return claims
             except JWTError:
                 continue
-        logger.warning("Could not validate id_token signature with any JWKS key")
-        return {}
-    except Exception:
-        logger.warning("id_token validation failed; returning empty claims", exc_info=True)
-        return {}
+        raise ValueError("Could not validate id_token signature with any JWKS key")
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError(f"id_token validation failed: {exc}") from exc
 
 
 @router.get("/providers", response_model=AuthProvidersResponse)
@@ -989,9 +996,10 @@ async def oidc_callback(
                 raise ValueError(f"Provider '{state_payload['provider']}' not found or disabled")
             claims = await oidc_svc.exchange_code_and_get_claims(provider, code, _build_oidc_redirect_uri(request))
             local_user = await oidc_svc.resolve_or_create_user(db, claims, provider)
-        except Exception as exc:
+        except Exception:
+            logger.exception("OIDC authentication failed (DB provider flow)")
             return RedirectResponse(
-                _build_frontend_redirect(request, auth_error=f"Enterprise authentication failed: {exc}"),
+                _build_frontend_redirect(request, auth_error="Enterprise authentication failed. Please try again or contact support."),
                 status_code=status.HTTP_302_FOUND,
             )
     elif _validate_oidc_state(state):
@@ -1028,9 +1036,10 @@ async def oidc_callback(
             if not claims.get("sub"):
                 raise ValueError("OIDC user claims did not include sub")
             local_user = await _resolve_or_create_oidc_user(db, claims)
-        except Exception as exc:
+        except Exception:
+            logger.exception("OIDC authentication failed (legacy env flow)")
             return RedirectResponse(
-                _build_frontend_redirect(request, auth_error=f"Enterprise authentication failed: {exc}"),
+                _build_frontend_redirect(request, auth_error="Enterprise authentication failed. Please try again or contact support."),
                 status_code=status.HTTP_302_FOUND,
             )
     else:

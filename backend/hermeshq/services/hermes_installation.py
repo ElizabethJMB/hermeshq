@@ -576,6 +576,8 @@ class HermesInstallationManager:
                 config["plugins"] = {"enabled": plugins_to_enable}
         config_path = hermes_home / "config.yaml"
         config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+        # config.yaml may contain API keys — protect with owner-only permissions
+        _protect_file(config_path)
 
     async def _resolve_effective_model(self, agent: Agent) -> str | None:
         """Resolve the effective model for the agent.
