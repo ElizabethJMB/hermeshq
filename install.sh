@@ -110,6 +110,7 @@ calculate_sizing() {
   local max_by_ram
 
   concurrent=$(( total_agents / 2 ))
+  if [ "$concurrent" -lt 1 ]; then concurrent=1; fi
   semaphore=$concurrent
   ram_backend=$(( semaphore * 50 + 500 ))
   ram_postgres=$(( semaphore * 10 + 200 ))
