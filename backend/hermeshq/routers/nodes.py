@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 import psutil
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +37,7 @@ async def list_nodes(
     return [NodeRead.model_validate(n) for n in result.scalars().all()]
 
 
-@router.post("", response_model=NodeRead)
+@router.post("", response_model=NodeRead, status_code=status.HTTP_201_CREATED)
 async def create_node(
     payload: NodeCreate,
     _: User = Depends(require_admin),
