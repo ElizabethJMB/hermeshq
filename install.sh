@@ -118,8 +118,9 @@ calculate_sizing() {
   disk_needed=$(( total_agents * 1500 / 1000 + 5 ))
 
   # Clamp semaphore to available RAM
-  if [ "$SYS_AVAILABLE_RAM_MB" -gt 756 ]; then
-    max_by_ram=$(( (SYS_AVAILABLE_RAM_MB - 756) / 60 ))
+  # ram_total = semaphore*60 + 956 (500 min backend + 200 min postgres + 256 frontend)
+  if [ "$SYS_AVAILABLE_RAM_MB" -gt 956 ]; then
+    max_by_ram=$(( (SYS_AVAILABLE_RAM_MB - 956) / 60 ))
     if [ "$max_by_ram" -lt "$semaphore" ]; then
       semaphore=$max_by_ram
       concurrent=$semaphore
@@ -187,8 +188,8 @@ calculate_max_agents() {
   local max_agents=200
   local max_semaphore max_by_cpu max_by_disk agents_from_ram agents_from_cpu agents_from_disk
 
-  if [ "$SYS_AVAILABLE_RAM_MB" -gt 756 ]; then
-    max_semaphore=$(( (SYS_AVAILABLE_RAM_MB - 756) / 60 ))
+  if [ "$SYS_AVAILABLE_RAM_MB" -gt 956 ]; then
+    max_semaphore=$(( (SYS_AVAILABLE_RAM_MB - 956) / 60 ))
     agents_from_ram=$(( max_semaphore * 2 ))
   else
     agents_from_ram=0
