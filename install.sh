@@ -197,7 +197,7 @@ calculate_max_agents() {
   max_by_cpu=$(( SYS_CPU_CORES * 6 ))
   agents_from_cpu=$(( max_by_cpu * 2 ))
 
-  agents_from_disk=$(( (SYS_AVAILABLE_DISK_GB - 5) * 1000 / 1500 * 2 ))
+  agents_from_disk=$(( (SYS_AVAILABLE_DISK_GB - 5) * 1000 / 1500 ))
 
   # Take minimum of all constraints
   max_agents=$agents_from_ram
