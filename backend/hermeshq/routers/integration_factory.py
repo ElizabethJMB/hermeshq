@@ -121,9 +121,9 @@ async def delete_integration_draft(
     db: AsyncSession = Depends(get_db_session),
 ) -> Response:
     draft = await _get_draft_or_404(db, draft_id)
-    delete_draft_files(draft)
     await db.delete(draft)
     await db.commit()
+    delete_draft_files(draft)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
