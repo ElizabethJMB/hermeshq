@@ -249,6 +249,8 @@ class AgentSupervisor:
                     "and could not be resumed."
                 )
                 task.completed_at = now
+                if not task.board_manual:
+                    task.board_column = "failed"
 
             await session.commit()
 
@@ -793,8 +795,6 @@ class AgentSupervisor:
         target_agent = await session.get(Agent, target_agent_id)
         if target_agent:
             target_agent.avatar_filename = filename
-            await session.commit()
-
             await self._log(
                 session,
                 "agent.avatar.generated",
@@ -802,6 +802,7 @@ class AgentSupervisor:
                 task=task,
                 message="AI avatar applied from operator task",
             )
+            await session.commit()
 
         # Publish event so frontend refreshes
 # ---------------------------------------------------------------------------
