@@ -101,7 +101,7 @@ export function AgentConversationPanel({
       return;
     }
     node.scrollTop = node.scrollHeight;
-  }, [entries.length]);
+  }, [entries]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

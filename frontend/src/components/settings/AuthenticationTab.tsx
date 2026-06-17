@@ -92,7 +92,15 @@ export function AuthenticationTab() {
     }
   }
 
+  function validateDiscoveryUrl(url: string | undefined): boolean {
+    return typeof url === "string" && url.startsWith("https://");
+  }
+
   async function handleCreate() {
+    if (!validateDiscoveryUrl(form.discovery_url)) {
+      alert(t("settings.discoveryUrlInvalid"));
+      return;
+    }
     try {
       await createOidcProvider(form as OidcProviderCreate);
       setShowCreate(false);
@@ -105,6 +113,10 @@ export function AuthenticationTab() {
 
   async function handleUpdate() {
     if (!editing) return;
+    if (!validateDiscoveryUrl(form.discovery_url)) {
+      alert(t("settings.discoveryUrlInvalid"));
+      return;
+    }
     try {
       await updateOidcProvider(editing.id, {
         name: form.name,
