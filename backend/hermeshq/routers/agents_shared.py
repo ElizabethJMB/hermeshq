@@ -238,6 +238,8 @@ async def _validate_supervisor(
     supervisor = await db.get(Agent, supervisor_agent_id)
     if not supervisor:
         raise HTTPException(status_code=404, detail="Supervisor agent not found")
+    if supervisor.is_archived:
+        raise HTTPException(status_code=400, detail="Archived agents cannot be assigned as supervisors")
     current_parent_id = supervisor.supervisor_agent_id
     seen: set[str] = set()
     while current_parent_id:

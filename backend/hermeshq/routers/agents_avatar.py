@@ -37,7 +37,11 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 
 
 @router.get("/{agent_id}/avatar", include_in_schema=False)
-async def get_agent_avatar(agent_id: str, db: AsyncSession = Depends(get_db_session)):
+async def get_agent_avatar(
+    agent_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
     agent = await db.get(Agent, agent_id)
     if not agent or not agent.avatar_filename:
         raise HTTPException(status_code=404, detail="Avatar not found")
