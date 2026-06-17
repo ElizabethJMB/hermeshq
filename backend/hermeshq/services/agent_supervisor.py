@@ -756,7 +756,7 @@ class AgentSupervisor:
         """
         from pathlib import Path
         from hermeshq.config import get_settings
-        from hermeshq.services.avatar import save_avatar_bytes, AVATAR_MEDIA_TYPES
+        from hermeshq.services.avatar import save_avatar_bytes, AVATAR_MEDIA_TYPES, delete_avatar_files
 
         settings = get_settings()
 
@@ -793,7 +793,11 @@ class AgentSupervisor:
         target_agent = await session.get(Agent, target_agent_id)
         if target_agent:
             target_agent.avatar_filename = filename
-            await session.commit()
+            try:
+                await session.commit()
+            except Exception:
+                delete_avatar_files(avatar_base, target_agent_id)
+                raise
 
             await self._log(
                 session,
