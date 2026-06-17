@@ -100,14 +100,21 @@ export function TasksPage() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await createTask.mutateAsync({
-      agent_id: agentId || agents?.[0]?.id,
-      title,
-      prompt,
-      priority: 5,
-    });
-    setTitle("");
-    setPrompt("");
+    const resolvedAgentId = agentId || agents?.[0]?.id;
+    if (!resolvedAgentId) return;
+    if (!title.trim() || !prompt.trim()) return;
+    try {
+      await createTask.mutateAsync({
+        agent_id: resolvedAgentId,
+        title,
+        prompt,
+        priority: 5,
+      });
+      setTitle("");
+      setPrompt("");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Task creation failed");
+    }
   }
 
   async function moveTask(taskId: string, boardColumn: string) {
