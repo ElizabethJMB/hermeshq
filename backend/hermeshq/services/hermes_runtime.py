@@ -136,8 +136,12 @@ class HermesRuntime:
                 + "IMPORTANT: You are responding through the SixAgentic mobile app. "
                 "Always provide your response directly in the task response text. "
                 "Do NOT send responses through Telegram, WhatsApp, email, or any other "
-                "external channel. If you generate files, they will be automatically "
-                "attached as response_attachments."
+                "external channel. "
+                "When you generate files (PDFs, images, spreadsheets, etc.), save them "
+                "in your work/ directory — NOT in /tmp or other system locations. "
+                "Do NOT include file paths or filenames in your response text. "
+                "Any files you generate will be automatically collected and attached "
+                "as response_attachments."
             )
 
         payload = {
