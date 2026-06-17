@@ -63,15 +63,17 @@ apiClient.interceptors.response.use(
     const hadAuthHeader = Boolean(error.config?.headers?.Authorization);
 
     // If 401 and we have a session, try a token refresh once before logging out
-    if (status === 401 && hadAuthHeader && !isLoginAttempt) {
+    const alreadyRetried = (error.config as Record<string, unknown> | undefined)?._retry === true;
+    if (status === 401 && hadAuthHeader && !isLoginAttempt && !alreadyRetried) {
       const hasSession = Boolean(useSessionStore.getState().token);
       if (hasSession) {
         const newToken = await _queuedRefresh();
         if (newToken && error.config) {
-          // Clone the original request with the new token and retry
-          const retryConfig = error.config;
-          retryConfig.headers.set("Authorization", `Bearer ${newToken}`);
-          return apiClient.request(retryConfig);
+          // Clone the original request with the new token and retry once
+          const retryConfig = error.config as Record<string, unknown>;
+          retryConfig._retry = true;
+          (retryConfig.headers as { set: (k: string, v: string) => void }).set("Authorization", `Bearer ${newToken}`);
+          return apiClient.request(retryConfig as Parameters<typeof apiClient.request>[0]);
         }
         // Refresh also failed → log out
         useSessionStore.getState().logout();

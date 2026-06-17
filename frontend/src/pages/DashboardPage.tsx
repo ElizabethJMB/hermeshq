@@ -24,9 +24,10 @@ function statusBadgeTone(status: string) {
 }
 
 function FleetHealthPanel() {
-  const { data: health } = useFleetHealth();
+  const { data: health, isError: healthError } = useFleetHealth();
   const { t } = useI18n();
 
+  if (healthError) return <div className="panel-frame p-5 text-sm text-[var(--accent)]">{t("dashboard.metricsError")}</div>;
   if (!health) return null;
 
   const statusColors: Record<string, string> = {
@@ -127,9 +128,10 @@ function FleetHealthPanel() {
 }
 
 function TaskAnalyticsPanel() {
-  const { data: analytics } = useTaskAnalytics(14);
+  const { data: analytics, isError: analyticsError } = useTaskAnalytics(14);
   const { t } = useI18n();
 
+  if (analyticsError) return <div className="panel-frame p-5 text-sm text-[var(--accent)]">{t("dashboard.metricsError")}</div>;
   if (!analytics) return null;
 
   const days = Object.keys(analytics.time_series).sort();
