@@ -8,7 +8,9 @@ and routes them to the appropriate gateway instances.
 import json
 import logging
 
-from fastapi import APIRouter, Depends, Request, Response
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from jose import jwt as jose_jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.database import get_db_session
@@ -16,6 +18,33 @@ from hermeshq.database import get_db_session
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["webhooks"])
+
+_GOOGLE_CHAT_ISSUER = "chat@system.gserviceaccount.com"
+_GOOGLE_CHAT_JWKS_URI = "https://www.googleapis.com/service_accounts/v1/jwk/chat@system.gserviceaccount.com"
+
+
+async def _verify_google_chat_bearer(request: Request) -> None:
+    """Reject requests that lack a valid Google-signed RS256 Bearer JWT."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Google Chat bearer token")
+    token = auth_header[len("Bearer "):]
+    try:
+        unverified = jose_jwt.get_unverified_claims(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid Google Chat bearer token")
+    if unverified.get("iss") != _GOOGLE_CHAT_ISSUER:
+        logger.warning("Google Chat webhook: unexpected issuer %r", unverified.get("iss"))
+        raise HTTPException(status_code=401, detail="Untrusted Google Chat token issuer")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(_GOOGLE_CHAT_JWKS_URI)
+            resp.raise_for_status()
+            jwks = resp.json()
+        jose_jwt.decode(token, jwks, algorithms=["RS256"])
+    except Exception as exc:
+        logger.warning("Google Chat webhook: signature verification failed: %s", exc)
+        raise HTTPException(status_code=401, detail="Google Chat bearer token signature invalid")
 
 
 # ---------------------------------------------------------------------------
@@ -36,6 +65,7 @@ async def google_chat_webhook(
     - The bot is added/removed from a space
     - A card interaction occurs
     """
+    await _verify_google_chat_bearer(request)
     try:
         payload = await request.json()
     except Exception:
@@ -105,19 +135,16 @@ async def kapso_whatsapp_webhook(
     # Verify signature using raw body (before parsing)
     if signature:
         gateways_with_secret = [gw for gw in kapso_gateways.values() if gw._webhook_secret]
-        if gateways_with_secret:
-            verified = any(
-                verify_webhook_signature(body, signature, gw._webhook_secret)
-                for gw in gateways_with_secret
-            )
-            if not verified:
-                logger.warning("Kapso webhook: signature verification failed")
-                return Response(status_code=401, content="Invalid signature")
-        else:
-            logger.warning(
-                "Kapso webhook: signature present but no webhook_secret configured "
-                "in any gateway — accepting without verification"
-            )
+        if not gateways_with_secret:
+            logger.warning("Kapso webhook: signature present but no webhook_secret configured — rejecting")
+            return Response(status_code=401, content="Webhook secret not configured")
+        verified = any(
+            verify_webhook_signature(body, signature, gw._webhook_secret)
+            for gw in gateways_with_secret
+        )
+        if not verified:
+            logger.warning("Kapso webhook: signature verification failed")
+            return Response(status_code=401, content="Invalid signature")
 
     # Process each event (single or batch)
     for event_data in raw_events:
