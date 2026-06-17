@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import logging
 
 from croniter import croniter
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import false, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,7 +40,7 @@ async def list_scheduled_tasks(
     return [ScheduledTaskRead.model_validate(item) for item in result.scalars().all()]
 
 
-@router.post("", response_model=ScheduledTaskRead)
+@router.post("", response_model=ScheduledTaskRead, status_code=status.HTTP_201_CREATED)
 async def create_scheduled_task(
     payload: ScheduledTaskCreate,
     current_user: User = Depends(get_current_user),

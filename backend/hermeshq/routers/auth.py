@@ -31,6 +31,7 @@ from hermeshq.core.security import (
     create_access_token,
     get_current_user,
     hash_password,
+    require_admin,
     verify_password,
 )
 from hermeshq.config import get_settings
@@ -182,6 +183,16 @@ async def _send_mfa_code(
     code_hash = hashlib.sha256(raw_code.encode()).hexdigest()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=MFA_CODE_EXPIRY_MINUTES)
 
+    # Send email before committing so that orphan codes are not persisted
+    # if the email delivery fails.
+    email_service = get_email_service()
+    await email_service.areload_config()
+    await email_service.send_mfa_code(
+        to_email=user.email,
+        code=raw_code,
+        display_name=user.display_name,
+    )
+
     mfa_code = MfaCode(
         user_id=user.id,
         code_hash=code_hash,
@@ -190,15 +201,6 @@ async def _send_mfa_code(
     )
     db.add(mfa_code)
     await db.commit()
-
-    # Send email
-    email_service = get_email_service()
-    await email_service.areload_config()
-    await email_service.send_mfa_code(
-        to_email=user.email,
-        code=raw_code,
-        display_name=user.display_name,
-    )
 
     return raw_code
 
@@ -696,7 +698,7 @@ async def verify_mfa(
         select(MfaCode).where(
             MfaCode.user_id == user_id,
             MfaCode.used_at.is_(None),
-        ).order_by(MfaCode.created_at.desc())
+        ).order_by(MfaCode.created_at.desc()).with_for_update()
     )
     mfa_codes = list(result.scalars().all())
 
@@ -1206,7 +1208,7 @@ async def reset_password(
 
 @router.get("/email-config", response_model=EmailConfigStatus)
 async def get_email_config(
-    _admin: User = Depends(get_current_user),
+    _admin: User = Depends(require_admin),
 ) -> EmailConfigStatus:
     """Get current email configuration status (admin only)."""
     email_service = get_email_service()

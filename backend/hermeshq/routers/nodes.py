@@ -1,7 +1,7 @@
+import asyncio
 import logging
-import socket
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 import psutil
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +37,7 @@ async def list_nodes(
     return [NodeRead.model_validate(n) for n in result.scalars().all()]
 
 
-@router.post("", response_model=NodeRead)
+@router.post("", response_model=NodeRead, status_code=status.HTTP_201_CREATED)
 async def create_node(
     payload: NodeCreate,
     _: User = Depends(require_admin),
@@ -96,9 +96,13 @@ async def test_node(
             "hostname": node.hostname,
         }
     try:
-        with socket.create_connection((node.hostname, node.ssh_port), timeout=3):
-            pass
-    except OSError as exc:
+        _, writer = await asyncio.wait_for(
+            asyncio.open_connection(node.hostname, node.ssh_port),
+            timeout=3,
+        )
+        writer.close()
+        await writer.wait_closed()
+    except (asyncio.TimeoutError, OSError) as exc:
         raise HTTPException(status_code=502, detail=f"SSH connectivity test failed: {exc}") from exc
     return {
         "status": "ok",
@@ -145,7 +149,7 @@ async def node_metrics(
     vm = psutil.virtual_memory()
     return {
         "node_id": node_id,
-        "cpu_percent": psutil.cpu_percent(interval=0.2),
+        "cpu_percent": await asyncio.to_thread(psutil.cpu_percent, 0.2),
         "memory_percent": vm.percent,
         "disk_percent": disk_usage.percent,
         "memory_total": vm.total,

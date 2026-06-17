@@ -54,8 +54,9 @@ jobs:
 
       - name: Run full backend tests (including known failures)
         if: always()
+        continue-on-error: true
         working-directory: backend
-        run: python -m pytest tests/ -v --tb=short || true
+        run: python -m pytest tests/ -v --tb=short
 
   # ── Frontend build ────────────────────────────────────────────────────────
   frontend:

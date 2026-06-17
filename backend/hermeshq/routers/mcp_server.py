@@ -254,7 +254,7 @@ async def _call_tool(
 
     # Per-agent MCP tools (agent__{slug}__{tool_name})
     if name.startswith("agent__"):
-        return await _handle_per_agent_tool(db, access, name, arguments)
+        return await _handle_per_agent_tool(request, db, access, name, arguments)
 
     return _tool_text_result(f"Unknown tool: {name}", {"error": "unknown_tool", "tool": name})
 
@@ -436,7 +436,7 @@ async def _handle_get_agent_task(db: AsyncSession, access: McpAccessToken, argum
 
 async def _list_resources(db: AsyncSession, access: McpAccessToken) -> list[dict]:
     """Return static resources available to this token."""
-    agents, _ = await _list_allowed_agents(db, access)
+    agents, _ = await _list_allowed_agents(db, access, page_size=max(50, len(access.allowed_agent_ids or []) + 1))
     resources: list[dict] = []
     for agent in agents:
         label = _agent_label(agent)
@@ -589,7 +589,7 @@ _BUILTIN_PROMPTS: list[dict] = [
 
 
 async def _list_prompts(db: AsyncSession, access: McpAccessToken) -> list[dict]:
-    agents, _ = await _list_allowed_agents(db, access)
+    agents, _ = await _list_allowed_agents(db, access, page_size=max(50, len(access.allowed_agent_ids or []) + 1))
     prompts = list(_BUILTIN_PROMPTS)
     for agent in agents:
         label = _agent_label(agent)
@@ -656,7 +656,7 @@ async def _get_prompt(db: AsyncSession, access: McpAccessToken, name: str, argum
 
 async def _per_agent_tools(db: AsyncSession, access: McpAccessToken) -> list[dict]:
     """Generate MCP tool definitions from each agent's ``mcp_servers`` config."""
-    agents, _ = await _list_allowed_agents(db, access)
+    agents, _ = await _list_allowed_agents(db, access, page_size=max(50, len(access.allowed_agent_ids or [])))
     tools: list[dict] = []
     for agent in agents:
         for srv in (agent.mcp_servers or []):
@@ -674,7 +674,7 @@ async def _per_agent_tools(db: AsyncSession, access: McpAccessToken) -> list[dic
 # ---------------------------------------------------------------------------
 
 
-async def _handle_per_agent_tool(db: AsyncSession, access: McpAccessToken, name: str, arguments: dict) -> dict:
+async def _handle_per_agent_tool(request: Request, db: AsyncSession, access: McpAccessToken, name: str, arguments: dict) -> dict:
     """Dispatch a per-agent MCP tool call. Pattern: ``agent__{slug}__{tool}``"""
     parts = name.split("__", 2)
     if len(parts) < 3:
@@ -683,7 +683,7 @@ async def _handle_per_agent_tool(db: AsyncSession, access: McpAccessToken, name:
     tool_name = parts[2]
 
     # Find agent by slug prefix
-    agents, _ = await _list_allowed_agents(db, access)
+    agents, _ = await _list_allowed_agents(db, access, page_size=max(50, len(access.allowed_agent_ids or [])))
     matched: Agent | None = None
     for a in agents:
         if (a.slug or a.id[:8]) == slug_or_prefix:
@@ -718,6 +718,8 @@ async def _handle_per_agent_tool(db: AsyncSession, access: McpAccessToken, name:
                 db.add(task)
                 await db.commit()
                 await db.refresh(task)
+                if matched.status == "running":
+                    await request.app.state.supervisor.submit_task(task.id)
                 return _tool_text_result(
                     f"Tool '{tool_name}' dispatched to agent {_agent_label(matched)}.\n\n"
                     f"Task ID: {task.id}\nStatus: queued\n\n"

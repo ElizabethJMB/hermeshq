@@ -418,6 +418,18 @@ class AgentSupervisor:
                 task.iterations = max(task.iterations, execution.iterations)
                 task.messages_json = execution.messages or task.messages_json
                 task.tool_calls = execution.tool_calls
+
+                # ── Persist response_attachments in task metadata ──
+                response_attachments = getattr(execution, "response_attachments", [])
+                if response_attachments:
+                    metadata = dict(task.metadata_json or {})
+                    # Strip source_path (internal only, never sent to client)
+                    metadata["response_attachments"] = [
+                        {k: v for k, v in att.items() if k != "source_path"}
+                        for att in response_attachments
+                    ]
+                    task.metadata_json = metadata
+
                 agent.total_tasks += 1
                 agent.total_tokens_used += task.tokens_used
                 agent.last_activity = utcnow()
@@ -452,6 +464,7 @@ class AgentSupervisor:
                     "task_id": task_id,
                     "agent_id": task.agent_id,
                     "response": execution.final_response,
+                    "metadata": task.metadata_json or {},
                 }
             )
 
@@ -664,6 +677,12 @@ class AgentSupervisor:
         summary: str,
     ) -> None:
         metadata = task.metadata_json or {}
+
+        # ── Channel routing: skip external delivery for mobile_app tasks ──
+        reply_to = str(metadata.get("reply_to") or metadata.get("source") or "").strip().lower()
+        if reply_to == "mobile_app":
+            return
+
         callback_delivery = metadata.get("callback_delivery")
         if not isinstance(callback_delivery, dict):
             return
@@ -802,6 +821,7 @@ class AgentSupervisor:
                 task=task,
                 message="AI avatar applied from operator task",
             )
+            await session.commit()
 
         # Publish event so frontend refreshes
 # ---------------------------------------------------------------------------
