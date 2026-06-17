@@ -503,12 +503,14 @@ class KapsoWhatsAppGateway:
 
         # Mark message as read and send acknowledgment
         if message_id:
-            asyncio.create_task(
+            t1 = asyncio.create_task(
                 kapso_mark_read(self._api_key, self._phone_number_id, message_id)
             )
-        asyncio.create_task(
+            t1.add_done_callback(lambda t: logger.exception("kapso_mark_read failed", exc_info=t.exception()) if t.exception() else None)
+        t2 = asyncio.create_task(
             kapso_send_text(self._api_key, self._phone_number_id, sender_wa_id, "⏳")
         )
+        t2.add_done_callback(lambda t: logger.exception("kapso_send_text failed", exc_info=t.exception()) if t.exception() else None)
 
         # Resolve HermesHQ user from the sender's Kapso ID (kapso_id stores the WA phone number)
         hermeshq_user_id: str | None = None
