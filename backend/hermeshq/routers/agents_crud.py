@@ -220,10 +220,12 @@ async def update_agent(
         if restricted_fields:
             raise HTTPException(
                 status_code=403,
-                detail=f"Users cannot modify: {', '.join(restricted_fields)}",
+                detail="You don't have permission to modify some of the selected fields.",
             )
     if "supervisor_agent_id" in update_data:
         await _validate_supervisor(db, agent_id, update_data.get("supervisor_agent_id"))
+    # Capture old values BEFORE any mutation for audit trail
+    old_snapshot = {k: getattr(agent, k, None) for k in update_data} if update_data else None
     runtime_profile_changed = "runtime_profile" in update_data
     hermes_version_changed = "hermes_version" in update_data
     if hermes_version_changed:
@@ -319,7 +321,7 @@ async def update_agent(
         actor_username=current_user.username,
         actor_role=current_user.role,
         ip_address=extract_ip(request),
-        old_value={k: getattr(agent, k, None) for k in update_data} if update_data else None,
+        old_value=old_snapshot,
         new_value=update_data if update_data else None,
     )
     await db.commit()
@@ -355,8 +357,21 @@ async def delete_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     if agent.is_archived:
+        agent_name = agent.name
         db.expunge(agent)
         await db.execute(delete(Agent).where(Agent.id == agent_id))
+        await record_audit(
+            db,
+            action="agent.permanent_delete",
+            target_type="agent",
+            target_id=agent_id,
+            target_name=agent_name,
+            actor_id=current_user.id,
+            actor_username=current_user.username,
+            actor_role=current_user.role,
+            ip_address=extract_ip(request),
+            details={"deleted_by": current_user.username},
+        )
         await db.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -416,6 +431,7 @@ async def delete_agent(
         .values(enabled=False)
     )
 
+    was_already_archived = agent.is_archived
     agent.status = "stopped"
     agent.is_archived = True
     agent.archived_at = datetime.now(timezone.utc)
@@ -430,8 +446,7 @@ async def delete_agent(
             details={"archived_by": current_user.username},
         )
     )
-    is_permanent = agent.is_archived
-    action_label = "agent.permanent_delete" if is_permanent else "agent.archive"
+    action_label = "agent.permanent_delete" if was_already_archived else "agent.archive"
     await record_audit(
         db,
         action=action_label,
@@ -442,7 +457,7 @@ async def delete_agent(
         actor_username=current_user.username,
         actor_role=current_user.role,
         ip_address=extract_ip(request),
-        details={"archive_reason": agent.archive_reason} if not is_permanent else None,
+        details={"archive_reason": agent.archive_reason} if not was_already_archived else None,
     )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

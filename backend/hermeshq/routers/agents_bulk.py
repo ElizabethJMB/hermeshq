@@ -212,6 +212,15 @@ async def bulk_config_update(
             except HTTPException:
                 skipped_agents.append(AgentBulkOperationSkipped(agent_id=agent.id, reason="no access"))
                 continue
+            # Enforce field-level authorization — same check as single-agent update
+            from hermeshq.routers.agents_shared import USER_EDITABLE_FIELDS
+            restricted_fields = sorted(set(update_data) - USER_EDITABLE_FIELDS)
+            if restricted_fields:
+                skipped_agents.append(AgentBulkOperationSkipped(
+                    agent_id=agent.id,
+                    reason=f"restricted fields: {', '.join(restricted_fields)}",
+                ))
+                continue
 
         runtime_profile_changed = "runtime_profile" in update_data
 
@@ -235,9 +244,8 @@ async def bulk_config_update(
     if not submitted_agent_ids:
         raise HTTPException(status_code=400, detail="No valid agents were available for bulk config update")
 
-    await db.commit()
-
-    # Record audit entry for the bulk config change
+    # Record audit entry in the same transaction as the config changes so that
+    # both land atomically — a failed commit cannot leave data without an audit trail.
     await record_audit(
         db,
         action="agent.bulk_config",

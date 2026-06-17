@@ -14,9 +14,22 @@ from uuid import uuid4
 
 from fastapi import WebSocket
 
+# Sensitive env var prefixes to strip from PTY sessions so terminal users
+# cannot access infrastructure credentials (DATABASE_URL, JWT_SECRET, etc.)
+_PTY_SENSITIVE_PREFIXES = (
+    "AWS_", "GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CREDENTIALS",
+    "KUBECONFIG", "DOCKER_", "GITHUB_TOKEN", "GITLAB_TOKEN",
+    "HEROKU_API_KEY", "STRIPE_", "TWILIO_", "SENDGRID_",
+    "DATABASE_URL", "REDIS_URL", "RABBITMQ_", "KAFKA_",
+    "LDAP_", "VAULT_TOKEN", "VAULT_ADDR",
+    "HERMESHQ_", "JWT_SECRET", "FERNET_KEY",
+    "ADMIN_PASSWORD", "OIDC_CLIENT_SECRET",
+    "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+)
+
 ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 REDRAW_NOISE_RE = re.compile(r"^\d{1,3}s?$")
-BORDER_STRIP_RE = re.compile(r"^[\\s─│╭╮╰╯═║╔╗╚╝┌┐└┘━┃]+|[\\s─│╭╮╰╯═║╔╗╚╝┌┐└┘━┃]+$")
+BORDER_STRIP_RE = re.compile(r"^[\s─│╭╮╰╯═║╔╗╚╝┌┐└┘━┃]+|[\s─│╭╮╰╯═║╔╗╚╝┌┐└┘━┃]+$")
 MULTISPACE_RE = re.compile(r"\s+")
 BORDER_CHARS = set("─│╭╮╰╯═║╔╗╚╝┌┐└┘━┃")
 BRAILLE_BLOCK_START = 0x2800
@@ -76,7 +89,11 @@ class PTYManager:
                 stdout=slave_fd,
                 stderr=slave_fd,
                 cwd=cwd,
-                env={**os.environ, "TERM": "xterm-256color", **(env or {})},
+                env={
+                    **{k: v for k, v in os.environ.items() if not k.upper().startswith(_PTY_SENSITIVE_PREFIXES)},
+                    "TERM": "xterm-256color",
+                    **(env or {}),
+                },
                 close_fds=True,
             )
             # Close the parent's copy of slave_fd after forking. Without this,
@@ -84,6 +101,9 @@ class PTYManager:
             # the parent still holds an open fd pointing to the slave end.
             with contextlib.suppress(OSError):
                 os.close(slave_fd)
+            # Mark as -1 so destroy_session does not try to close a stale fd
+            # that the OS may have already reused for another resource.
+            slave_fd = -1
             session = PTYSession(
                 session_id=str(uuid4()),
                 agent_id=agent_id,
@@ -124,8 +144,9 @@ class PTYManager:
             session.process.terminate()
         with contextlib.suppress(OSError):
             os.close(session.master_fd)
-        with contextlib.suppress(OSError):
-            os.close(session.slave_fd)
+        if session.slave_fd >= 0:
+            with contextlib.suppress(OSError):
+                os.close(session.slave_fd)
         if session.reader_task:
             session.reader_task.cancel()
             with contextlib.suppress(asyncio.CancelledError, OSError, RuntimeError):
@@ -160,7 +181,7 @@ class PTYManager:
         session = self.sessions.get(agent_id)
         if not session:
             return
-        os.write(session.master_fd, data)
+        await asyncio.to_thread(os.write, session.master_fd, data)
         await self._capture_input(session, data)
 
     async def resize(self, agent_id: str, cols: int, rows: int) -> None:

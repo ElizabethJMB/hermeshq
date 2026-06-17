@@ -31,6 +31,7 @@ from hermeshq.core.security import (
     create_access_token,
     get_current_user,
     hash_password,
+    require_admin,
     verify_password,
 )
 from hermeshq.config import get_settings
@@ -78,13 +79,17 @@ def _check_login_rate(ip: str) -> None:
     now = time.time()
     attempts = _login_attempts.get(ip, [])
     # Prune expired attempts
-    _login_attempts[ip] = [t for t in attempts if now - t < _LOGIN_WINDOW_SECONDS]
-    if len(_login_attempts[ip]) >= _LOGIN_MAX_ATTEMPTS:
+    recent = [t for t in attempts if now - t < _LOGIN_WINDOW_SECONDS]
+    if recent:
+        _login_attempts[ip] = recent
+    elif ip in _login_attempts:
+        # Clean up empty entries to prevent unbounded memory growth
+        del _login_attempts[ip]
+    if len(_login_attempts.get(ip, [])) >= _LOGIN_MAX_ATTEMPTS:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many login attempts. Please try again later.",
         )
-
 
 def _record_login_attempt(ip: str) -> None:
     """Record a failed login attempt for rate limiting."""
@@ -178,6 +183,16 @@ async def _send_mfa_code(
     code_hash = hashlib.sha256(raw_code.encode()).hexdigest()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=MFA_CODE_EXPIRY_MINUTES)
 
+    # Send email before committing so that orphan codes are not persisted
+    # if the email delivery fails.
+    email_service = get_email_service()
+    await email_service.areload_config()
+    await email_service.send_mfa_code(
+        to_email=user.email,
+        code=raw_code,
+        display_name=user.display_name,
+    )
+
     mfa_code = MfaCode(
         user_id=user.id,
         code_hash=code_hash,
@@ -186,15 +201,6 @@ async def _send_mfa_code(
     )
     db.add(mfa_code)
     await db.commit()
-
-    # Send email
-    email_service = get_email_service()
-    await email_service.areload_config()
-    await email_service.send_mfa_code(
-        to_email=user.email,
-        code=raw_code,
-        display_name=user.display_name,
-    )
 
     return raw_code
 
@@ -355,9 +361,8 @@ def _build_frontend_redirect(request: Request, *, token: str | None = None, auth
     scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
     base_url = f"{scheme}://{host}/"
     if token:
-        # Successful auth: redirect to root with token in fragment (#) so it's
-        # not sent to servers in logs/Referer headers
-        return f"{base_url}#token={token}"
+        query = urlencode({"token": token})
+        return f"{base_url}login?{query}"
     if auth_error:
         # Failed auth: redirect to /login so LoginPage.tsx can display the error
         query = urlencode({"auth_error": auth_error})
@@ -534,6 +539,13 @@ async def _fetch_jwks(jwks_uri: str) -> list[dict]:
 
 
 async def _extract_id_token_claims(token_response: dict) -> dict:
+    """Validate and extract claims from an OIDC id_token.
+
+    Returns {} if no id_token is present.  Raises ValueError if an id_token
+    exists but cannot be validated (signature failure, bad issuer, etc.)
+    so the caller can reject the authentication rather than silently
+    falling back to unverified userinfo claims.
+    """
     id_token = token_response.get("id_token")
     if not isinstance(id_token, str) or not id_token.strip():
         return {}
@@ -565,11 +577,11 @@ async def _extract_id_token_claims(token_response: dict) -> dict:
                 return claims
             except JWTError:
                 continue
-        logger.warning("Could not validate id_token signature with any JWKS key")
-        return {}
-    except Exception:
-        logger.warning("id_token validation failed; returning empty claims", exc_info=True)
-        return {}
+        raise ValueError("Could not validate id_token signature with any JWKS key")
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError(f"id_token validation failed: {exc}") from exc
 
 
 @router.get("/providers", response_model=AuthProvidersResponse)
@@ -686,7 +698,7 @@ async def verify_mfa(
         select(MfaCode).where(
             MfaCode.user_id == user_id,
             MfaCode.used_at.is_(None),
-        ).order_by(MfaCode.created_at.desc())
+        ).order_by(MfaCode.created_at.desc()).with_for_update()
     )
     mfa_codes = list(result.scalars().all())
 
@@ -694,6 +706,13 @@ async def verify_mfa(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="No pending verification code. Please request a new one.",
+        )
+
+    # Reject if any pending code has been locked out due to too many failed attempts
+    if any(mc.failed_attempts >= MFA_CODE_MAX_ATTEMPTS for mc in mfa_codes):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed verification attempts. Please request a new code.",
         )
 
     # Check all pending codes (user might have requested resend)
@@ -717,6 +736,19 @@ async def verify_mfa(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Verification code has expired. Please request a new one.",
                 )
+        # Increment failed attempts on all pending codes to prevent brute-force
+        for mc in mfa_codes:
+            mc.failed_attempts += 1
+        await db.commit()
+        # Lock out if any code has exceeded max attempts
+        if any(mc.failed_attempts >= MFA_CODE_MAX_ATTEMPTS for mc in mfa_codes):
+            for mc in mfa_codes:
+                mc.used_at = now
+            await db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many failed verification attempts. Please request a new code.",
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid verification code.",
@@ -965,9 +997,10 @@ async def oidc_callback(
                 raise ValueError(f"Provider '{state_payload['provider']}' not found or disabled")
             claims = await oidc_svc.exchange_code_and_get_claims(provider, code, _build_oidc_redirect_uri(request))
             local_user = await oidc_svc.resolve_or_create_user(db, claims, provider)
-        except Exception as exc:
+        except Exception:
+            logger.exception("OIDC authentication failed (DB provider flow)")
             return RedirectResponse(
-                _build_frontend_redirect(request, auth_error=f"Enterprise authentication failed: {exc}"),
+                _build_frontend_redirect(request, auth_error="Enterprise authentication failed. Please try again or contact support."),
                 status_code=status.HTTP_302_FOUND,
             )
     elif _validate_oidc_state(state):
@@ -1004,9 +1037,10 @@ async def oidc_callback(
             if not claims.get("sub"):
                 raise ValueError("OIDC user claims did not include sub")
             local_user = await _resolve_or_create_oidc_user(db, claims)
-        except Exception as exc:
+        except Exception:
+            logger.exception("OIDC authentication failed (legacy env flow)")
             return RedirectResponse(
-                _build_frontend_redirect(request, auth_error=f"Enterprise authentication failed: {exc}"),
+                _build_frontend_redirect(request, auth_error="Enterprise authentication failed. Please try again or contact support."),
                 status_code=status.HTTP_302_FOUND,
             )
     else:
@@ -1174,7 +1208,7 @@ async def reset_password(
 
 @router.get("/email-config", response_model=EmailConfigStatus)
 async def get_email_config(
-    _admin: User = Depends(get_current_user),
+    _admin: User = Depends(require_admin),
 ) -> EmailConfigStatus:
     """Get current email configuration status (admin only)."""
     email_service = get_email_service()

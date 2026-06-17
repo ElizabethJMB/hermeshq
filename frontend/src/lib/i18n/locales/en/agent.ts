@@ -272,6 +272,9 @@ const ns: Record<string, string> = {
   "agent.kapsoSecretHint": "Create a secret in Settings → Secrets with your **Kapso Project API Key** as the value. A single API key works for all phone numbers in your Kapso project — you only need one secret shared across all agents. Each agent differentiates via the Phone Number ID below.",
   "agent.enableKapsoWhatsApp": "Enable Kapso WhatsApp gateway for this agent",
   "agent.saveKapsoWhatsApp": "Save Kapso WhatsApp channel",
+  "agent.sixagenticCopy": "SixAgentic mobile app channel. When enabled, the agent recognizes the mobile app as an official channel and routes responses directly to the task response — no external gateway needed.",
+  "agent.enableSixagentic": "Enable SixAgentic App channel for this agent",
+  "agent.saveSixagentic": "Save SixAgentic App channel",
   "agent.kapsoWhatsAppConfigSaveFailed": "Unable to save Kapso WhatsApp channel configuration.",
   "agent.kapsoWhatsAppStartFailed": "Unable to start Kapso WhatsApp gateway.",
   "agent.kapsoWhatsAppStopFailed": "Unable to stop Kapso WhatsApp gateway.",
@@ -302,6 +305,7 @@ const ns: Record<string, string> = {
   "agent.auxiliaryTask.compression": "Context Compression",
   "agent.auxiliaryTask.web_extract": "Web Extraction",
   "agent.auxiliaryTask.approval": "Auto-Approval",
+  "agent.m365AgentPermissions": "Agent permissions",
 };
 
 export default ns;
