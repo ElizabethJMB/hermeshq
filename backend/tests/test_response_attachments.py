@@ -16,16 +16,9 @@ import hermes_task_runner as runner
 
 
 def _make_args(tmp: Path) -> tuple:
-    """Build (cwd, pre_workspace, pre_tmp, tmp_dir) for tests.
-
-    Uses a separate temp dir as the fake /tmp so tests don't pick up
-    real files from the host's /tmp.
-    """
-    fake_tmp = tmp / "_fake_tmp"
-    fake_tmp.mkdir(parents=True, exist_ok=True)
+    """Build (cwd, pre_workspace) for tests."""
     pre_ws = runner._snapshot_directory(tmp)
-    pre_tmp = runner._snapshot_directory(fake_tmp)
-    return (tmp, pre_ws, pre_tmp, fake_tmp)
+    return (tmp, pre_ws)
 
 
 class TestSnapshotDirectory(unittest.TestCase):
@@ -116,20 +109,20 @@ class TestCollectResponseAttachments(unittest.TestCase):
             (tmp / "work").mkdir()
             (tmp / "work" / "pre_existing.txt").write_bytes(b"old content")
 
-            cwd, pre_ws, pre_tmp, fake_tmp = _make_args(tmp)
-            attachments = runner._collect_response_attachments(cwd, pre_ws, pre_tmp, tmp_dir=fake_tmp)
+            cwd, pre_ws = _make_args(tmp)
+            attachments = runner._collect_response_attachments(cwd, pre_ws)
             self.assertEqual(attachments, [])
 
     def test_new_file_in_work_collected_and_copied(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             (tmp / "work").mkdir()
-            cwd, pre_ws, pre_tmp, fake_tmp = _make_args(tmp)
+            cwd, pre_ws = _make_args(tmp)
 
             # Simulate agent generating a file in work/
             (tmp / "work" / "report.xlsx").write_bytes(b"fake xlsx content here")
 
-            attachments = runner._collect_response_attachments(cwd, pre_ws, pre_tmp, tmp_dir=fake_tmp)
+            attachments = runner._collect_response_attachments(cwd, pre_ws)
             self.assertEqual(len(attachments), 1)
 
             att = attachments[0]
@@ -151,12 +144,12 @@ class TestCollectResponseAttachments(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             (tmp / "work").mkdir()
-            cwd, pre_ws, pre_tmp, fake_tmp = _make_args(tmp)
+            cwd, pre_ws = _make_args(tmp)
 
             # Simulate agent generating a file directly in workspace root
             (tmp / "summary.pdf").write_bytes(b"fake pdf")
 
-            attachments = runner._collect_response_attachments(cwd, pre_ws, pre_tmp, tmp_dir=fake_tmp)
+            attachments = runner._collect_response_attachments(cwd, pre_ws)
             filenames = [a["filename"] for a in attachments]
             self.assertIn("summary.pdf", filenames)
 
@@ -164,13 +157,13 @@ class TestCollectResponseAttachments(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             (tmp / "work").mkdir()
-            cwd, pre_ws, pre_tmp, fake_tmp = _make_args(tmp)
+            cwd, pre_ws = _make_args(tmp)
 
             # .exe is not in allowed extensions
             (tmp / "work" / "malware.exe").write_bytes(b"bad")
             (tmp / "work" / "good.pdf").write_bytes(b"good pdf")
 
-            attachments = runner._collect_response_attachments(cwd, pre_ws, pre_tmp, tmp_dir=fake_tmp)
+            attachments = runner._collect_response_attachments(cwd, pre_ws)
             filenames = [a["filename"] for a in attachments]
             self.assertIn("good.pdf", filenames)
             self.assertNotIn("malware.exe", filenames)
@@ -179,12 +172,12 @@ class TestCollectResponseAttachments(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             (tmp / "work").mkdir()
-            cwd, pre_ws, pre_tmp, fake_tmp = _make_args(tmp)
+            cwd, pre_ws = _make_args(tmp)
 
             (tmp / "work" / "empty.txt").write_bytes(b"")
             (tmp / "work" / "data.txt").write_bytes(b"data")
 
-            attachments = runner._collect_response_attachments(cwd, pre_ws, pre_tmp, tmp_dir=fake_tmp)
+            attachments = runner._collect_response_attachments(cwd, pre_ws)
             filenames = [a["filename"] for a in attachments]
             self.assertIn("data.txt", filenames)
             self.assertNotIn("empty.txt", filenames)
@@ -193,7 +186,7 @@ class TestCollectResponseAttachments(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             (tmp / "work").mkdir()
-            cwd, pre_ws, pre_tmp, fake_tmp = _make_args(tmp)
+            cwd, pre_ws = _make_args(tmp)
 
             original_max = runner.MAX_RESPONSE_FILES
             try:
@@ -201,7 +194,7 @@ class TestCollectResponseAttachments(unittest.TestCase):
                 for i in range(10):
                     (tmp / "work" / f"file_{i}.txt").write_bytes(f"content {i}".encode())
 
-                attachments = runner._collect_response_attachments(cwd, pre_ws, pre_tmp, tmp_dir=fake_tmp)
+                attachments = runner._collect_response_attachments(cwd, pre_ws)
                 self.assertEqual(len(attachments), 3)
             finally:
                 runner.MAX_RESPONSE_FILES = original_max
@@ -211,11 +204,11 @@ class TestCollectResponseAttachments(unittest.TestCase):
             tmp = Path(tmpdir)
             (tmp / "work").mkdir()
             (tmp / "work" / "output").mkdir()
-            cwd, pre_ws, pre_tmp, fake_tmp = _make_args(tmp)
+            cwd, pre_ws = _make_args(tmp)
 
             (tmp / "work" / "output" / "result.json").write_bytes(b'{"key": "value"}')
 
-            attachments = runner._collect_response_attachments(cwd, pre_ws, pre_tmp, tmp_dir=fake_tmp)
+            attachments = runner._collect_response_attachments(cwd, pre_ws)
             self.assertEqual(len(attachments), 1)
             self.assertEqual(attachments[0]["filename"], "result.json")
             self.assertEqual(attachments[0]["media_type"], "application/json")
@@ -224,14 +217,14 @@ class TestCollectResponseAttachments(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             (tmp / "work").mkdir()
-            cwd, pre_ws, pre_tmp, fake_tmp = _make_args(tmp)
+            cwd, pre_ws = _make_args(tmp)
 
             original_max = runner.MAX_RESPONSE_FILE_SIZE
             try:
                 runner.MAX_RESPONSE_FILE_SIZE = 10
                 (tmp / "work" / "big.txt").write_bytes(b"x" * 100)
 
-                attachments = runner._collect_response_attachments(cwd, pre_ws, pre_tmp, tmp_dir=fake_tmp)
+                attachments = runner._collect_response_attachments(cwd, pre_ws)
                 self.assertEqual(attachments, [])
             finally:
                 runner.MAX_RESPONSE_FILE_SIZE = original_max
@@ -242,12 +235,12 @@ class TestCollectResponseAttachments(unittest.TestCase):
             (tmp / "work").mkdir()
             (tmp / "work" / "old.txt").write_bytes(b"old")
 
-            cwd, pre_ws, pre_tmp, fake_tmp = _make_args(tmp)
+            cwd, pre_ws = _make_args(tmp)
 
             # Don't modify old.txt, only add a new file
             (tmp / "work" / "new.txt").write_bytes(b"new")
 
-            attachments = runner._collect_response_attachments(cwd, pre_ws, pre_tmp, tmp_dir=fake_tmp)
+            attachments = runner._collect_response_attachments(cwd, pre_ws)
             filenames = [a["filename"] for a in attachments]
             self.assertIn("new.txt", filenames)
             self.assertNotIn("old.txt", filenames)
@@ -256,11 +249,11 @@ class TestCollectResponseAttachments(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             (tmp / "work").mkdir()
-            cwd, pre_ws, pre_tmp, fake_tmp = _make_args(tmp)
+            cwd, pre_ws = _make_args(tmp)
 
             (tmp / "work" / "test.txt").write_bytes(b"test")
 
-            attachments = runner._collect_response_attachments(cwd, pre_ws, pre_tmp, tmp_dir=fake_tmp)
+            attachments = runner._collect_response_attachments(cwd, pre_ws)
             self.assertEqual(len(attachments), 1)
             # file_id should be a UUID
             import re
@@ -277,12 +270,12 @@ class TestCollectResponseAttachments(unittest.TestCase):
             tmp = Path(tmpdir)
             (tmp / "work").mkdir()
             (tmp / "uploads").mkdir()
-            cwd, pre_ws, pre_tmp, fake_tmp = _make_args(tmp)
+            cwd, pre_ws = _make_args(tmp)
 
             # Add a file to uploads/ (simulating a previous upload)
             (tmp / "uploads" / "previous.jpg").write_bytes(b"old upload")
 
-            attachments = runner._collect_response_attachments(cwd, pre_ws, pre_tmp, tmp_dir=fake_tmp)
+            attachments = runner._collect_response_attachments(cwd, pre_ws)
             filenames = [a["filename"] for a in attachments]
             self.assertNotIn("previous.jpg", filenames)
 
