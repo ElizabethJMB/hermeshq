@@ -59,15 +59,19 @@ export function ScheduledTasksPage() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await createScheduledTask.mutateAsync({
-      agent_id: scheduleAgentId || agents?.[0]?.id,
-      name: scheduleName,
-      cron_expression: cronExpression,
-      prompt: schedulePrompt,
-      enabled: true,
-    });
-    setScheduleName("");
-    setSchedulePrompt("");
+    try {
+      await createScheduledTask.mutateAsync({
+        agent_id: scheduleAgentId || agents?.[0]?.id,
+        name: scheduleName,
+        cron_expression: cronExpression,
+        prompt: schedulePrompt,
+        enabled: true,
+      });
+      setScheduleName("");
+      setSchedulePrompt("");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Schedule creation failed");
+    }
   }
 
   async function onDelete(scheduleId: string, name: string) {
@@ -75,7 +79,11 @@ export function ScheduledTasksPage() {
     if (!confirmed) {
       return;
     }
-    await deleteScheduledTask.mutateAsync(scheduleId);
+    try {
+      await deleteScheduledTask.mutateAsync(scheduleId);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Schedule deletion failed");
+    }
   }
 
   return (
