@@ -52,6 +52,7 @@ export function M365ConnectPanel() {
           stopPolling();
           setFlow(null);
           await queryClient.invalidateQueries({ queryKey: ["m365-me"] });
+          await queryClient.invalidateQueries({ queryKey: ["m365-agent-scopes"] });
         }
       } catch {
         // pending — seguir intentando
