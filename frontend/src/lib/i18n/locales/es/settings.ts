@@ -141,6 +141,8 @@ const ns: Record<string, string> = {
   "settings.semaphoreUpdated": "Semáforo actualizado a {value}. Requiere reinicio.",
   "settings.semaphoreValue": "Valor del semáforo",
   "settings.sizingNote": "El sizing es estimativo — los requerimientos reales varían según la complejidad de las tareas. El tuning de PostgreSQL es básico — para >100 agentes, usa una base de datos externa.",
+  "settings.discoveryUrl": "URL de descubrimiento",
+  "settings.discoveryUrlInvalid": "La URL de descubrimiento debe comenzar con https://",
 };
 
 export default ns;

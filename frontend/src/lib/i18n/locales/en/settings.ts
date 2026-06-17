@@ -141,6 +141,8 @@ const ns: Record<string, string> = {
   "settings.semaphoreUpdated": "Semaphore updated to {value}. Restart required.",
   "settings.semaphoreValue": "Semaphore value",
   "settings.sizingNote": "Sizing is estimated — actual requirements vary by task complexity. PostgreSQL tuning is basic — for >100 agents, use an external database.",
+  "settings.discoveryUrl": "Discovery URL",
+  "settings.discoveryUrlInvalid": "Discovery URL must start with https://",
 };
 
 export default ns;
