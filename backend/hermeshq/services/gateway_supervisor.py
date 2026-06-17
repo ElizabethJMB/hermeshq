@@ -17,7 +17,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from hermeshq.core.events import EventBroker
@@ -103,6 +103,16 @@ class GatewaySupervisor:
 
         await asyncio.gather(*[_bootstrap_agent(a) for a in agents], return_exceptions=True)
 
+    async def _persist_channel_metadata(self, channel_id: str, metadata: dict) -> None:
+        """Persist updated metadata_json for a channel using a fresh session."""
+        async with self.session_factory() as session:
+            await session.execute(
+                update(MessagingChannel)
+                .where(MessagingChannel.id == channel_id)
+                .values(metadata_json=metadata)
+            )
+            await session.commit()
+
     async def _bootstrap_one(self, agent: Agent) -> None:
         async with self.session_factory() as session:
             channels = await session.execute(
@@ -144,6 +154,8 @@ class GatewaySupervisor:
                         await asyncio.sleep(delay)
                 if last_exc:
                     logger.warning("Bootstrap failed for %s/%s: %s", agent.id, platform, last_exc)
+                # Persist the final bootstrap state; channel is detached so use a fresh session.
+                await self._persist_channel_metadata(channel.id, channel.metadata_json or {})
 
     def _mark_bootstrap_state(
         self,
@@ -246,10 +258,10 @@ class GatewaySupervisor:
             result["bridge_log_path"] = bridge_log_path.as_posix() if bridge_log_path else None
             result["pairing_qr_text"] = self._log_mgr._extract_whatsapp_qr_text(bridge_log_path)
 
-        self._maybe_update_connected_at(channel, running)
+        await self._maybe_update_connected_at(channel, running)
         return result
 
-    def _maybe_update_connected_at(self, channel: MessagingChannel, running: bool) -> None:
+    async def _maybe_update_connected_at(self, channel: MessagingChannel, running: bool) -> None:
         if not running:
             return
         metadata = dict(channel.metadata_json or {})
@@ -257,6 +269,7 @@ class GatewaySupervisor:
             return
         metadata["connected_at"] = datetime.now(timezone.utc).isoformat()
         channel.metadata_json = metadata
+        await self._persist_channel_metadata(channel.id, metadata)
 
     async def tail_log(self, agent_id: str, platform: str, lines: int = 120) -> str:
         return await self._log_mgr.tail_log(agent_id, platform, lines)

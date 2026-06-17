@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import desc, false, select
+from sqlalchemy import desc, false, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.core.security import ensure_agent_access, get_accessible_agent_ids, get_current_user, is_admin
@@ -29,7 +29,10 @@ async def list_tasks(
         else:
             statement = statement.where(
                 Task.agent_id.in_(accessible_ids),
-                Task.created_by_user_id == current_user.id,
+                or_(
+                    Task.created_by_user_id == current_user.id,
+                    Task.created_by_user_id.is_(None),  # scheduler-created tasks
+                ),
             )
     result = await db.execute(statement)
     return [TaskRead.model_validate(t) for t in result.scalars().all()]

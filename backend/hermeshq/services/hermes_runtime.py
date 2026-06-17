@@ -19,6 +19,35 @@ from hermeshq.services.secret_vault import SecretVault
 logger = logging.getLogger(__name__)
 
 
+# ── Response attachment extension/MIME maps (shared with task_runner) ──
+_ALLOWED_MEDIA_EXTS = {
+    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg",
+    ".mp3", ".aac", ".ogg", ".wav", ".m4a", ".flac",
+    ".mp4", ".webm", ".mov", ".avi", ".mkv",
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+    ".txt", ".csv", ".json", ".md", ".xml", ".html", ".zip",
+}
+_MEDIA_EXT_MIME_MAP = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+    ".svg": "image/svg+xml",
+    ".mp3": "audio/mpeg", ".aac": "audio/aac", ".ogg": "audio/ogg",
+    ".wav": "audio/wav", ".m4a": "audio/mp4", ".flac": "audio/flac",
+    ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo", ".mkv": "video/x-matroska",
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".txt": "text/plain", ".csv": "text/csv", ".json": "application/json",
+    ".md": "text/markdown", ".xml": "application/xml", ".html": "text/html",
+    ".zip": "application/zip",
+}
+
+
 @dataclass
 class RuntimeExecutionResult:
     final_response: str
@@ -27,6 +56,7 @@ class RuntimeExecutionResult:
     tokens_used: int
     iterations: int
     engine: str
+    response_attachments: list[dict]
 
 
 class RuntimeExecutionError(RuntimeError):
@@ -125,6 +155,27 @@ class HermesRuntime:
         runtime_provider = self.installation_manager._model_provider_for_agent(agent)
         effective_base_url = self.installation_manager._effective_provider_base_url(agent)
         effective_model = await self._resolve_effective_model(agent, runtime_provider)
+        # ── Channel routing: suppress external channels for mobile_app tasks ──
+        _task_meta = task.metadata_json or {}
+        _reply_to = str(_task_meta.get("reply_to") or _task_meta.get("source") or "").strip().lower()
+        if _reply_to == "mobile_app":
+            runtime_system_prompt = (
+                runtime_system_prompt
+                + "\n\n"
+                + "IMPORTANT: You are responding through the SixAgentic mobile app. "
+                "Always provide your response directly in the task response text. "
+                "Do NOT send responses through Telegram, WhatsApp, email, or any other "
+                "external channel. "
+                "When you generate files (PDFs, images, spreadsheets, etc.), save them "
+                "in your work/ directory — NOT in /tmp or other system locations. "
+                "After generating a file, add a line at the END of your response in the "
+                "exact format: MEDIA:/path/to/your/file.ext — this is required for the "
+                "file to be delivered to the user. "
+                "Do NOT mention file paths elsewhere in your response text. "
+                "Any files you generate will be automatically collected and attached "
+                "as response_attachments."
+            )
+
         payload = {
             "task_id": str(task.id),
             "prompt": task.prompt,
@@ -213,6 +264,70 @@ class HermesRuntime:
         if any(p.lower() in raw_response.lower() for p in _PROVIDER_ERROR_PATTERNS) and len(raw_response) < 300:
             raise RuntimeExecutionError(raw_response)
 
+        # ── Parse MEDIA:/FILE: references and collect response attachments ──
+        # The agent may emit lines like "MEDIA:/path/to/file.pdf" to indicate
+        # files it generated. We extract these, copy to uploads/, and strip
+        # the references from the response text.
+        import re as _re
+        import uuid as _uuid
+        import shutil as _shutil
+        from pathlib import Path as _Path
+
+        media_attachments: list[dict] = []
+        media_pattern = _re.compile(r"(?im)^MEDIA:\s*(.+)$")
+
+        media_matches = list(media_pattern.finditer(raw_response))
+        if media_matches:
+            workspace_path = _Path(payload["cwd"])
+            uploads_dir = workspace_path / "uploads"
+            uploads_dir.mkdir(parents=True, exist_ok=True)
+
+            for match in media_matches:
+                file_path_str = match.group(1).strip()
+                file_path = _Path(file_path_str)
+                if not file_path.exists():
+                    # Try relative to workspace
+                    file_path = workspace_path / file_path_str
+                if not file_path.exists() or not file_path.is_file():
+                    logger.warning("MEDIA: file not found: %s", file_path_str)
+                    continue
+
+                ext = file_path.suffix.lower()
+                if ext not in _ALLOWED_MEDIA_EXTS:
+                    logger.warning("MEDIA: file extension not allowed: %s", ext)
+                    continue
+
+                file_id = str(_uuid.uuid4())
+                dest_filename = f"{file_id}{ext}"
+                dest_path = uploads_dir / dest_filename
+                try:
+                    _shutil.copy2(file_path, dest_path)
+                except OSError as exc:
+                    logger.warning("MEDIA: failed to copy %s: %s", file_path, exc)
+                    continue
+
+                file_size = dest_path.stat().st_size
+                media_attachments.append({
+                    "file_id": file_id,
+                    "filename": file_path.name,
+                    "media_type": _MEDIA_EXT_MIME_MAP.get(ext, "application/octet-stream"),
+                    "size": file_size,
+                    "caption": "",
+                    "source_path": str(file_path),
+                })
+                logger.info("MEDIA: collected %s (%d bytes) as %s", file_path.name, file_size, file_id)
+
+            # Strip MEDIA: lines from the response text
+            raw_response = media_pattern.sub("", raw_response).strip()
+            # Also strip any remaining inline MEDIA: references
+            raw_response = _re.sub(r"(?i)MEDIA:\s*/\S+", "", raw_response).strip()
+            # Clean up any double blank lines left behind
+            raw_response = _re.sub(r"\n{3,}", "\n\n", raw_response)
+
+        # Merge with any attachments the task runner already collected
+        runner_attachments = list(final_result.get("response_attachments") or [])
+        all_attachments = runner_attachments + media_attachments
+
         return RuntimeExecutionResult(
             final_response=raw_response,
             messages=list(final_result.get("messages") or []),
@@ -220,6 +335,7 @@ class HermesRuntime:
             tokens_used=int(final_result.get("tokens_used") or 0),
             iterations=int(final_result.get("iterations") or 0),
             engine=str(final_result.get("engine") or "hermes-agent"),
+            response_attachments=all_attachments,
         )
 
     async def _resolve_api_key(self, api_key_ref: str | None) -> str | None:
