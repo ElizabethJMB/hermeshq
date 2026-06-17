@@ -254,6 +254,15 @@ async def create_agent_from_config(
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
 
+    # --- duplicate name check ---------------------------------------------
+    name_candidate = (payload.friendly_name or payload.name or "").strip()
+    if name_candidate:
+        existing = await db.execute(
+            select(Agent).where(Agent.name == name_candidate, Agent.is_archived.is_(False))
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail=f"An agent named '{name_candidate}' already exists")
+
     # --- runtime defaults --------------------------------------------------
     runtime_defaults = await _resolve_runtime_defaults(db, payload)
 
