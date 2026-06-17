@@ -345,6 +345,13 @@ async def get_channel(
     )
     channel = result.scalar_one_or_none()
     if not channel:
+        # sixagentic needs no configuration — auto-create on first access
+        if platform == "sixagentic":
+            channel = MessagingChannel(agent_id=agent_id, platform=platform)
+            db.add(channel)
+            await db.commit()
+            await db.refresh(channel)
+            return MessagingChannelRead.model_validate(channel)
         raise HTTPException(status_code=404, detail="Channel not configured")
     return MessagingChannelRead.model_validate(channel)
 
