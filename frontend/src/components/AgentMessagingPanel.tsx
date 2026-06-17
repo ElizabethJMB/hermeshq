@@ -324,7 +324,7 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
   const [selectedPlatform, setSelectedPlatform] = useState<PlatformSlug>("telegram");
 
   useEffect(() => {
-    dirtyRefs.current = { telegram: false, whatsapp: false, microsoft_teams: false, google_chat: false, kapso_whatsapp: false };
+    dirtyRefs.current = { telegram: false, whatsapp: false, microsoft_teams: false, google_chat: false, kapso_whatsapp: false, sixagentic: false };
   }, [agentId]);
   const whatsappQrSvg = useMemo(
     () => buildWhatsappQrSvg(whatsappRuntime?.pairing_qr_text),
