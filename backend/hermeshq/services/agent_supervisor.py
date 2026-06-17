@@ -138,7 +138,7 @@ from hermeshq.models.task import Task
 from hermeshq.models.base import utcnow
 from hermeshq.services.hermes_runtime import HermesRuntime
 from hermeshq.services.secret_vault import SecretVault
-from hermeshq.services.task_board import sync_board_with_runtime
+from hermeshq.services.task_board import runtime_status_to_board_column, sync_board_with_runtime
 
 
 class AgentSupervisor:
@@ -249,6 +249,8 @@ class AgentSupervisor:
                     "and could not be resumed."
                 )
                 task.completed_at = now
+                if not task.board_manual:
+                    task.board_column = runtime_status_to_board_column("failed")
 
             await session.commit()
 
@@ -337,6 +339,8 @@ class AgentSupervisor:
             async with self.session_factory() as session:
                 task = await session.get(Task, task_id)
                 if not task:
+                    return
+                if task.status != "queued":
                     return
                 agent = await session.get(Agent, task.agent_id)
                 if not agent:
