@@ -27,6 +27,7 @@ class RuntimeExecutionResult:
     tokens_used: int
     iterations: int
     engine: str
+    response_attachments: list[dict]
 
 
 class RuntimeExecutionError(RuntimeError):
@@ -220,6 +221,7 @@ class HermesRuntime:
             tokens_used=int(final_result.get("tokens_used") or 0),
             iterations=int(final_result.get("iterations") or 0),
             engine=str(final_result.get("engine") or "hermes-agent"),
+            response_attachments=list(final_result.get("response_attachments") or []),
         )
 
     async def _resolve_api_key(self, api_key_ref: str | None) -> str | None:

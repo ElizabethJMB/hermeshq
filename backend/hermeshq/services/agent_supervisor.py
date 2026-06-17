@@ -418,6 +418,18 @@ class AgentSupervisor:
                 task.iterations = max(task.iterations, execution.iterations)
                 task.messages_json = execution.messages or task.messages_json
                 task.tool_calls = execution.tool_calls
+
+                # ── Persist response_attachments in task metadata ──
+                response_attachments = getattr(execution, "response_attachments", [])
+                if response_attachments:
+                    metadata = dict(task.metadata_json or {})
+                    # Strip source_path (internal only, never sent to client)
+                    metadata["response_attachments"] = [
+                        {k: v for k, v in att.items() if k != "source_path"}
+                        for att in response_attachments
+                    ]
+                    task.metadata_json = metadata
+
                 agent.total_tasks += 1
                 agent.total_tokens_used += task.tokens_used
                 agent.last_activity = utcnow()
@@ -452,6 +464,7 @@ class AgentSupervisor:
                     "task_id": task_id,
                     "agent_id": task.agent_id,
                     "response": execution.final_response,
+                    "metadata": task.metadata_json or {},
                 }
             )
 

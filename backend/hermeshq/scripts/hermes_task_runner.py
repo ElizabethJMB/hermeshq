@@ -1,12 +1,121 @@
 import json
 import os
+import shutil
 import sys
 import traceback
+import uuid
 from pathlib import Path
+
+
+# ── Response attachment limits ──────────────────────────────────
+ALLOWED_RESPONSE_EXTENSIONS = {
+    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg",
+    ".mp3", ".aac", ".ogg", ".wav", ".m4a", ".flac",
+    ".mp4", ".webm", ".mov", ".avi", ".mkv",
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+    ".txt", ".csv", ".json", ".md", ".xml", ".html", ".zip",
+}
+MAX_RESPONSE_FILE_SIZE = 100 * 1024 * 1024   # 100 MB per file
+MAX_RESPONSE_FILES = 20                       # cap per task
+
+# MIME type map for common extensions (copied from attachments.py)
+_EXT_MIME_MAP = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+    ".svg": "image/svg+xml",
+    ".mp3": "audio/mpeg", ".aac": "audio/aac", ".ogg": "audio/ogg",
+    ".wav": "audio/wav", ".m4a": "audio/mp4", ".flac": "audio/flac",
+    ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo", ".mkv": "video/x-matroska",
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".txt": "text/plain", ".csv": "text/csv", ".json": "application/json",
+    ".md": "text/markdown", ".xml": "application/xml", ".html": "text/html",
+    ".zip": "application/zip",
+}
 
 
 def _emit(payload: dict) -> None:
     print(json.dumps(payload, ensure_ascii=False), flush=True)
+
+
+def _snapshot_directory(directory: Path) -> dict[str, dict]:
+    """Return {relative_path: {path, name, ext, size, mtime}} for all files."""
+    snapshot: dict[str, dict] = {}
+    if not directory.exists():
+        return snapshot
+    for path in directory.rglob("*"):
+        if path.is_file():
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            rel = str(path.relative_to(directory))
+            snapshot[rel] = {
+                "path": path,
+                "name": path.name,
+                "ext": path.suffix.lower(),
+                "size": stat.st_size,
+                "mtime": stat.st_mtime,
+            }
+    return snapshot
+
+
+def _diff_snapshots(pre: dict, post: dict) -> list[dict]:
+    """Return files that are new or modified (by mtime + size)."""
+    result: list[dict] = []
+    for rel, info in post.items():
+        if rel not in pre:
+            result.append(info)
+        elif info["mtime"] != pre[rel]["mtime"] or info["size"] != pre[rel]["size"]:
+            result.append(info)
+    return result
+
+
+def _collect_response_attachments(cwd: Path, pre_snapshot: dict) -> list[dict]:
+    """Scan work/ for new/modified files since *pre_snapshot*, copy them to
+    uploads/, and return metadata list suitable for the result payload."""
+    work_dir = cwd / "work"
+    post_snapshot = _snapshot_directory(work_dir)
+
+    diff = _diff_snapshots(pre_snapshot, post_snapshot)
+
+    # Filter by extension and size
+    filtered = [
+        f for f in diff
+        if f["ext"] in ALLOWED_RESPONSE_EXTENSIONS
+        and f["size"] <= MAX_RESPONSE_FILE_SIZE
+        and f["size"] > 0
+    ][:MAX_RESPONSE_FILES]
+
+    uploads_dir = cwd / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+
+    attachments: list[dict] = []
+    for f in filtered:
+        file_id = str(uuid.uuid4())
+        dest_filename = f"{file_id}{f['ext']}"
+        dest_path = uploads_dir / dest_filename
+        try:
+            shutil.copy2(f["path"], dest_path)
+        except OSError:
+            continue
+
+        attachments.append({
+            "file_id": file_id,
+            "filename": f["name"],
+            "media_type": _EXT_MIME_MAP.get(f["ext"], "application/octet-stream"),
+            "size": f["size"],
+            "caption": "",
+            "source_path": str(f["path"]),  # internal only, stripped before client
+        })
+
+    return attachments
 
 
 def _extract_tool_calls(messages: list[dict]) -> list[dict]:
@@ -73,6 +182,10 @@ def main() -> int:
             payload["prompt"] += "\n\nAttached files:\n" + "\n".join(attachment_lines)
     # ── End attachment enrichment ──────────────────────────────
 
+    # ── Snapshot work/ BEFORE execution (for response attachment detection) ──
+    _pre_work_snapshot = _snapshot_directory(Path(payload["cwd"]) / "work")
+    # ── End pre-execution snapshot ─────────────────────────────
+
     try:
         from run_agent import AIAgent
 
@@ -113,6 +226,12 @@ def main() -> int:
         if not final_response and not assistant_messages and not tool_calls:
             raise RuntimeError("Hermes runtime returned no assistant output")
 
+        # ── Collect response attachments (files generated by the agent) ──
+        response_attachments = _collect_response_attachments(
+            Path(payload["cwd"]), _pre_work_snapshot
+        )
+        # ── End response attachment collection ──────────────────
+
         _emit(
             {
                 "event": "result",
@@ -122,6 +241,7 @@ def main() -> int:
                 "tokens_used": max(256, len(str(result).split())),
                 "iterations": len(assistant_messages),
                 "engine": "hermes-agent",
+                "response_attachments": response_attachments,
             }
         )
         return 0
