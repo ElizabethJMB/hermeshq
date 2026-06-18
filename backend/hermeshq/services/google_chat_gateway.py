@@ -175,6 +175,7 @@ class GoogleChatGateway:
         self._service_account_json: str = ""
         self._project_id: str = ""
         self._pending_tasks: dict[str, dict] = {}  # task_id → delivery info
+        self._known_spaces: set[str] = set()  # spaces this gateway has been added to
 
     # ---- lifecycle ----
 
@@ -281,13 +282,19 @@ class GoogleChatGateway:
 
         if event_type == "ADDED_TO_SPACE":
             space = event.get("space", {})
+            sname = space.get("name", "")
+            if sname:
+                self._known_spaces.add(sname)
             logger.info(
-                "Google Chat bot added to space %s (%s)",
-                space.get("name"), space.get("displayName"),
+                "Google Chat bot added to space %s (%s) for agent %s",
+                sname, space.get("displayName"), self.agent_id,
             )
             return {"text": "Hello! I'm the HermesHQ agent bot. Send me a message to get started."}
 
         if event_type == "REMOVED_FROM_SPACE":
+            space = event.get("space", {})
+            sname = space.get("name", "")
+            self._known_spaces.discard(sname)
             return None
 
         if event_type == "CARD_CLICKED":
@@ -313,6 +320,12 @@ class GoogleChatGateway:
         space = event.get("space", {})
         space_name = space.get("name", "")
         space_type = space.get("spaceType", "")
+
+        # In multi-agent setups each gateway tracks its own spaces. If this
+        # gateway has known spaces and this message is from a different space,
+        # let another gateway handle it.
+        if self._known_spaces and space_name not in self._known_spaces:
+            return None
         thread_name = message.get("thread", {}).get("name")
         message_name = message.get("name", "")
 

@@ -290,8 +290,15 @@ class GatewayProcessManager:
         restarted_handle: GatewayProcessHandle | None = None
         if remaining_channels:
             agent_row = await self._reload_agent(agent_id)
-            restarted_handle = await self._launch_gateway_process(agent_row, remaining_channels, log_mgr)
-            self.processes[agent_id] = restarted_handle
+            try:
+                restarted_handle = await self._launch_gateway_process(agent_row, remaining_channels, log_mgr)
+                self.processes[agent_id] = restarted_handle
+            except Exception:
+                logger.exception(
+                    "Failed to restart gateway for agent %s after stopping %s — remaining channels will be marked stopped",
+                    agent_id,
+                    platform,
+                )
 
         async with self.session_factory() as session:
             agent_row = await session.get(Agent, agent_id)
