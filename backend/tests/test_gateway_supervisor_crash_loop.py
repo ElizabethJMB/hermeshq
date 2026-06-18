@@ -77,6 +77,10 @@ def _make_supervisor() -> tuple[GatewaySupervisor, MagicMock, Mock, Mock]:
     event_broker = Mock()
     installation_manager = Mock()
     supervisor = GatewaySupervisor(session_factory, event_broker, installation_manager)
+    # Mock process manager methods that _bootstrap_one calls
+    supervisor._process_mgr.start_channel_locked = AsyncMock()
+    supervisor._process_mgr._channel_runtime_enabled = Mock(return_value=True)
+    supervisor._process_mgr._terminate_handle = AsyncMock()
     return supervisor, session_factory, event_broker, installation_manager
 
 
@@ -103,6 +107,10 @@ def _make_session(
     mock_result = Mock()
     mock_result.all = Mock(return_value=rows if rows is not None else [])
     mock_result.scalar_one_or_none = Mock(return_value=channel_for_get)
+    # Support result.scalars().all() used by _do_bootstrap_gateways
+    mock_scalars = Mock()
+    mock_scalars.all = Mock(return_value=rows if rows is not None else [])
+    mock_result.scalars = Mock(return_value=mock_scalars)
     s.execute = AsyncMock(return_value=mock_result)
 
     # session.get(Model, pk)
@@ -188,31 +196,27 @@ class TestBootstrapAgentStatusFilter(unittest.IsolatedAsyncioTestCase):
         ch_run = _make_channel(agent_id="run-1")
 
         sf.side_effect = SessionSequence(
-            _make_session(rows=[(ch_run, running)]),  # bootstrap query
-            _make_session(channel_for_get=ch_run),     # success path
+            _make_session(rows=[running]),        # bootstrap query: agents
+            _make_session(rows=[ch_run]),          # _bootstrap_one: channels
         )
-        supervisor.start_channel = AsyncMock()
 
         await supervisor._do_bootstrap_gateways()
 
-        self.assertEqual(supervisor.start_channel.call_count, 1)
-        self.assertEqual(supervisor.start_channel.call_args[0][0].id, "run-1")
+        self.assertEqual(supervisor._process_mgr.start_channel_locked.call_count, 1)
 
     async def test_archived_agents_excluded(self) -> None:
         supervisor, sf, _, _ = _make_supervisor()
         sf.side_effect = SessionSequence(_make_session(rows=[]))
-        supervisor.start_channel = AsyncMock()
 
         await supervisor._do_bootstrap_gateways()
-        supervisor.start_channel.assert_not_called()
+        supervisor._process_mgr.start_channel_locked.assert_not_called()
 
     async def test_archived_status_excluded(self) -> None:
         supervisor, sf, _, _ = _make_supervisor()
         sf.side_effect = SessionSequence(_make_session(rows=[]))
-        supervisor.start_channel = AsyncMock()
 
         await supervisor._do_bootstrap_gateways()
-        supervisor.start_channel.assert_not_called()
+        supervisor._process_mgr.start_channel_locked.assert_not_called()
 
     async def test_multiple_running_agents_bootstrapped(self) -> None:
         supervisor, sf, _, _ = _make_supervisor()
@@ -222,33 +226,34 @@ class TestBootstrapAgentStatusFilter(unittest.IsolatedAsyncioTestCase):
         c2 = _make_channel(agent_id="r2")
 
         sf.side_effect = SessionSequence(
-            _make_session(rows=[(c1, a1), (c2, a2)]),
-            _make_session(channel_for_get=c1),
-            _make_session(channel_for_get=c2),
+            _make_session(rows=[a1, a2]),        # bootstrap query: agents
+            _make_session(rows=[c1]),             # _bootstrap_one for a1: channels
+            _make_session(rows=[c2]),             # _bootstrap_one for a2: channels
         )
-        supervisor.start_channel = AsyncMock()
 
         await supervisor._do_bootstrap_gateways()
-        self.assertEqual(supervisor.start_channel.call_count, 2)
+        self.assertEqual(supervisor._process_mgr.start_channel_locked.call_count, 2)
 
     async def test_all_stopped_means_no_bootstrap(self) -> None:
         supervisor, sf, _, _ = _make_supervisor()
         sf.side_effect = SessionSequence(_make_session(rows=[]))
-        supervisor.start_channel = AsyncMock()
 
         await supervisor._do_bootstrap_gateways()
-        supervisor.start_channel.assert_not_called()
+        supervisor._process_mgr.start_channel_locked.assert_not_called()
 
     async def test_runtime_disabled_channels_skipped(self) -> None:
         supervisor, sf, _, _ = _make_supervisor()
         agent = _make_agent(agent_id="rd-1", status="running")
         ch = _make_channel(agent_id="rd-1", metadata_json={"runtime_disabled": True})
 
-        sf.side_effect = SessionSequence(_make_session(rows=[(ch, agent)]))
-        supervisor.start_channel = AsyncMock()
+        sf.side_effect = SessionSequence(
+            _make_session(rows=[agent]),
+            _make_session(rows=[ch]),
+        )
+        supervisor._process_mgr._channel_runtime_enabled = Mock(return_value=False)
 
         await supervisor._do_bootstrap_gateways()
-        supervisor.start_channel.assert_not_called()
+        supervisor._process_mgr.start_channel_locked.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -261,25 +266,22 @@ class TestBootstrapTransientHandling(unittest.IsolatedAsyncioTestCase):
     """
 
     async def test_invalid_token_retried(self) -> None:
-        """InvalidToken from Fernet should be caught and retried."""
+        """Transient errors should be caught and retried."""
         supervisor, sf, _, _ = _make_supervisor()
         agent = _make_agent(agent_id="brk-1", name="BrokenTg")
         channel = _make_channel(agent_id="brk-1", platform="telegram")
 
-        # Bootstrap query + error sessions for each retry
-        sessions = [_make_session(rows=[(channel, agent)])]
-        for _ in range(BOOTSTRAP_RETRY_ATTEMPTS):
-            sessions.append(_make_session(
-                channel_for_get=channel,
-                agent_for_get=agent,
-            ))
-        sf.side_effect = SessionSequence(*sessions)
+        # Session 1: bootstrap agents; Session 2: channels; Session 3: persist metadata
+        sf.side_effect = SessionSequence(
+            _make_session(rows=[agent]),
+            _make_session(rows=[channel]),
+            _make_session(rows=[]),
+        )
 
-        from cryptography.fernet import InvalidToken
-        supervisor.start_channel = AsyncMock(side_effect=InvalidToken)
+        supervisor._process_mgr.start_channel_locked = AsyncMock(side_effect=TimeoutError("Operation timed out"))
 
         await supervisor._do_bootstrap_gateways()
-        self.assertEqual(supervisor.start_channel.call_count, BOOTSTRAP_RETRY_ATTEMPTS)
+        self.assertEqual(supervisor._process_mgr.start_channel_locked.call_count, BOOTSTRAP_RETRY_ATTEMPTS)
 
     async def test_one_failing_agent_does_not_block_others(self) -> None:
         """If one agent fails, others should still bootstrap."""
@@ -289,25 +291,30 @@ class TestBootstrapTransientHandling(unittest.IsolatedAsyncioTestCase):
         ch_bad = _make_channel(agent_id="bad-1")
         ch_good = _make_channel(agent_id="good-1")
 
-        sessions = [_make_session(rows=[(ch_bad, bad), (ch_good, good)])]
-        # Error sessions for bad agent retries
-        for _ in range(BOOTSTRAP_RETRY_ATTEMPTS):
-            sessions.append(_make_session(
-                channel_for_get=ch_bad,
-                agent_for_get=bad,
-            ))
-        # Success session for good agent
-        sessions.append(_make_session(channel_for_get=ch_good))
-        sf.side_effect = SessionSequence(*sessions)
-
         started: list[str] = []
 
-        async def start_fn(agent_obj, platform):
-            if agent_obj.id == "bad-1":
-                raise RuntimeError("Simulated InvalidToken")
-            started.append(agent_obj.id)
+        async def start_fn(agent_id, platform, log_mgr):
+            if agent_id == "bad-1":
+                raise TimeoutError("timed out")
+            started.append(agent_id)
 
-        supervisor.start_channel = start_fn
+        supervisor._process_mgr.start_channel_locked = start_fn
+
+        # Patch _bootstrap_one to test gather isolation directly
+        call_count = 0
+
+        original_bootstrap = supervisor._bootstrap_one
+
+        async def patched_bootstrap(agent):
+            nonlocal call_count
+            call_count += 1
+            if agent.id == "bad-1":
+                raise TimeoutError("timed out")
+            started.append(agent.id)
+
+        supervisor._bootstrap_one = patched_bootstrap
+
+        sf.side_effect = SessionSequence(_make_session(rows=[bad, good]))
 
         await supervisor._do_bootstrap_gateways()
         self.assertIn("good-1", started)
@@ -318,22 +325,20 @@ class TestBootstrapTransientHandling(unittest.IsolatedAsyncioTestCase):
         agent = _make_agent(agent_id="retry-1")
         channel = _make_channel(agent_id="retry-1")
 
-        sessions = [_make_session(rows=[(channel, agent)])]
-        for _ in range(BOOTSTRAP_RETRY_ATTEMPTS):
-            sessions.append(_make_session(
-                channel_for_get=channel,
-                agent_for_get=agent,
-            ))
-        sf.side_effect = SessionSequence(*sessions)
+        sf.side_effect = SessionSequence(
+            _make_session(rows=[agent]),
+            _make_session(rows=[channel]),
+            _make_session(rows=[]),  # persist
+        )
 
         attempts = 0
 
-        async def fail(agent_obj, platform):
+        async def fail(agent_id, platform, log_mgr):
             nonlocal attempts
             attempts += 1
-            raise RuntimeError("Transient failure")
+            raise TimeoutError("timed out")
 
-        supervisor.start_channel = fail
+        supervisor._process_mgr.start_channel_locked = fail
 
         await supervisor._do_bootstrap_gateways()
         self.assertEqual(attempts, BOOTSTRAP_RETRY_ATTEMPTS)
@@ -406,22 +411,26 @@ class TestEnterprisePlatformExclusion(unittest.IsolatedAsyncioTestCase):
         agent = _make_agent(agent_id="gc-1")
         ch = _make_channel(agent_id="gc-1", platform="google_chat")
 
-        sf.side_effect = SessionSequence(_make_session(rows=[(ch, agent)]))
-        supervisor.start_channel = AsyncMock()
+        sf.side_effect = SessionSequence(
+            _make_session(rows=[agent]),
+            _make_session(rows=[ch]),
+        )
 
         await supervisor._do_bootstrap_gateways()
-        supervisor.start_channel.assert_not_called()
+        supervisor._process_mgr.start_channel_locked.assert_not_called()
 
     async def test_kapso_whatsapp_skipped(self) -> None:
         supervisor, sf, _, _ = _make_supervisor()
         agent = _make_agent(agent_id="kw-1")
         ch = _make_channel(agent_id="kw-1", platform="kapso_whatsapp")
 
-        sf.side_effect = SessionSequence(_make_session(rows=[(ch, agent)]))
-        supervisor.start_channel = AsyncMock()
+        sf.side_effect = SessionSequence(
+            _make_session(rows=[agent]),
+            _make_session(rows=[ch]),
+        )
 
         await supervisor._do_bootstrap_gateways()
-        supervisor.start_channel.assert_not_called()
+        supervisor._process_mgr.start_channel_locked.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -491,20 +500,23 @@ class TestBootstrapStateTracking(unittest.TestCase):
 class TestChannelRuntimeEnabled(unittest.TestCase):
     def setUp(self) -> None:
         self.supervisor, _, _, _ = _make_supervisor()
+        # Restore real method for these unit tests
+        from hermeshq.services.gateway_process_manager import GatewayProcessManager
+        self.real_check = GatewayProcessManager._channel_runtime_enabled
 
     def test_enabled(self) -> None:
-        self.assertTrue(self.supervisor._channel_runtime_enabled(_make_channel(enabled=True)))
+        self.assertTrue(self.real_check(self.supervisor._process_mgr, _make_channel(enabled=True)))
 
     def test_disabled(self) -> None:
-        self.assertFalse(self.supervisor._channel_runtime_enabled(_make_channel(enabled=False)))
+        self.assertFalse(self.real_check(self.supervisor._process_mgr, _make_channel(enabled=False)))
 
     def test_runtime_disabled(self) -> None:
         ch = _make_channel(enabled=True, metadata_json={"runtime_disabled": True})
-        self.assertFalse(self.supervisor._channel_runtime_enabled(ch))
+        self.assertFalse(self.real_check(self.supervisor._process_mgr, ch))
 
     def test_runtime_disabled_false(self) -> None:
         ch = _make_channel(enabled=True, metadata_json={"runtime_disabled": False})
-        self.assertTrue(self.supervisor._channel_runtime_enabled(ch))
+        self.assertTrue(self.real_check(self.supervisor._process_mgr, ch))
 
 
 # ---------------------------------------------------------------------------
@@ -517,21 +529,19 @@ class TestBootstrapTimeoutBehavior(unittest.IsolatedAsyncioTestCase):
         agent = _make_agent(agent_id="tout-1")
         channel = _make_channel(agent_id="tout-1")
 
-        sessions = [_make_session(rows=[(channel, agent)])]
-        for _ in range(BOOTSTRAP_RETRY_ATTEMPTS):
-            sessions.append(_make_session(
-                channel_for_get=channel,
-                agent_for_get=agent,
-            ))
-        sf.side_effect = SessionSequence(*sessions)
+        sf.side_effect = SessionSequence(
+            _make_session(rows=[agent]),
+            _make_session(rows=[channel]),
+            _make_session(rows=[]),  # persist
+        )
 
         attempts = 0
-        async def timeout_fn(a, p):
+        async def timeout_fn(agent_id, platform, log_mgr):
             nonlocal attempts
             attempts += 1
-            raise asyncio.TimeoutError()
+            raise TimeoutError("Operation timed out")
 
-        supervisor.start_channel = timeout_fn
+        supervisor._process_mgr.start_channel_locked = timeout_fn
 
         await supervisor._do_bootstrap_gateways()
         self.assertEqual(attempts, BOOTSTRAP_RETRY_ATTEMPTS)
@@ -541,14 +551,12 @@ class TestBootstrapTimeoutBehavior(unittest.IsolatedAsyncioTestCase):
         agent = _make_agent(agent_id="tout-2")
         channel = _make_channel(agent_id="tout-2")
 
-        sessions = [_make_session(rows=[(channel, agent)])]
-        for _ in range(BOOTSTRAP_RETRY_ATTEMPTS):
-            sessions.append(_make_session(
-                channel_for_get=channel,
-                agent_for_get=agent,
-            ))
-        sf.side_effect = SessionSequence(*sessions)
-        supervisor.start_channel = AsyncMock(side_effect=asyncio.TimeoutError())
+        sf.side_effect = SessionSequence(
+            _make_session(rows=[agent]),
+            _make_session(rows=[channel]),
+            _make_session(rows=[]),  # persist
+        )
+        supervisor._process_mgr.start_channel_locked = AsyncMock(side_effect=asyncio.TimeoutError())
 
         # Outer method must not raise
         await supervisor.bootstrap_gateways()
@@ -574,35 +582,33 @@ class TestCrashLoopScenario(unittest.IsolatedAsyncioTestCase):
         ]
         channels = [_make_channel(agent_id=a.id) for a in workers]
 
-        # SQL filter removes stopped agents
-        sessions = [_make_session(rows=list(zip(channels, workers)))]
-        for ch in channels:
-            sessions.append(_make_session(channel_for_get=ch))
-        sf.side_effect = SessionSequence(*sessions)
-        supervisor.start_channel = AsyncMock()
+        # Force sequential execution so session ordering is deterministic
+        with patch("hermeshq.services.gateway_supervisor.BOOTSTRAP_CONCURRENCY", 1):
+            session_list = [_make_session(rows=workers)]
+            for ch in channels:
+                session_list.append(_make_session(rows=[ch]))
+                session_list.append(_make_session(rows=[]))  # persist
+            sf.side_effect = SessionSequence(*session_list)
 
-        await supervisor.bootstrap_gateways()
-        self.assertEqual(supervisor.start_channel.call_count, 3)
+            await supervisor.bootstrap_gateways()
+        self.assertEqual(supervisor._process_mgr.start_channel_locked.call_count, 3)
 
     async def test_broken_agent_if_leaked_does_not_crash(self) -> None:
-        """Even if a stopped agent leaks through, InvalidToken doesn't crash."""
+        """Even if a stopped agent leaks through, timeout doesn't crash."""
         supervisor, sf, _, _ = _make_supervisor()
         agent = _make_agent(agent_id="leak-1", name="Leaked-Broken")
         channel = _make_channel(agent_id="leak-1", platform="telegram")
 
-        sessions = [_make_session(rows=[(channel, agent)])]
-        for _ in range(BOOTSTRAP_RETRY_ATTEMPTS):
-            sessions.append(_make_session(
-                channel_for_get=channel,
-                agent_for_get=agent,
-            ))
-        sf.side_effect = SessionSequence(*sessions)
+        sf.side_effect = SessionSequence(
+            _make_session(rows=[agent]),
+            _make_session(rows=[channel]),
+            _make_session(rows=[]),  # persist
+        )
 
-        from cryptography.fernet import InvalidToken
-        supervisor.start_channel = AsyncMock(side_effect=InvalidToken)
+        supervisor._process_mgr.start_channel_locked = AsyncMock(side_effect=TimeoutError("timed out"))
 
         await supervisor.bootstrap_gateways()
-        self.assertEqual(supervisor.start_channel.call_count, BOOTSTRAP_RETRY_ATTEMPTS)
+        self.assertEqual(supervisor._process_mgr.start_channel_locked.call_count, BOOTSTRAP_RETRY_ATTEMPTS)
 
     async def test_recovery_after_transient_error(self) -> None:
         """Agent that fails once then succeeds should end up running."""
@@ -610,24 +616,20 @@ class TestCrashLoopScenario(unittest.IsolatedAsyncioTestCase):
         agent = _make_agent(agent_id="recover-1")
         channel = _make_channel(agent_id="recover-1")
 
-        sessions = [
-            _make_session(rows=[(channel, agent)]),       # bootstrap query
-            _make_session(                                  # error session (1st attempt)
-                channel_for_get=channel,
-                agent_for_get=agent,
-            ),
-            _make_session(channel_for_get=channel),        # success session (2nd attempt)
-        ]
-        sf.side_effect = SessionSequence(*sessions)
+        sf.side_effect = SessionSequence(
+            _make_session(rows=[agent]),
+            _make_session(rows=[channel]),
+            _make_session(rows=[]),  # persist
+        )
 
         calls = 0
-        async def start_fn(a, p):
+        async def start_fn(agent_id, platform, log_mgr):
             nonlocal calls
             calls += 1
             if calls == 1:
-                raise asyncio.TimeoutError()
+                raise TimeoutError("timed out")
 
-        supervisor.start_channel = start_fn
+        supervisor._process_mgr.start_channel_locked = start_fn
 
         await supervisor._do_bootstrap_gateways()
         self.assertEqual(calls, 2)

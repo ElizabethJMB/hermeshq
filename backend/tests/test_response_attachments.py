@@ -1,4 +1,11 @@
-"""Unit tests for response attachment collection in hermes_task_runner."""
+"""Unit tests for response attachment collection.
+
+NOTE: The snapshot/diff-based attachment collection was removed from
+hermes_task_runner.py (it caused subprocess crashes). Attachment collection
+now happens via the MEDIA: parser in hermes_runtime.py — see
+tests/test_media_parser.py for current coverage. These tests are kept for
+reference but skipped because the functions they test no longer exist.
+"""
 
 import json
 import os
@@ -13,6 +20,11 @@ _scripts_dir = str(Path(__file__).resolve().parents[1] / "hermeshq" / "scripts")
 sys.path.insert(0, _scripts_dir)
 
 import hermes_task_runner as runner
+
+# Functions removed in revert — skip all tests in this module
+_snapshot_directory = getattr(runner, "_snapshot_directory", None)
+if _snapshot_directory is None:
+    raise unittest.SkipTest("Attachment collection moved to hermes_runtime MEDIA: parser")
 
 
 def _make_args(tmp: Path) -> tuple:

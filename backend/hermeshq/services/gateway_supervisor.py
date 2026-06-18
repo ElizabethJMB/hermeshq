@@ -126,6 +126,9 @@ class GatewaySupervisor:
             if not self._process_mgr._channel_runtime_enabled(channel):
                 continue
             platform = channel.platform
+            # Enterprise platforms are managed by their own gateway, skip here
+            if platform in ("google_chat", "kapso_whatsapp"):
+                continue
             lock = self._get_agent_lock(agent.id)
             async with lock:
                 last_exc: Exception | None = None
@@ -168,16 +171,19 @@ class GatewaySupervisor:
         attempts: int | None = None,
     ) -> None:
         metadata = dict(channel.metadata_json or {})
-        metadata["bootstrap"] = {
+        previous = metadata.get("bootstrap") or {}
+        bootstrap = {
             "last_attempt_at": attempted_at.isoformat(),
             "last_status": status,
             "last_error": error,
             "last_duration_ms": duration_ms,
             "last_attempts": attempts,
             "last_source": "startup",
+            "last_success_at": previous.get("last_success_at"),
         }
         if status == "success":
-            metadata["bootstrap"]["last_success_at"] = attempted_at.isoformat()
+            bootstrap["last_success_at"] = attempted_at.isoformat()
+        metadata["bootstrap"] = bootstrap
         channel.metadata_json = metadata
 
     @staticmethod

@@ -65,9 +65,16 @@ class AuthRegressionTests(unittest.IsolatedAsyncioTestCase):
 
 class DatabaseInitRegressionTests(unittest.IsolatedAsyncioTestCase):
     async def test_init_database_propagates_alembic_failures(self) -> None:
+        # init_database() now uses subprocess.run() to execute alembic.
+        # Patch subprocess.run to simulate a migration failure.
+        import subprocess as _subprocess
+        mock_result = Mock()
+        mock_result.returncode = 1
+        mock_result.stderr = "migration failed"
+        mock_result.stdout = ""
         with patch("pathlib.Path.exists", return_value=True), patch(
-            "hermeshq.database._run_alembic_migrations",
-            new=AsyncMock(side_effect=RuntimeError("migration failed")),
+            "subprocess.run",
+            return_value=mock_result,
         ):
             with self.assertRaisesRegex(RuntimeError, "migration failed"):
                 await init_database()
