@@ -78,6 +78,7 @@ export function UsersPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [createInfo, setCreateInfo] = useState<string | null>(null);
   const [rowMessages, setRowMessages] = useState<Record<string, string | null>>({});
+  const [rowSuccess, setRowSuccess] = useState<Record<string, boolean>>({});
 
   const agentOptions = useMemo(
     () => (agents ?? []).map((agent) => ({ id: agent.id, label: agent.friendly_name || agent.name })),
@@ -285,8 +286,10 @@ export function UsersPage() {
                                 payload: { display_name: displayName },
                               });
                               setRowMessages((current) => ({ ...current, [user.id]: t("users.displayNameUpdated") }));
+                              setRowSuccess((current) => ({ ...current, [user.id]: true }));
                             } catch (error) {
                               setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
+                              setRowSuccess((current) => ({ ...current, [user.id]: false }));
                             }
                           }}
                         >
@@ -334,12 +337,13 @@ export function UsersPage() {
                     <span className="panel-label">Role</span>
                     <select
                       value={user.role}
-                      onChange={(event) =>
-                        void updateUser.mutateAsync({
-                          userId: user.id,
-                          payload: { role: event.target.value },
-                        })
-                      }
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        updateUser.mutateAsync({ userId: user.id, payload: { role: value } }).catch((error: unknown) => {
+                          setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
+                          setRowSuccess((current) => ({ ...current, [user.id]: false }));
+                        });
+                      }}
                     >
                       <option value="user">User</option>
                       <option value="admin">Admin</option>
@@ -350,14 +354,13 @@ export function UsersPage() {
                     <select
                       multiple
                       value={user.assigned_agent_ids}
-                      onChange={(event) =>
-                        void updateUser.mutateAsync({
-                          userId: user.id,
-                          payload: {
-                            assigned_agent_ids: Array.from(event.target.selectedOptions, (option) => option.value),
-                          },
-                        })
-                      }
+                      onChange={(event) => {
+                        const ids = Array.from(event.target.selectedOptions, (option) => option.value);
+                        updateUser.mutateAsync({ userId: user.id, payload: { assigned_agent_ids: ids } }).catch((error: unknown) => {
+                          setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
+                          setRowSuccess((current) => ({ ...current, [user.id]: false }));
+                        });
+                      }}
                       className="min-h-32"
                     >
                       {agentOptions.map((agent) => (
@@ -377,6 +380,7 @@ export function UsersPage() {
                         onChange={(event) =>
                           {
                             setRowMessages((current) => ({ ...current, [user.id]: null }));
+                            setRowSuccess((current) => ({ ...current, [user.id]: false }));
                             setPasswordDrafts((current) => ({ ...current, [user.id]: event.target.value }));
                           }
                         }
@@ -400,8 +404,10 @@ export function UsersPage() {
                           await updateUser.mutateAsync({ userId: user.id, payload: { password } });
                           setPasswordDrafts((current) => ({ ...current, [user.id]: "" }));
                           setRowMessages((current) => ({ ...current, [user.id]: "Password updated." }));
+                          setRowSuccess((current) => ({ ...current, [user.id]: true }));
                         } catch (error) {
                           setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
+                          setRowSuccess((current) => ({ ...current, [user.id]: false }));
                         }
                       }}
                     >
@@ -410,12 +416,12 @@ export function UsersPage() {
                     <button
                       type="button"
                       className="panel-button-secondary"
-                      onClick={() =>
-                        void updateUser.mutateAsync({
-                          userId: user.id,
-                          payload: { is_active: !user.is_active },
-                        })
-                      }
+                      onClick={() => {
+                        updateUser.mutateAsync({ userId: user.id, payload: { is_active: !user.is_active } }).catch((error: unknown) => {
+                          setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
+                          setRowSuccess((current) => ({ ...current, [user.id]: false }));
+                        });
+                      }}
                     >
                       {user.is_active ? "Deactivate" : "Activate"}
                     </button>
@@ -431,7 +437,7 @@ export function UsersPage() {
                     </button>
                   </div>
                   {rowMessages[user.id] ? (
-                    <p className={`text-sm ${rowMessages[user.id] === "Password updated." ? "text-[var(--success)]" : "text-[var(--accent)]"}`}>
+                    <p className={`text-sm ${rowSuccess[user.id] ? "text-[var(--success)]" : "text-[var(--accent)]"}`}>
                       {rowMessages[user.id]}
                     </p>
                   ) : null}
@@ -470,8 +476,10 @@ export function UsersPage() {
                             await updateUser.mutateAsync({ userId: user.id, payload: { ...draft } });
                             setChannelIdDrafts((prev) => { const next = { ...prev }; delete next[user.id]; return next; });
                             setRowMessages((current) => ({ ...current, [user.id]: "Channel IDs updated." }));
+                            setRowSuccess((current) => ({ ...current, [user.id]: true }));
                           } catch (error) {
                             setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
+                            setRowSuccess((current) => ({ ...current, [user.id]: false }));
                           }
                         }}
                       >
