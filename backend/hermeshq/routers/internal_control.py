@@ -10,6 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+import hmac as _hmac
+
 from hermeshq.core.security import create_agent_service_token
 from hermeshq.database import get_db_session
 from hermeshq.models.activity import ActivityLog
