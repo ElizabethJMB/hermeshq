@@ -72,6 +72,7 @@ async def authenticate_mcp_token(db: AsyncSession, authorization: str | None) ->
             headers={"WWW-Authenticate": "Bearer"},
         )
     access.last_used_at = now
+    await db.commit()
     return access
 
 
