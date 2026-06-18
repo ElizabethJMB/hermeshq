@@ -42,7 +42,7 @@ export interface OidcProviderUpdate {
 
 const authHeaders = () => {
   const token = localStorage.getItem("hermeshq.token");
-  return { Authorization: `Bearer ${token}` };
+  return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
 export async function listOidcProviders(): Promise<OidcProviderRead[]> {
