@@ -57,6 +57,7 @@ const ns: Record<string, string> = {
   "dashboard.day": "Día",
   "dashboard.completedTasks": "Completadas",
   "dashboard.failedTasks": "Fallidas",
+  "dashboard.metricsError": "No se pudieron cargar las métricas. Verifica tu conexión e intenta de nuevo.",
 };
 
 export default ns;
