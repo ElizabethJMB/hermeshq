@@ -58,6 +58,7 @@ const ns: Record<string, string> = {
   "dashboard.completedTasks": "Completed",
   "dashboard.failedTasks": "Failed",
   "dashboard.metricsError": "Could not load metrics. Check your connection and try again.",
+  "dashboard.platform": "Platform",
 };
 
 export default ns;
