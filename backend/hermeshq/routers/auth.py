@@ -612,12 +612,15 @@ async def auth_providers(db: AsyncSession = Depends(get_db_session)) -> AuthProv
     for slug in _get_public_oidc_provider_slugs():
         if slug not in db_provider_slugs:
             env_url = _get_oidc_provider_login_url(slug)
+            # Direct URL providers (google/microsoft) only need their explicit login URL —
+            # full OIDC discovery config is not required for a direct redirect.
+            enabled = bool(env_url)
             providers.append(
                 AuthProviderRead(
                     slug=slug,
                     name=_get_oidc_provider_label(slug),
                     kind="oidc",
-                    enabled=bool(_oidc_enabled() and env_url),
+                    enabled=enabled,
                 )
             )
 
@@ -881,23 +884,32 @@ async def oidc_login(request: Request, provider: str | None = None, db: AsyncSes
             logger.debug("DB-backed OIDC login failed; falling through to env-based flow", exc_info=True)
 
     # --- Legacy env-based OIDC flow ---
-    auth_mode = _get_auth_mode()
-    if auth_mode == AUTH_MODE_LOCAL or not _oidc_enabled():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enterprise authentication is not enabled")
 
-    configured_generic_slug = ((get_settings().oidc_provider_slug or "").strip().lower() or "generic")
-    allowed_providers = set(_get_public_oidc_provider_slugs()) | {configured_generic_slug}
-    if requested_provider and requested_provider not in allowed_providers:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"OIDC provider '{requested_provider}' is not enabled")
-
+    # Direct URL redirects (e.g. OIDC_PROVIDER_LOGIN_URL_MICROSOFT) bypass the full OIDC
+    # discovery flow and don't require AUTH_MODE to be set to oidc/hybrid.
     provider_login_url = _get_oidc_provider_login_url(requested_provider)
     if requested_provider and provider_login_url:
         return RedirectResponse(url=provider_login_url, status_code=status.HTTP_302_FOUND)
 
+    auth_mode = _get_auth_mode()
+    if auth_mode == AUTH_MODE_LOCAL or not _oidc_enabled():
+        return RedirectResponse(
+            _build_frontend_redirect(request, auth_error="Enterprise authentication is not enabled"),
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    configured_generic_slug = ((get_settings().oidc_provider_slug or "").strip().lower() or "generic")
+    allowed_providers = set(_get_public_oidc_provider_slugs()) | {configured_generic_slug}
+    if requested_provider and requested_provider not in allowed_providers:
+        return RedirectResponse(
+            _build_frontend_redirect(request, auth_error=f"OIDC provider '{requested_provider}' is not enabled"),
+            status_code=status.HTTP_302_FOUND,
+        )
+
     if requested_provider and requested_provider != configured_generic_slug:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"OIDC provider '{requested_provider}' is not configured",
+        return RedirectResponse(
+            _build_frontend_redirect(request, auth_error=f"OIDC provider '{requested_provider}' is not configured"),
+            status_code=status.HTTP_302_FOUND,
         )
 
     discovery = await _fetch_oidc_discovery()
