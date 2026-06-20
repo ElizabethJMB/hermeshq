@@ -215,7 +215,7 @@ async def resolve_builder_llm(
 
     Returns (api_key, model) or (None, None) if unavailable.
     """
-    from hermeshq.core.security import SecretVault
+    from hermeshq.services.secret_vault import SecretVault
     from hermeshq.config import get_settings
 
     settings = get_settings()
