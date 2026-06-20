@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { AiAgentBuilder } from "../components/AiAgentBuilder";
 import { Link } from "react-router-dom";
 
 import { useAgentAction, useAgents, useBulkAgentConfig, useBulkAgentMessage, useBulkAgentTask, useCreateAgent, useDeleteAgent } from "../api/agents";
@@ -109,6 +110,7 @@ export function AgentsPage() {
   const [bulkConfigSystemPrompt, setBulkConfigSystemPrompt] = useState("");
   const [bulkConfigRunMode, setBulkConfigRunMode] = useState("");
   const [bulkConfigRuntimeProfile, setBulkConfigRuntimeProfile] = useState("");
+  const [showAiBuilder, setShowAiBuilder] = useState(false);
 
   const activeNodeId = useMemo(() => nodes?.[0]?.id ?? "", [nodes]);
   const enabledProviders = useMemo(
@@ -331,6 +333,12 @@ export function AgentsPage() {
           <p className="text-sm leading-6 text-[var(--text-secondary)]">
             {t("agents.createDescription")}
           </p>
+          <button
+            onClick={() => setShowAiBuilder(true)}
+            className="mt-2 inline-flex items-center gap-2 rounded-xl border border-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent)] transition hover:bg-[var(--accent)] hover:text-white"
+          >
+            ✨ {t("agentBuilder.createWithAI")}
+          </button>
         </div>
 
         <form className="mt-8 space-y-5" onSubmit={onSubmit}>
@@ -946,6 +954,12 @@ export function AgentsPage() {
           </div>
         </div>
       ) : null}
+
+      <AiAgentBuilder
+        open={showAiBuilder}
+        onClose={() => setShowAiBuilder(false)}
+        onCreated={() => setShowAiBuilder(false)}
+      />
     </div>
   );
 }

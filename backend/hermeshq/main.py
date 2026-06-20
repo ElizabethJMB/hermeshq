@@ -48,8 +48,10 @@ from hermeshq.routers import (
     templates,
     terminal_sessions,
     users,
+    voice,
     webhooks,
 )
+from hermeshq.routers import agent_builder
 from hermeshq.routers import settings as settings_router
 from hermeshq.schemas.common import HealthResponse
 from hermeshq.services.agent_identity import derive_agent_identity
@@ -355,6 +357,8 @@ app.include_router(mcp_server.router)
 app.include_router(webhooks.router)
 app.include_router(attachments.router, prefix=settings.api_prefix)
 app.include_router(m365.router, prefix=settings.api_prefix)
+app.include_router(voice.router, prefix=settings.api_prefix)
+app.include_router(agent_builder.router, prefix=settings.api_prefix)
 
 
 @app.get("/health", response_model=HealthResponse)
