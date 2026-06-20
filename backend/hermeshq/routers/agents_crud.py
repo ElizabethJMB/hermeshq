@@ -6,7 +6,7 @@ import contextlib
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import delete, false, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -215,6 +215,7 @@ async def update_agent(
     agent_id: str,
     payload: AgentUpdate,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> AgentRead:
@@ -327,17 +328,30 @@ async def update_agent(
         old_value=old_snapshot,
         new_value=update_data if update_data else None,
     )
-    await db.commit()
-    await request.app.state.installation_manager.sync_agent_installation(agent)
-    if should_reset_session:
-        await request.app.state.pty_manager.destroy_session(agent_id)
+    # Pre-fetch channels before commit so the background task doesn't need the request session
+    channels_to_restart: list[tuple[str, bool]] = []
     if should_restart_gateways:
         channel_result = await db.execute(
             select(MessagingChannel.platform, MessagingChannel.enabled).where(MessagingChannel.agent_id == agent_id)
         )
-        for platform, enabled in channel_result.all():
+        channels_to_restart = list(channel_result.all())
+
+    await db.commit()
+
+    installation_manager = request.app.state.installation_manager
+    pty_manager = request.app.state.pty_manager
+    gateway_supervisor = request.app.state.gateway_supervisor
+
+    async def _post_save_background() -> None:
+        await installation_manager.sync_agent_installation(agent)
+        if should_reset_session:
+            await pty_manager.destroy_session(agent_id)
+        for platform, enabled in channels_to_restart:
             if enabled:
-                await request.app.state.gateway_supervisor.restart_channel(agent_id, platform)
+                await gateway_supervisor.restart_channel(agent_id, platform)
+
+    background_tasks.add_task(_post_save_background)
+
     result = await db.execute(
         select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id)
     )
