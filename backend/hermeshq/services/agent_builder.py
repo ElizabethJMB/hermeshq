@@ -210,13 +210,15 @@ def _compute_required_connectors(
 
 async def resolve_builder_llm(
     db: AsyncSession,
-) -> tuple[str | None, str | None]:
+) -> tuple[str | None, str | None, str | None]:
     """Resolve the LLM provider and model for the builder.
 
-    Returns (api_key, model) or (None, None) if unavailable.
+    Returns (api_key, model, base_url) or (None, None, None) if unavailable.
     """
+    from hermeshq.models.secret import Secret
     from hermeshq.services.secret_vault import SecretVault
     from hermeshq.config import get_settings
+    from sqlalchemy import select
 
     settings = get_settings()
     app_settings = await db.get(AppSettings, "default")
@@ -230,17 +232,20 @@ async def resolve_builder_llm(
         base_url = app_settings.default_base_url
         if app_settings.default_api_key_ref:
             try:
-                vault = SecretVault(settings.jwt_secret)
-                api_key = vault.decrypt(app_settings.default_api_key_ref)
+                result = await db.execute(
+                    select(Secret).where(Secret.name == app_settings.default_api_key_ref)
+                )
+                secret = result.scalar_one_or_none()
+                if secret:
+                    vault = SecretVault(settings.jwt_secret)
+                    api_key = vault.decrypt(secret.value_enc)
             except Exception:
-                pass
+                logger.warning("Failed to resolve builder API key", exc_info=True)
 
-    if not model:
-        model = settings.admin_username and "gpt-4o-mini" or None
     if not base_url:
         base_url = "https://api.openai.com/v1"
 
-    return api_key, model, base_url  # type: ignore[return-value]
+    return api_key, model, base_url
 
 
 async def process_builder_message(
