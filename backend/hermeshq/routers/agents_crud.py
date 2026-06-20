@@ -296,7 +296,6 @@ async def update_agent(
         "can_receive_tasks",
         "runtime_profile",
         "hermes_version",
-        "integration_configs",
         "approval_mode",
         "tool_progress_mode",
         "gateway_notifications_mode",
