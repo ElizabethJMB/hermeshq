@@ -190,34 +190,38 @@ def _whisper_transcribe_sync(model, audio_bytes: bytes, language: str | None):
 
 
 def _bytes_to_numpy(audio_bytes: bytes):
+    """Decode audio bytes (WebM/Opus, WAV, MP3, etc.) to a float32 numpy array."""
     import io
-    import wave
 
     try:
-        buf = io.BytesIO(audio_bytes)
-        with wave.open(buf, "rb") as wf:
-            frames = wf.readframes(wf.getnframes())
-            import numpy as np
-            audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-            return audio
-    except Exception:
-        pass
-
-    try:
-        from pydub import AudioSegment  # type: ignore[import-untyped]
-        seg = AudioSegment.from_file(io.BytesIO(audio_bytes))
+        import av
         import numpy as np
-        audio = np.array(seg.get_array_of_samples()).astype(np.float32)
-        if seg.channels > 1:
-            audio = audio[:: seg.channels]
-        audio /= 32768.0
+
+        container = av.open(io.BytesIO(audio_bytes))
+        audio_frames = []
+        for frame in container.decode(audio=0):
+            array = frame.to_ndarray()
+            if array.ndim > 1:
+                array = array.mean(axis=1)
+            audio_frames.append(array)
+
+        if not audio_frames:
+            logger.warning("No audio frames decoded from input")
+            return None
+
+        audio = np.concatenate(audio_frames).astype(np.float32)
+        if audio.dtype == np.int16:
+            audio = audio / 32768.0
+        elif audio.dtype == np.int32:
+            audio = audio / 2147483648.0
+        elif audio.dtype == np.uint8:
+            audio = (audio.astype(np.float32) - 128) / 128.0
+
         audio = np.clip(audio, -1.0, 1.0)
+        container.close()
         return audio
-    except ImportError:
-        logger.warning("pydub not available for audio conversion")
-        return None
     except Exception:
-        logger.warning("Failed to convert audio bytes", exc_info=True)
+        logger.warning("Failed to decode audio with PyAV", exc_info=True)
         return None
 
 
