@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -90,6 +90,7 @@ async def send_message(
 @router.post("/agent-builder/sessions/{session_id}/finalize", response_model=AgentBuilderFinalizeResult)
 async def finalize_agent(
     session_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db_session),
     user: User = Depends(require_admin),
 ):
@@ -106,14 +107,17 @@ async def finalize_agent(
 
     try:
         agent_id, agent_name = await finalize_agent_from_draft(
-            session, db, node_id="", created_by_user_id=str(user.id)
+            session,
+            db,
+            request.app.state,
+            created_by_user_id=str(user.id),
         )
-        await db.commit()
+        await db.commit();
     except ValueError as e:
         raise HTTPException(
             status_code=422,
             detail={"error": str(e), "recoverable": True},
-        )
+        );
     except Exception:
         logger.error("Agent creation from builder failed", exc_info=True)
         raise HTTPException(

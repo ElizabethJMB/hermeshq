@@ -351,8 +351,8 @@ async def process_builder_message(
 async def finalize_agent_from_draft(
     session: BuilderSession,
     db: AsyncSession,
-    node_id: str,
-    created_by_user_id: str,
+    app_state: object,
+    created_by_user_id: str = "",
 ) -> tuple[str, str]:
     """Create an agent from the builder draft.
 
@@ -364,17 +364,15 @@ async def finalize_agent_from_draft(
     from sqlalchemy import select
     from hermeshq.models.node import Node
 
-    node = await db.get(Node, node_id)
-    if not node:
-        node_result = await db.execute(select(Node).limit(1))
-        node = node_result.scalar_one_or_none()
-    if not node:
-        raise ValueError("No node available for agent creation")
-
     draft = session.draft
     agent_name = draft.name or draft.friendly_name or "ai-agent"
     if not draft.friendly_name or not draft.system_prompt:
         raise ValueError("Draft is incomplete: friendly_name and system_prompt are required")
+
+    node_result = await db.execute(select(Node).limit(1))
+    node = node_result.scalar_one_or_none()
+    if not node:
+        raise ValueError("No node available for agent creation")
 
     payload = AgentCreate(
         node_id=node.id,
@@ -388,17 +386,31 @@ async def finalize_agent_from_draft(
         integration_configs=draft.integration_configs,
     )
 
-    agent = await create_agent_from_config(payload, db, created_by_user_id=created_by_user_id)
+    workspace_manager = getattr(app_state, "workspace_manager", None)
+    hermes_version_manager = getattr(app_state, "hermes_version_manager", None)
 
-    from hermeshq.services.audit import record_audit
-    await record_audit(
-        db,
-        actor_id=created_by_user_id,
-        action="agent.created_via_builder",
-        target_type="agent",
-        target_id=str(agent.id),
-        target_name=str(agent.name),
-        details={"draft": draft.model_dump()},
+    if not workspace_manager or not hermes_version_manager:
+        raise ValueError("Server is not fully initialized. Please try again.")
+
+    agent = await create_agent_from_config(
+        db=db,
+        payload=payload,
+        workspace_manager=workspace_manager,
+        hermes_version_manager=hermes_version_manager,
     )
+
+    try:
+        from hermeshq.services.audit import record_audit
+        await record_audit(
+            db,
+            actor_id=created_by_user_id,
+            action="agent.created_via_builder",
+            target_type="agent",
+            target_id=str(agent.id),
+            target_name=str(agent.name),
+            details={"draft": draft.model_dump()},
+        )
+    except Exception:
+        logger.warning("Failed to record audit for builder agent creation", exc_info=True)
 
     return str(agent.id), str(agent.name)
