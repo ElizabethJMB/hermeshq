@@ -11,6 +11,7 @@ import {
   type RequiredConnector,
 } from "../api/agentBuilder";
 import { useI18n } from "../lib/i18n";
+import { MarkdownText } from "./MarkdownText";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -221,7 +222,11 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
                       : "bg-[var(--bg-hover)] text-[var(--text)]"
                   }`}
                 >
-                  {msg.content || "…"}
+                  {msg.role === "assistant" ? (
+                    <MarkdownText>{msg.content || "…"}</MarkdownText>
+                  ) : (
+                    msg.content || "…"
+                  )}
                 </div>
               </div>
             ))}
