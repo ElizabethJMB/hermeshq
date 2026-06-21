@@ -190,7 +190,12 @@ def _whisper_transcribe_sync(model, audio_bytes: bytes, language: str | None):
 
 
 def _bytes_to_numpy(audio_bytes: bytes):
-    """Decode audio bytes (WebM/Opus, WAV, MP3, etc.) to a float32 numpy array."""
+    """Decode audio bytes (WebM/Opus, WAV, MP3, etc.) to a float32 numpy array at 16kHz.
+
+    faster-whisper expects mono float32 audio sampled at exactly 16kHz.
+    We use PyAV's AudioResampler to guarantee the correct sample rate
+    regardless of the input container's native rate (Opus=48k, MP3=24k, etc).
+    """
     import io
 
     try:
@@ -198,24 +203,26 @@ def _bytes_to_numpy(audio_bytes: bytes):
         import numpy as np
 
         container = av.open(io.BytesIO(audio_bytes))
-        audio_frames = []
+
+        # Resample to 16kHz mono float32 — exactly what faster-whisper expects
+        resampler = av.AudioResampler(format="fltp", layout="mono", rate=16000)
+
+        audio_frames: list[np.ndarray] = []
         for frame in container.decode(audio=0):
-            array = frame.to_ndarray()
-            # PyAV returns (channels, samples) for planar formats.
-            # Average across channels (axis=0) to get mono — NOT axis=1
-            # which would collapse all samples into one value per channel.
+            for rf in resampler.resample(frame):
+                array = rf.to_ndarray()
+                if array.ndim > 1:
+                    array = array.reshape(-1)
+                audio_frames.append(array.astype(np.float32))
+
+        # Flush any samples still buffered in the resampler
+        for rf in resampler.resample(None):
+            array = rf.to_ndarray()
             if array.ndim > 1:
-                array = array.mean(axis=0)
-            # Normalize integer formats to [-1.0, 1.0] BEFORE casting to float32
-            if array.dtype == np.int16:
-                array = array.astype(np.float32) / 32768.0
-            elif array.dtype == np.int32:
-                array = array.astype(np.float32) / 2147483648.0
-            elif array.dtype == np.uint8:
-                array = (array.astype(np.float32) - 128.0) / 128.0
-            else:
-                array = array.astype(np.float32)
-            audio_frames.append(array)
+                array = array.reshape(-1)
+            audio_frames.append(array.astype(np.float32))
+
+        container.close()
 
         if not audio_frames:
             logger.warning("No audio frames decoded from input")
@@ -223,7 +230,6 @@ def _bytes_to_numpy(audio_bytes: bytes):
 
         audio = np.concatenate(audio_frames).astype(np.float32)
         audio = np.clip(audio, -1.0, 1.0)
-        container.close()
         return audio
     except Exception:
         logger.warning("Failed to decode audio with PyAV", exc_info=True)
