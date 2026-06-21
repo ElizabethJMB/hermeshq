@@ -248,6 +248,51 @@ async def resolve_builder_llm(
     return api_key, model, base_url
 
 
+def _extract_inline_tool_calls(text: str) -> list[tuple[str, dict[str, Any]]]:
+    """Extract tool calls from LLM text output (XML-like format).
+
+    Returns list of (function_name, arguments_dict).
+    """
+    import re
+
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    for block in re.finditer(r"<tool_call>\s*(.*?)\s*</tool_call>", text, re.DOTALL):
+        inner = block.group(1)
+        func_match = re.search(r"<function=([\w_]+)>", inner)
+        if not func_match:
+            continue
+
+        func_name = func_match.group(1)
+        params: dict[str, Any] = {}
+
+        for param_match in re.finditer(r"<parameter=([\w_]+)>\s*(.*?)\s*</parameter>", inner, re.DOTALL):
+            key = param_match.group(1)
+            val = param_match.group(2).strip()
+            if val.lower() in ("true", "false"):
+                params[key] = val.lower() == "true"
+            elif val.startswith("{") or val.startswith("["):
+                try:
+                    params[key] = json.loads(val)
+                except Exception:
+                    params[key] = val
+            else:
+                params[key] = val
+
+        calls.append((func_name, params))
+
+    return calls
+
+
+def _strip_tool_call_blocks(text: str) -> str:
+    """Remove <tool_call>...</tool_call> blocks from text and clean up whitespace."""
+    import re
+
+    clean = re.sub(r"<tool_call>.*?</tool_call>", "", text, flags=re.DOTALL).strip()
+    clean = re.sub(r"\n{3,}", "\n\n", clean)
+    return clean
+
+
 def _parse_inline_tool_calls(
     text: str,
     session: BuilderSession,
@@ -391,9 +436,35 @@ async def process_builder_message(
             assistant_text = message.content or ""
 
             # Fallback: detect inline tool calls in text (models without native tool-calling)
-            assistant_text, ready_flag = _parse_inline_tool_calls(assistant_text, session, db)
+            parsed_calls = _extract_inline_tool_calls(assistant_text)
 
-            session.llm_messages.append({"role": "assistant", "content": assistant_text})
+            if parsed_calls:
+                clean_text = _strip_tool_call_blocks(assistant_text)
+                session.llm_messages.append({"role": "assistant", "content": clean_text})
+
+                ready_flag = False
+                for tc_name, tc_args in parsed_calls:
+                    result = await _execute_tool(tc_name, tc_args, session, db)
+                    if tc_name == "propose_agent_draft":
+                        parsed = json.loads(result)
+                        ready_flag = parsed.get("ready_to_create", False)
+                    session.llm_messages.append({"role": "user", "content": f"[Tool result for {tc_name}]: {result}"})
+
+                # Follow-up so the LLM gives a natural response with the tool data
+                follow_up = await client.chat.completions.create(
+                    model=model,
+                    messages=session.llm_messages,
+                    temperature=0.7,
+                    max_tokens=2000,
+                )
+                assistant_text = follow_up.choices[0].message.content or ""
+                # Check if follow-up also has tool calls (multi-step reasoning)
+                followup_calls = _extract_inline_tool_calls(assistant_text)
+                if followup_calls:
+                    assistant_text, ready_flag = _parse_inline_tool_calls(assistant_text, session, db)
+                session.llm_messages.append({"role": "assistant", "content": assistant_text})
+            else:
+                session.llm_messages.append({"role": "assistant", "content": assistant_text})
 
     except Exception:
         logger.error("Builder LLM call failed", exc_info=True)
