@@ -248,6 +248,77 @@ async def resolve_builder_llm(
     return api_key, model, base_url
 
 
+def _parse_inline_tool_calls(
+    text: str,
+    session: BuilderSession,
+    db: AsyncSession,
+) -> tuple[str, bool]:
+    """Detect and execute tool calls embedded in LLM text output.
+
+    Many models (especially free/smaller ones) don't support native tool-calling
+    via the OpenAI API ``tools=`` parameter. Instead they emit XML-like blocks
+    in the response text:
+
+        <tool_call> <function=propose_agent_draft> <parameter=name> ... </parameter> ... </tool_call>
+
+    This function strips those blocks from the visible text and applies the
+    draft changes to the session, returning (clean_text, ready_to_create).
+    """
+    import re
+
+    ready_flag = False
+
+    # Pattern: <tool_call> ... </tool_call>
+    tool_call_blocks = re.findall(r"<tool_call>\s*(.*?)\s*</tool_call>", text, re.DOTALL)
+
+    if not tool_call_blocks:
+        # Also try JSON blocks: ```json { ... } ```
+        json_match = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
+        if json_match:
+            try:
+                data = json.loads(json_match.group(1))
+                if "friendly_name" in data or "system_prompt" in data:
+                    tool_call_blocks = [json_match.group(0)]
+            except Exception:
+                pass
+
+    if not tool_call_blocks:
+        return text, False
+
+    for block in tool_call_blocks:
+        func_match = re.search(r"<function=([\w_]+)>", block)
+        if not func_match:
+            continue
+
+        func_name = func_match.group(1)
+
+        params: dict[str, Any] = {}
+        for param_match in re.finditer(r"<parameter=([\w_]+)>\s*(.*?)\s*</parameter>", block, re.DOTALL):
+            key = param_match.group(1)
+            val = param_match.group(2).strip()
+            if val.lower() in ("true", "false"):
+                params[key] = val.lower() == "true"
+            elif val.startswith("{") or val.startswith("["):
+                try:
+                    params[key] = json.loads(val)
+                except Exception:
+                    params[key] = val
+            else:
+                params[key] = val
+
+        if func_name == "propose_agent_draft":
+            draft_data = {k: v for k, v in params.items() if k != "ready_to_create"}
+            for key, val in draft_data.items():
+                if hasattr(session.draft, key):
+                    setattr(session.draft, key, val)
+            ready_flag = params.get("ready_to_create", False)
+
+    clean_text = re.sub(r"<tool_call>.*?</tool_call>", "", text, flags=re.DOTALL).strip()
+    clean_text = re.sub(r"\n{3,}", "\n\n", clean_text)
+
+    return clean_text or "He preparado el borrador del agente. Revisa el panel lateral para ver los detalles.", ready_flag
+
+
 async def process_builder_message(
     session: BuilderSession,
     user_text: str,
@@ -308,12 +379,6 @@ async def process_builder_message(
                     parsed = json.loads(result)
                     ready_flag = parsed.get("ready_to_create", False)
 
-                session.llm_messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.id,
-                    "content": result,
-                })
-
             follow_up = await client.chat.completions.create(
                 model=model,
                 messages=session.llm_messages,
@@ -324,6 +389,10 @@ async def process_builder_message(
             session.llm_messages.append({"role": "assistant", "content": assistant_text})
         else:
             assistant_text = message.content or ""
+
+            # Fallback: detect inline tool calls in text (models without native tool-calling)
+            assistant_text, ready_flag = _parse_inline_tool_calls(assistant_text, session, db)
+
             session.llm_messages.append({"role": "assistant", "content": assistant_text})
 
     except Exception:
