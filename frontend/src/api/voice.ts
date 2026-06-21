@@ -18,6 +18,7 @@ export async function transcribeAudio(blob: Blob): Promise<{ text: string; langu
   formData.append("file", blob, "audio.webm");
   const { data } = await apiClient.post("/voice/stt", formData, {
     headers: { "Content-Type": "multipart/form-data" },
+    timeout: 120_000, // 2 min — first request loads Whisper model
   });
   return data;
 }
