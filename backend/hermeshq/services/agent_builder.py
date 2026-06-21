@@ -553,4 +553,12 @@ async def finalize_agent_from_draft(
     except Exception:
         logger.warning("Failed to record audit for builder agent creation", exc_info=True)
 
+    try:
+        supervisor = getattr(app_state, "supervisor", None)
+        if supervisor:
+            await supervisor.start_agent(str(agent.id))
+            logger.info("Agent %s started after builder creation", agent.id)
+    except Exception:
+        logger.warning("Failed to auto-start agent %s after builder creation", agent.id, exc_info=True)
+
     return str(agent.id), str(agent.name)
