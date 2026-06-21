@@ -201,8 +201,20 @@ def _bytes_to_numpy(audio_bytes: bytes):
         audio_frames = []
         for frame in container.decode(audio=0):
             array = frame.to_ndarray()
+            # PyAV returns (channels, samples) for planar formats.
+            # Average across channels (axis=0) to get mono — NOT axis=1
+            # which would collapse all samples into one value per channel.
             if array.ndim > 1:
-                array = array.mean(axis=1)
+                array = array.mean(axis=0)
+            # Normalize integer formats to [-1.0, 1.0] BEFORE casting to float32
+            if array.dtype == np.int16:
+                array = array.astype(np.float32) / 32768.0
+            elif array.dtype == np.int32:
+                array = array.astype(np.float32) / 2147483648.0
+            elif array.dtype == np.uint8:
+                array = (array.astype(np.float32) - 128.0) / 128.0
+            else:
+                array = array.astype(np.float32)
             audio_frames.append(array)
 
         if not audio_frames:
@@ -210,13 +222,6 @@ def _bytes_to_numpy(audio_bytes: bytes):
             return None
 
         audio = np.concatenate(audio_frames).astype(np.float32)
-        if audio.dtype == np.int16:
-            audio = audio / 32768.0
-        elif audio.dtype == np.int32:
-            audio = audio / 2147483648.0
-        elif audio.dtype == np.uint8:
-            audio = (audio.astype(np.float32) - 128) / 128.0
-
         audio = np.clip(audio, -1.0, 1.0)
         container.close()
         return audio

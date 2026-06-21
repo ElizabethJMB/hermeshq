@@ -34,6 +34,7 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
   const [connectors, setConnectors] = useState<RequiredConnector[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -139,7 +140,16 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : MediaRecorder.isTypeSupported("audio/mp4")
+            ? "audio/mp4"
+            : "";
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
       audioChunksRef.current = [];
 
       recorder.ondataavailable = (e) => {
@@ -149,13 +159,23 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
       recorder.onstop = async () => {
         stream.getTracks().forEach((track) => track.stop());
         const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        if (blob.size < 500) {
+          setError("Recording too short — try speaking for longer");
+          return;
+        }
+        setTranscribing(true);
         try {
           const result = await transcribeAudio(blob);
-          if (result.text) {
-            sendMessage(result.text);
+          if (result.text && result.text.trim()) {
+            await sendMessage(result.text);
+          } else {
+            setError("No speech detected — try again");
           }
-        } catch {
-          setError("Speech recognition failed");
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Speech recognition failed";
+          setError(`Transcription failed: ${msg}`);
+        } finally {
+          setTranscribing(false);
         }
       };
 
@@ -249,15 +269,17 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
               {micAvailable && (
                 <button
                   onClick={toggleRecording}
-                  disabled={streaming}
-                  title={recording ? "Stop recording" : "Record voice message"}
+                  disabled={streaming || transcribing}
+                  title={recording ? "Stop recording" : transcribing ? "Transcribing..." : "Record voice message"}
                   className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg transition ${
                     recording
                       ? "animate-pulse bg-red-500 text-white"
-                      : "bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text)]"
+                      : transcribing
+                        ? "animate-spin bg-[var(--accent)] text-white"
+                        : "bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text)]"
                   }`}
                 >
-                  {recording ? "⏹" : "🎤"}
+                  {recording ? "⏹" : transcribing ? "⟳" : "🎤"}
                 </button>
               )}
               <input
