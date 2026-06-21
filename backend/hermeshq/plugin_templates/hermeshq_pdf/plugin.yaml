@@ -1,0 +1,6 @@
+name: hermeshq-pdf
+version: "1.0.0"
+description: PDF document generation tool for agents. Create professional PDFs from HTML content with CSS styling.
+author: HermesHQ
+provides_tools:
+  - hq_pdf_generate
