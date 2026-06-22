@@ -272,9 +272,15 @@ async def get_agent_m365_scopes(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> AgentM365ScopesRead:
-    from hermeshq.models.agent import Agent
+    from hermeshq.core.security import ensure_agent_access
     from hermeshq.models.agent_assignment import AgentAssignment
     from hermeshq.services.m365_oauth import AVAILABLE_SCOPES
+
+    # Authorization: only users who already have access to this agent (assigned, or
+    # admin) may read/configure its M365 scopes. This endpoint used to auto-create an
+    # AgentAssignment for any agent_id, which let any user grant themselves access to
+    # an agent and was the entry point for cross-user M365 token theft.
+    agent = await ensure_agent_access(db, current_user, agent_id)
     result = await db.execute(
         select(AgentAssignment).where(
             AgentAssignment.user_id == current_user.id,
@@ -282,31 +288,17 @@ async def get_agent_m365_scopes(
         )
     )
     assignment = result.scalar_one_or_none()
-    if not assignment:
-        # Auto-create assignment so users can configure M365 scopes for any agent
-        from uuid import uuid4
-
-        from hermeshq.models.agent_assignment import AgentAssignment as _AgentAssignment
-        assignment = _AgentAssignment(
-            id=str(uuid4()),
-            user_id=current_user.id,
-            agent_id=agent_id,
-            m365_allowed_scopes=None,
-        )
-        db.add(assignment)
-        await db.commit()
     token_result = await db.execute(
         select(UserM365Token).where(UserM365Token.user_id == current_user.id)
     )
     token = token_result.scalar_one_or_none()
     user_scopes = token.scopes.split() if token and token.scopes else []
     # Get SharePoint site URL from agent integration_configs if set
-    agent = await db.get(Agent, agent_id)
     sharepoint_site_url = None
     if agent and isinstance((agent.integration_configs or {}).get("sharepoint"), dict):
         sharepoint_site_url = agent.integration_configs["sharepoint"].get("site_url") or None
     return {
-        "allowed_scopes": assignment.m365_allowed_scopes,
+        "allowed_scopes": assignment.m365_allowed_scopes if assignment else None,
         "user_scopes": user_scopes,
         "available_scopes": {k: v for k, v in AVAILABLE_SCOPES.items() if k in user_scopes},
         "sharepoint_site_url": sharepoint_site_url,
