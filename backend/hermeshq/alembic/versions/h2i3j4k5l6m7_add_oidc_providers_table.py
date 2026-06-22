@@ -1,7 +1,7 @@
 """add oidc_providers table
 
 Revision ID: h2i3j4k5l6m7
-Revises: g1h2i3j4k5l6
+Revises: e2f3a4b5c6d7
 Create Date: 2026-06-19 00:00:00.000000
 
 """
@@ -12,7 +12,7 @@ from alembic import op
 from sqlalchemy import inspect
 
 revision: str = "h2i3j4k5l6m7"
-down_revision: str | None = "g1h2i3j4k5l6"
+down_revision: str | None = "e2f3a4b5c6d7"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
