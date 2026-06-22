@@ -217,7 +217,7 @@ async def get_valid_token(
             token_record.token_cache_enc = vault.encrypt(cache.serialize())
             if result_token.get("expires_in"):
                 from datetime import timedelta
-                token_record.expires_at = datetime.now(timezone.utc) + timedelta(
+                token_record.expires_at = datetime.now(UTC) + timedelta(
                     seconds=int(result_token["expires_in"])
                 )
             await db.commit()
