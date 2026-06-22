@@ -5,6 +5,7 @@ import asyncio
 import contextlib
 import logging
 import subprocess
+import time
 from pathlib import Path
 
 from sqlalchemy import select
@@ -21,6 +22,8 @@ from hermeshq.services.hermes_installation import HermesInstallationError, Herme
 logger = logging.getLogger(__name__)
 
 GATEWAY_STARTUP_STABILIZATION_SECONDS = 2
+GATEWAY_AUTO_RESTART_MAX_ATTEMPTS = 5
+GATEWAY_AUTO_RESTART_MIN_UPTIME = 30  # if process ran longer, reset backoff
 
 
 class GatewayProcessManager:
@@ -490,6 +493,7 @@ class GatewayProcessManager:
                 log_path.as_posix(),
                 log_handle,
                 set(handle.platforms),
+                log_mgr,
             )
         )
         try:
@@ -551,7 +555,10 @@ class GatewayProcessManager:
         log_path: str,
         log_handle,
         platforms: set[str],
+        log_mgr=None,
     ) -> None:
+        start_time = time.monotonic()
+
         try:
             return_code = await asyncio.to_thread(process.wait)
         except asyncio.CancelledError:
@@ -560,6 +567,8 @@ class GatewayProcessManager:
             with contextlib.suppress(Exception):
                 log_handle.flush()
                 log_handle.close()
+
+        uptime = time.monotonic() - start_time
 
         handle = self.processes.get(agent_id)
         if handle and handle.process is process:
@@ -583,7 +592,7 @@ class GatewayProcessManager:
                         node_id=agent.node_id,
                         event_type=f"channel.{channel.platform}.exited",
                         message=f"{agent.name} {channel.platform} gateway exited",
-                        details={"platform": channel.platform, "return_code": return_code, "log_path": log_path},
+                        details={"platform": channel.platform, "return_code": return_code, "log_path": log_path, "uptime": round(uptime, 1)},
                     )
                 )
             await session.commit()
@@ -597,6 +606,149 @@ class GatewayProcessManager:
                     "message": platform,
                 }
             )
+
+        # ── Auto-restart logic ──────────────────────────────────────────────
+        # Check if channels are still supposed to be running (not explicitly stopped)
+        should_restart = False
+        async with self.session_factory() as session:
+            agent = await session.get(Agent, agent_id)
+            if agent and not agent.is_archived:
+                channels = await self._get_channels(session, agent_id)
+                should_restart = any(
+                    self._channel_runtime_enabled(ch) and ch.platform in platforms
+                    for ch in channels
+                )
+
+        if not should_restart:
+            return
+
+        if agent_id in self.processes:
+            logger.info("Gateway for agent %s already relaunched — skipping auto-restart", agent_id)
+            return
+
+        logger.warning(
+            "Gateway for agent %s exited unexpectedly (rc=%d, uptime=%.0fs) — scheduling auto-restart",
+            agent_id, return_code, uptime,
+        )
+
+        await self._auto_restart_gateway(agent_id, platforms, uptime, log_mgr)
+
+    async def _auto_restart_gateway(
+        self,
+        agent_id: str,
+        platforms: set[str],
+        uptime: float,
+        log_mgr,
+    ) -> None:
+        """Auto-restart gateway after unexpected exit, with exponential backoff."""
+
+        # If the process ran stably for a while, reset any previous retry state
+        if uptime > GATEWAY_AUTO_RESTART_MIN_UPTIME:
+            logger.info("Gateway was stable for %.0fs — starting fresh restart cycle", uptime)
+
+        for attempt in range(GATEWAY_AUTO_RESTART_MAX_ATTEMPTS):
+            backoff = min(5 * (2 ** attempt), 60)
+
+            logger.warning(
+                "Gateway auto-restart for agent %s: attempt %d/%d in %ds",
+                agent_id, attempt + 1, GATEWAY_AUTO_RESTART_MAX_ATTEMPTS, backoff,
+            )
+
+            await asyncio.sleep(backoff)
+
+            # Re-check if channels are still supposed to be running
+            async with self.session_factory() as session:
+                agent_row = await session.get(Agent, agent_id)
+                if not agent_row or agent_row.is_archived:
+                    logger.info("Agent %s gone or archived — cancelling auto-restart", agent_id)
+                    return
+
+                channels = await self._get_channels(session, agent_id)
+                active = [
+                    ch for ch in channels
+                    if self._channel_runtime_enabled(ch) and ch.platform in platforms
+                ]
+
+                if not active:
+                    logger.info("Channels for agent %s were stopped during backoff — not restarting", agent_id)
+                    return
+
+            # Check if something else already relaunched the gateway
+            if agent_id in self.processes:
+                logger.info("Gateway for agent %s already running — skipping restart", agent_id)
+                return
+
+            # Attempt restart
+            try:
+                agent_row = await self._reload_agent(agent_id)
+                await self.installation_manager.sync_agent_installation(agent_row)
+
+                async with self.session_factory() as session:
+                    channels = await self._get_channels(session, agent_id)
+                    active_channels = [ch for ch in channels if self._channel_runtime_enabled(ch)]
+
+                agent_row = await self._reload_agent(agent_id)
+                handle = await self._launch_gateway_process(agent_row, active_channels, log_mgr)
+                self.processes[agent_id] = handle
+
+                # Update status to running
+                async with self.session_factory() as session:
+                    agent_row = await session.get(Agent, agent_id)
+                    channels = await self._get_channels(session, agent_id)
+                    for ch in channels:
+                        if ch.platform in handle.platforms:
+                            ch.status = "running"
+                            ch.last_error = None
+                            ch.updated_at = utcnow()
+                            session.add(ActivityLog(
+                                agent_id=agent_row.id,
+                                node_id=agent_row.node_id,
+                                event_type=f"channel.{ch.platform}.auto_restarted",
+                                message=f"{agent_row.name} {ch.platform} gateway auto-restarted after unexpected exit",
+                                details={"platform": ch.platform, "pid": handle.process.pid},
+                            ))
+                    await session.commit()
+
+                for platform in handle.platforms:
+                    await self.event_broker.publish(
+                        {"type": "messaging.status_changed", "agent_id": agent_id, "status": "running", "message": platform}
+                    )
+
+                logger.info("Gateway for agent %s auto-restarted successfully on attempt %d", agent_id, attempt + 1)
+                return
+
+            except Exception:
+                logger.exception(
+                    "Gateway auto-restart attempt %d/%d failed for agent %s",
+                    attempt + 1, GATEWAY_AUTO_RESTART_MAX_ATTEMPTS, agent_id,
+                )
+
+        # All attempts exhausted
+        logger.error("Gateway auto-restart exhausted for agent %s after %d attempts — giving up",
+                     agent_id, GATEWAY_AUTO_RESTART_MAX_ATTEMPTS)
+
+        async with self.session_factory() as session:
+            agent_row = await session.get(Agent, agent_id)
+            if not agent_row:
+                return
+            channels = await self._get_channels(session, agent_id)
+            for ch in channels:
+                if ch.platform in platforms:
+                    ch.status = "error"
+                    ch.last_error = "Gateway crashed repeatedly — manual restart required"
+                    session.add(ActivityLog(
+                        agent_id=agent_row.id,
+                        node_id=agent_row.node_id,
+                        event_type=f"channel.{ch.platform}.auto_restart_failed",
+                        message=f"{agent_row.name} {ch.platform} gateway auto-restart failed after {GATEWAY_AUTO_RESTART_MAX_ATTEMPTS} attempts",
+                        severity="error",
+                    ))
+            await session.commit()
+
+            for platform in platforms:
+                await self.event_broker.publish(
+                    {"type": "messaging.status_changed", "agent_id": agent_id, "status": "error", "message": platform}
+                )
 
     # ── Path helpers ────────────────────────────────────────────────────────
 
