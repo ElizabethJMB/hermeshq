@@ -225,22 +225,18 @@ class GatewayProcessManager:
             async with self.session_factory() as session:
                 agent_row = await session.get(Agent, agent_id)
                 channels = await self._get_channels(session, agent_id)
-                for item in channels:
-                    if item.platform == platform:
-                        item.status = "error"
-                        item.last_error = str(exc)
-                    elif self._channel_runtime_enabled(item):
-                        item.status = "stopped"
-                        item.last_error = None
                 failed_channel = next((item for item in channels if item.platform == platform), None)
-                if agent_row and failed_channel:
-                    await self._log_channel_event(
-                        session, agent_row, failed_channel,
-                        f"channel.{platform}.start_failed",
-                        f"{agent_row.name} {platform} gateway failed to start",
-                        severity="warning",
-                        details={"reason": "gateway_start_failed", "error": str(exc)},
-                    )
+                if failed_channel:
+                    failed_channel.status = "error"
+                    failed_channel.last_error = str(exc)
+                    if agent_row:
+                        await self._log_channel_event(
+                            session, agent_row, failed_channel,
+                            f"channel.{platform}.start_failed",
+                            f"{agent_row.name} {platform} gateway failed to start",
+                            severity="warning",
+                            details={"reason": "gateway_start_failed", "error": str(exc)},
+                        )
                 await session.commit()
             raise
         self.processes[agent_id] = handle
