@@ -1682,7 +1682,7 @@ export function AgentDetailPage() {
         </div>,
       )}
 
-      {!isAdmin && renderSectionShell(
+      {renderSectionShell(
         "m365-scopes",
         "Microsoft 365",
         t("agent.m365AgentPermissions"),
