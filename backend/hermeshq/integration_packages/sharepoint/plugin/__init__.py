@@ -53,7 +53,7 @@ def _get_m365_token(user_id: str) -> tuple[str | None, str | None, str]:
 
 
 def _graph(method: str, path: str, access_token: str, payload: dict | None = None) -> dict:
-    url = f"{GRAPH_BASE}{path}".replace(" ", "%20")
+    url = (path if path.startswith("https://") else f"{GRAPH_BASE}{path}").replace(" ", "%20")
     data = json.dumps(payload).encode("utf-8") if payload else None
     req = urllib.request.Request(
         url, data=data, method=method.upper(),
@@ -65,10 +65,25 @@ def _graph(method: str, path: str, access_token: str, payload: dict | None = Non
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
+        retry_after = exc.headers.get("Retry-After") if exc.headers else None
         try:
-            return {"error": json.loads(body)}
+            parsed = json.loads(body)
+            err = parsed.get("error", {})
+            code = err.get("code", "")
+            msg = err.get("message", body)
         except (json.JSONDecodeError, ValueError):
-            return {"error": body, "status": exc.code}
+            code, msg = "", body
+        _FRIENDLY = {
+            "Authorization_RequestDenied": "Sin permiso para acceder a este recurso (403).",
+            "accessDenied": "Sin permiso para acceder a este recurso (403).",
+            "itemNotFound": "Archivo o carpeta no encontrado (404).",
+            "ActivityLimitReached": f"Límite de peticiones alcanzado. Reintenta en {retry_after or '60'} segundos.",
+        }
+        friendly = _FRIENDLY.get(code) or (f"Error {exc.code}: {msg}" if msg else f"Error HTTP {exc.code}")
+        result: dict = {"error": friendly, "_graph_code": code}
+        if retry_after:
+            result["retry_after"] = retry_after
+        return result
 
 
 def _auth_error(detail: str) -> str:
@@ -104,18 +119,23 @@ def _list_files_tool(args: dict, **_kwargs) -> str:
         # Default: user's OneDrive root
         base_path = "/me/drive/root"
 
-    path = f"{base_path}:/{folder_path}:/children" if folder_path else f"{base_path}/children"
+    path: str | None = f"{base_path}:/{folder_path}:/children" if folder_path else f"{base_path}/children"
 
-    result = _graph("GET", path, token)
-    if "error" in result:
-        return json.dumps({"success": False, "error": result["error"]})
-    items = result.get("value", [])
+    raw_items: list = []
+    while path and len(raw_items) < 200:
+        result = _graph("GET", path, token)
+        if "error" in result:
+            return json.dumps({"success": False, "error": result["error"]})
+        raw_items.extend(result.get("value", []))
+        next_link: str = result.get("@odata.nextLink") or ""
+        path = next_link if (next_link and len(raw_items) < 200) else None
+
     simplified = [
         {"id": i.get("id"), "name": i.get("name"),
          "type": "folder" if "folder" in i else "file",
          "size": i.get("size"), "url": i.get("webUrl"),
          "modified": i.get("lastModifiedDateTime")}
-        for i in items
+        for i in raw_items
     ]
     return json.dumps({"success": True, "count": len(simplified), "items": simplified}, ensure_ascii=False)
 
@@ -157,14 +177,20 @@ def _list_drives_tool(args: dict, **_kwargs) -> str:
     if not token:
         return _auth_error(err)
 
-    result = _graph("GET", "/me/drives", token)
-    if "error" in result:
-        return json.dumps({"success": False, "error": result["error"]})
-    drives = result.get("value", [])
+    path: str | None = "/me/drives"
+    raw_drives: list = []
+    while path and len(raw_drives) < 200:
+        result = _graph("GET", path, token)
+        if "error" in result:
+            return json.dumps({"success": False, "error": result["error"]})
+        raw_drives.extend(result.get("value", []))
+        next_link: str = result.get("@odata.nextLink") or ""
+        path = next_link if (next_link and len(raw_drives) < 200) else None
+
     simplified = [
         {"id": d.get("id"), "name": d.get("name"),
          "type": d.get("driveType"), "url": d.get("webUrl")}
-        for d in drives
+        for d in raw_drives
     ]
     return json.dumps({"success": True, "count": len(simplified), "drives": simplified}, ensure_ascii=False)
 

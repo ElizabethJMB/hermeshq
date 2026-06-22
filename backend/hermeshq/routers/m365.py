@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from hermeshq.core.security import get_current_user, require_admin
+from hermeshq.core.security import get_current_user, is_admin, require_admin
 from hermeshq.database import get_db_session
 from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.user import User
@@ -360,42 +360,44 @@ async def update_agent_m365_scopes(
     site_url = (payload.sharepoint_site_url or "").strip() or None
     assignment.sharepoint_site_url = site_url
 
-    # Auto-enable delegated M365 integrations based on the scopes granted
-    agent = await db.get(Agent, agent_id)
-    if agent:
-        scopes = payload.allowed_scopes or []
-        activated_integrations = {_SCOPE_TO_INTEGRATION[s] for s in scopes if s in _SCOPE_TO_INTEGRATION}
-        current_configs = dict(agent.integration_configs or {})
-        current_skills = list(agent.skills or [])
-        current_toolsets = list(agent.enabled_toolsets or [])
-        changed = False
-        for integration_slug in activated_integrations:
-            # 1. Enable in integration_configs (preserve existing config like site_url)
-            if integration_slug not in current_configs:
-                current_configs[integration_slug] = {}
-                changed = True
-                logger.info("Auto-enabled integration '%s' for agent %s", integration_slug, agent_id)
-            # 2. Add companion skill (provides SKILL.md context)
-            skill_id = _INTEGRATION_SKILL.get(integration_slug)
-            if skill_id and skill_id not in current_skills:
-                current_skills.append(skill_id)
-                changed = True
-                logger.info("Auto-added skill '%s' to agent %s", skill_id, agent_id)
-            # 3. Add plugin to enabled_toolsets (provides actual tools)
-            plugin_id = _INTEGRATION_PLUGIN.get(integration_slug)
-            if plugin_id and plugin_id not in current_toolsets:
-                current_toolsets.append(plugin_id)
-                changed = True
-                logger.info("Auto-added toolset '%s' to agent %s", plugin_id, agent_id)
+    # Only admins may mutate shared agent properties (toolsets/skills/integration_configs).
+    # Non-admin users configure only their own scopes and SharePoint site (per-assignment).
+    agent = None
+    if is_admin(current_user):
+        agent = await db.get(Agent, agent_id)
+        if agent:
+            scopes = payload.allowed_scopes or []
+            activated_integrations = {_SCOPE_TO_INTEGRATION[s] for s in scopes if s in _SCOPE_TO_INTEGRATION}
+            current_configs = dict(agent.integration_configs or {})
+            current_skills = list(agent.skills or [])
+            current_toolsets = list(agent.enabled_toolsets or [])
+            changed = False
+            for integration_slug in activated_integrations:
+                # 1. Enable in integration_configs
+                if integration_slug not in current_configs:
+                    current_configs[integration_slug] = {}
+                    changed = True
+                    logger.info("Auto-enabled integration '%s' for agent %s", integration_slug, agent_id)
+                # 2. Add companion skill (provides SKILL.md context)
+                skill_id = _INTEGRATION_SKILL.get(integration_slug)
+                if skill_id and skill_id not in current_skills:
+                    current_skills.append(skill_id)
+                    changed = True
+                    logger.info("Auto-added skill '%s' to agent %s", skill_id, agent_id)
+                # 3. Add plugin to enabled_toolsets (provides actual tools)
+                plugin_id = _INTEGRATION_PLUGIN.get(integration_slug)
+                if plugin_id and plugin_id not in current_toolsets:
+                    current_toolsets.append(plugin_id)
+                    changed = True
+                    logger.info("Auto-added toolset '%s' to agent %s", plugin_id, agent_id)
 
-        if changed:
-            agent.integration_configs = current_configs
-            agent.skills = current_skills
-            agent.enabled_toolsets = current_toolsets
+            if changed:
+                agent.integration_configs = current_configs
+                agent.skills = current_skills
+                agent.enabled_toolsets = current_toolsets
 
     await db.commit()
 
-    # Sync agent .env so HERMESHQ_SHAREPOINT_SITE_URL takes effect without manual restart
     if agent:
         try:
             await request.app.state.installation_manager.sync_agent_installation(agent)
