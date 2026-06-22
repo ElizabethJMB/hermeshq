@@ -328,7 +328,9 @@ def _strip_tool_call_blocks(text: str) -> str:
     clean = re.sub(r"<tool_call>.*?</tool_call>", "", text, flags=re.DOTALL)
     # Remove unclosed <tool_call> blocks (model forgot to close)
     clean = re.sub(r"<tool_call>.*", "", clean, flags=re.DOTALL)
-    # Remove stray XML-like tags the model might emit
+    # Remove stray <parameter=name>content</parameter> blocks (content included)
+    clean = re.sub(r"<parameter=\w+>.*?</parameter>", "", clean, flags=re.DOTALL)
+    # Remove any stray XML-like tags the model might emit
     clean = re.sub(r"</?function=\w+>", "", clean)
     clean = re.sub(r"</?parameter=\w+>", "", clean)
     # Clean up excessive whitespace
