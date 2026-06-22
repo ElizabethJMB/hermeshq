@@ -36,7 +36,7 @@ async def create_session(
 ):
     """Create a new builder session."""
     purge_expired_sessions()
-    session = create_builder_session(tool_mode="native")
+    session = create_builder_session(tool_mode="inline")
     return AgentBuilderSessionCreated(
         session_id=session.session_id,
         tool_mode=session.tool_mode,
