@@ -398,6 +398,7 @@ async def update_agent_m365_scopes(
 
     await db.commit()
 
+    # Sync agent .env so HERMESHQ_SHAREPOINT_SITE_URL takes effect without manual restart
     if agent:
         try:
             await request.app.state.installation_manager.sync_agent_installation(agent)
