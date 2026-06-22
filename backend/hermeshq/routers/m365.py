@@ -280,7 +280,7 @@ async def get_agent_m365_scopes(
     # admin) may read/configure its M365 scopes. This endpoint used to auto-create an
     # AgentAssignment for any agent_id, which let any user grant themselves access to
     # an agent and was the entry point for cross-user M365 token theft.
-    agent = await ensure_agent_access(db, current_user, agent_id)
+    await ensure_agent_access(db, current_user, agent_id)
     result = await db.execute(
         select(AgentAssignment).where(
             AgentAssignment.user_id == current_user.id,
@@ -293,15 +293,11 @@ async def get_agent_m365_scopes(
     )
     token = token_result.scalar_one_or_none()
     user_scopes = token.scopes.split() if token and token.scopes else []
-    # Get SharePoint site URL from agent integration_configs if set
-    sharepoint_site_url = None
-    if agent and isinstance((agent.integration_configs or {}).get("sharepoint"), dict):
-        sharepoint_site_url = agent.integration_configs["sharepoint"].get("site_url") or None
     return {
         "allowed_scopes": assignment.m365_allowed_scopes if assignment else None,
         "user_scopes": user_scopes,
         "available_scopes": {k: v for k, v in AVAILABLE_SCOPES.items() if k in user_scopes},
-        "sharepoint_site_url": sharepoint_site_url,
+        "sharepoint_site_url": assignment.sharepoint_site_url if assignment else None,
     }
 
 
@@ -361,6 +357,8 @@ async def update_agent_m365_scopes(
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found.")
     assignment.m365_allowed_scopes = payload.allowed_scopes
+    site_url = (payload.sharepoint_site_url or "").strip() or None
+    assignment.sharepoint_site_url = site_url
 
     # Auto-enable delegated M365 integrations based on the scopes granted
     agent = await db.get(Agent, agent_id)
@@ -390,15 +388,6 @@ async def update_agent_m365_scopes(
                 changed = True
                 logger.info("Auto-added toolset '%s' to agent %s", plugin_id, agent_id)
 
-        # Save SharePoint site URL in integration_configs["sharepoint"]["site_url"]
-        site_url = (payload.sharepoint_site_url or "").strip() or None
-        if "sharepoint" in current_configs:
-            existing_cfg = current_configs["sharepoint"] if isinstance(current_configs["sharepoint"], dict) else {}
-            new_cfg = {**existing_cfg, "site_url": site_url}
-            if new_cfg != existing_cfg:
-                current_configs["sharepoint"] = new_cfg
-                changed = True
-
         if changed:
             agent.integration_configs = current_configs
             agent.skills = current_skills
@@ -415,7 +404,7 @@ async def update_agent_m365_scopes(
 
     return {
         "allowed_scopes": assignment.m365_allowed_scopes,
-        "sharepoint_site_url": (payload.sharepoint_site_url or "").strip() or None,
+        "sharepoint_site_url": assignment.sharepoint_site_url,
     }
 
 
@@ -468,7 +457,11 @@ async def get_agent_m365_token(
     if allowed is not None:
         granted_scopes = [s for s in (granted_scopes or []) if s in allowed]
 
-    return {"access_token": access_token, "scopes": granted_scopes}
+    return {
+        "access_token": access_token,
+        "scopes": granted_scopes,
+        "sharepoint_site_url": assignment.sharepoint_site_url,
+    }
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
