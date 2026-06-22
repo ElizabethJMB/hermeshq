@@ -42,6 +42,15 @@ def _evict_cache(cache: dict[str, dict]) -> None:
             break
 
 
+def _discovery_endpoint(discovery_url: str) -> str:
+    """Return the well-known URL, avoiding duplication if already present."""
+    base = discovery_url.rstrip("/")
+    suffix = "/.well-known/openid-configuration"
+    if base.endswith("/.well-known/openid-configuration"):
+        return base
+    return base + suffix
+
+
 async def _fetch_discovery(discovery_url: str) -> dict:
     """Fetch and cache OIDC discovery document."""
     _evict_cache(_discovery_cache)
@@ -49,8 +58,9 @@ async def _fetch_discovery(discovery_url: str) -> dict:
     cached = _discovery_cache.get(discovery_url)
     if cached and (now - cached["_fetched_at"]) < _CACHE_TTL:
         return cached
+    url = _discovery_endpoint(discovery_url)
     async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.get(f"{discovery_url.rstrip('/')}/.well-known/openid-configuration")
+        resp = await client.get(url)
         resp.raise_for_status()
         doc = resp.json()
     doc["_fetched_at"] = now
@@ -93,7 +103,7 @@ def create_oidc_state(provider_slug: str, jwt_secret: str) -> str:
         "nonce": secrets.token_urlsafe(16),
     }
     raw = json.dumps(payload).encode()
-    exp = datetime.now(timezone.utc) + timedelta(minutes=10)
+    exp = datetime.now(UTC) + timedelta(minutes=10)
     sig = jwt.encode(
         {"data": base64.b64encode(raw).decode(), "exp": exp},
         jwt_secret,
