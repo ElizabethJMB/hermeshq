@@ -71,17 +71,17 @@ export function useUpdateAgent() {
       const { data } = await apiClient.put<Agent>(`/agents/${agentId}`, payload);
       return data;
     },
-    onSuccess: async (data, variables) => {
+    onSuccess: (data, variables) => {
       queryClient.setQueryData(["agents", variables.agentId], data);
-      await queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         predicate: (query) => {
           const key = query.queryKey;
           if (!Array.isArray(key) || key[0] !== "agents") return false;
           return key[1] !== variables.agentId;
         },
       });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      await queryClient.invalidateQueries({ queryKey: ["skills", "agent", variables.agentId] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["skills", "agent", variables.agentId] });
     },
   });
 }

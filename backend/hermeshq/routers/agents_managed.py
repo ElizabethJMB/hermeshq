@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from hermeshq.core.security import require_admin
+from hermeshq.core.security import ensure_agent_access, get_current_user
 from hermeshq.database import get_db_session
 from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
@@ -34,12 +34,10 @@ async def test_agent_integration(
     integration_slug: str,
     payload: ManagedIntegrationTestRequest,
     request: Request,
-    _: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> ManagedIntegrationTestResult:
-    agent = await db.get(Agent, agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
+    agent = await ensure_agent_access(db, current_user, agent_id)
 
     async def _resolve_secret(secret_ref: str) -> str | None:
         result = await db.execute(select(Secret).where(Secret.name == secret_ref))
@@ -69,12 +67,10 @@ async def run_agent_integration_action(
     action_slug: str,
     payload: ManagedIntegrationActionRequest,
     request: Request,
-    _: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> ManagedIntegrationActionResult:
-    agent = await db.get(Agent, agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
+    agent = await ensure_agent_access(db, current_user, agent_id)
 
     async def _resolve_secret(secret_ref: str) -> str | None:
         result = await db.execute(select(Secret).where(Secret.name == secret_ref))
