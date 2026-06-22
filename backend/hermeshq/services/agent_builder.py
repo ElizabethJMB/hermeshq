@@ -29,6 +29,7 @@ CRITICAL RULES:
 2. Be proactive. Propose a complete draft in your FIRST response whenever possible. Only ask clarifying questions if the request is truly ambiguous.
 3. Respond in the user's language (default Spanish).
 4. Keep responses concise. Use Markdown formatting (bold, lists, tables) for readability.
+5. NEVER output <tool_call> blocks in your natural language response. The tool call is parsed separately — your visible text should be a clean, natural explanation for the user.
 
 PLATFORM CONTEXT — HermesHQ is a multi-agent platform with these capabilities:
 - Messaging channels: telegram, whatsapp, microsoft_teams, google_chat, sixagentic (mobile app). The user may refer to any of these by name.
@@ -37,7 +38,7 @@ PLATFORM CONTEXT — HermesHQ is a multi-agent platform with these capabilities:
 - Agents can generate documents (PDF, images, reports) using their tools.
 
 RUNTIME PROFILES (you decide which one — never ask the user):
-- standard: Web browsing, file read/write, memory, vision, messaging. Good for research, summaries, notifications.
+- standard: Web browsing, file read/write, memory, vision, messaging, PDF generation. Good for research, summaries, notifications.
 - technical: Adds code execution, git, and terminal access. Use when the agent needs to run scripts, generate PDFs, or do data processing.
 - security: Adds security scanning and network tools.
 
@@ -54,6 +55,27 @@ WORKFLOW:
 
 When proposing integration_configs, use the slug as the key (e.g., {"sharepoint": {}, "ms365-mail": {}}).
 Write system_prompts in Spanish unless the user speaks another language. Make them detailed and specific to the agent's purpose.
+
+AVAILABLE TOOLS — call them using this EXACT format:
+
+<tool_call>
+<function=propose_agent_draft>
+<parameter=friendly_name>Agent Display Name</parameter>
+<parameter=description>What the agent does</parameter>
+<parameter=system_prompt>Detailed agent instructions in Spanish</parameter>
+<parameter=runtime_profile>standard</parameter>
+<parameter=integration_configs>{"slug-name": {}}</parameter>
+<parameter=ready_to_create>true</parameter>
+</function>
+</tool_call>
+
+You can also call:
+<tool_call>
+<function=list_capabilities>
+</function>
+</tool_call>
+
+IMPORTANT: Write a natural language message for the user FIRST, then add the tool call at the end. The tool call block will be parsed and executed automatically — the user will only see your natural language text.
 """
 
 
@@ -299,10 +321,18 @@ def _extract_inline_tool_calls(text: str) -> list[tuple[str, dict[str, Any]]]:
 
 
 def _strip_tool_call_blocks(text: str) -> str:
-    """Remove <tool_call>...</tool_call> blocks from text and clean up whitespace."""
+    """Remove <tool_call>...</tool_call> blocks and any leftover tool-call artifacts."""
     import re
 
-    clean = re.sub(r"<tool_call>.*?</tool_call>", "", text, flags=re.DOTALL).strip()
+    # Remove closed <tool_call>...</tool_call> blocks
+    clean = re.sub(r"<tool_call>.*?</tool_call>", "", text, flags=re.DOTALL)
+    # Remove unclosed <tool_call> blocks (model forgot to close)
+    clean = re.sub(r"<tool_call>.*", "", clean, flags=re.DOTALL)
+    # Remove stray XML-like tags the model might emit
+    clean = re.sub(r"</?function=\w+>", "", clean)
+    clean = re.sub(r"</?parameter=\w+>", "", clean)
+    # Clean up excessive whitespace
+    clean = clean.strip()
     clean = re.sub(r"\n{3,}", "\n\n", clean)
     return clean
 
@@ -405,39 +435,34 @@ async def process_builder_message(
     client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
 
     try:
-        tools = _get_builder_tools() if session.tool_mode == "native" else None
         response = await client.chat.completions.create(
             model=model,
             messages=session.llm_messages,
-            tools=tools,
             temperature=0.7,
             max_tokens=2000,
         )
 
-        message = response.choices[0].message
+        raw_text = response.choices[0].message.content or ""
 
-        if message.tool_calls:
-            session.llm_messages.append({
-                "role": "assistant",
-                "content": message.content or "",
-                "tool_calls": [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {"name": tc.function.name, "arguments": tc.function.arguments},
-                    }
-                    for tc in message.tool_calls
-                ],
-            })
+        # Parse and execute inline tool calls
+        parsed_calls = _extract_inline_tool_calls(raw_text)
+        ready_flag = False
 
-            ready_flag = False
-            for tc in message.tool_calls:
-                args = json.loads(tc.function.arguments)
-                result = await _execute_tool(tc.function.name, args, session, db)
-                if tc.function.name == "propose_agent_draft":
+        if parsed_calls:
+            clean_text = _strip_tool_call_blocks(raw_text)
+            session.llm_messages.append({"role": "assistant", "content": clean_text})
+
+            for tc_name, tc_args in parsed_calls:
+                result = await _execute_tool(tc_name, tc_args, session, db)
+                if tc_name == "propose_agent_draft":
                     parsed = json.loads(result)
                     ready_flag = parsed.get("ready_to_create", False)
+                session.llm_messages.append({
+                    "role": "user",
+                    "content": f"[Tool result for {tc_name}]: {result}",
+                })
 
+            # Follow-up for natural language response
             follow_up = await client.chat.completions.create(
                 model=model,
                 messages=session.llm_messages,
@@ -445,40 +470,16 @@ async def process_builder_message(
                 max_tokens=2000,
             )
             assistant_text = follow_up.choices[0].message.content or ""
-            session.llm_messages.append({"role": "assistant", "content": assistant_text})
         else:
-            assistant_text = message.content or ""
+            assistant_text = raw_text
 
-            # Fallback: detect inline tool calls in text (models without native tool-calling)
-            parsed_calls = _extract_inline_tool_calls(assistant_text)
+        # FINAL SAFETY: strip any remaining tool call blocks
+        assistant_text = _strip_tool_call_blocks(assistant_text)
 
-            if parsed_calls:
-                clean_text = _strip_tool_call_blocks(assistant_text)
-                session.llm_messages.append({"role": "assistant", "content": clean_text})
+        if not assistant_text and parsed_calls:
+            assistant_text = "He preparado el borrador del agente. Revisa el panel lateral para ver los detalles."
 
-                ready_flag = False
-                for tc_name, tc_args in parsed_calls:
-                    result = await _execute_tool(tc_name, tc_args, session, db)
-                    if tc_name == "propose_agent_draft":
-                        parsed = json.loads(result)
-                        ready_flag = parsed.get("ready_to_create", False)
-                    session.llm_messages.append({"role": "user", "content": f"[Tool result for {tc_name}]: {result}"})
-
-                # Follow-up so the LLM gives a natural response with the tool data
-                follow_up = await client.chat.completions.create(
-                    model=model,
-                    messages=session.llm_messages,
-                    temperature=0.7,
-                    max_tokens=2000,
-                )
-                assistant_text = follow_up.choices[0].message.content or ""
-                # Check if follow-up also has tool calls (multi-step reasoning)
-                followup_calls = _extract_inline_tool_calls(assistant_text)
-                if followup_calls:
-                    assistant_text, ready_flag = _parse_inline_tool_calls(assistant_text, session, db)
-                session.llm_messages.append({"role": "assistant", "content": assistant_text})
-            else:
-                session.llm_messages.append({"role": "assistant", "content": assistant_text})
+        session.llm_messages.append({"role": "assistant", "content": assistant_text})
 
     except Exception:
         logger.error("Builder LLM call failed", exc_info=True)
