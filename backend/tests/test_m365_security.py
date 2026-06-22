@@ -160,7 +160,7 @@ class TestGetAgentScopesRequiresAssignment(unittest.IsolatedAsyncioTestCase):
         user = _make_user("user-A")
         db = _make_db(scalar=None)  # no assignment found
 
-        with patch("hermeshq.routers.m365.ensure_agent_access", AsyncMock(side_effect=HTTPException(status_code=403))):
+        with patch("hermeshq.core.security.ensure_agent_access", AsyncMock(side_effect=HTTPException(status_code=403))):
             from hermeshq.routers.m365 import get_agent_m365_scopes
             with self.assertRaises(HTTPException) as ctx:
                 await get_agent_m365_scopes(
@@ -177,7 +177,7 @@ class TestGetAgentScopesRequiresAssignment(unittest.IsolatedAsyncioTestCase):
         user = _make_user("user-A")
         db = _make_db(scalar=None)
 
-        with patch("hermeshq.routers.m365.ensure_agent_access", AsyncMock(side_effect=HTTPException(status_code=403))):
+        with patch("hermeshq.core.security.ensure_agent_access", AsyncMock(side_effect=HTTPException(status_code=403))):
             from hermeshq.routers.m365 import get_agent_m365_scopes
             try:
                 await get_agent_m365_scopes(agent_id="agent-1", current_user=user, db=db)
