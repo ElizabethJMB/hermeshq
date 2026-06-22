@@ -528,45 +528,55 @@ export function AgentDetailPage() {
 
   async function onSaveIntegration(integrationSlug: string) {
     const integration = (managedIntegrations ?? []).find((item) => item.slug === integrationSlug);
-    if (!integration) {
-      return;
-    }
+    if (!integration) return;
     const currentDraft = integrationDrafts[integrationSlug] ?? {};
     const normalizedConfig = Object.fromEntries(
       integration.fields
         .map((field) => [field.name, (currentDraft[field.name] ?? "").trim()] as const)
         .filter(([, value]) => value),
     );
-    await updateAgent.mutateAsync({
-      agentId: currentAgent.id,
-      payload: {
-        skills: integration.skill_identifier
-          ? Array.from(new Set([...(currentAgent.skills ?? []), integration.skill_identifier]))
-          : currentAgent.skills,
-        integration_configs: {
-          ...(currentAgent.integration_configs ?? {}),
-          [integrationSlug]: normalizedConfig,
+    setIntegrationPending((p) => ({ ...p, [integrationSlug]: "save" }));
+    try {
+      await updateAgent.mutateAsync({
+        agentId: currentAgent.id,
+        payload: {
+          skills: integration.skill_identifier
+            ? Array.from(new Set([...(currentAgent.skills ?? []), integration.skill_identifier]))
+            : currentAgent.skills,
+          integration_configs: {
+            ...(currentAgent.integration_configs ?? {}),
+            [integrationSlug]: normalizedConfig,
+          },
         },
-      },
-    });
+      });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Failed to save integration");
+    } finally {
+      setIntegrationPending((p) => ({ ...p, [integrationSlug]: null }));
+    }
   }
 
   async function onDisableIntegration(integrationSlug: string) {
     const integration = (managedIntegrations ?? []).find((item) => item.slug === integrationSlug);
-    if (!integration) {
-      return;
-    }
+    if (!integration) return;
     const nextConfigs = { ...(currentAgent.integration_configs ?? {}) };
     delete nextConfigs[integrationSlug];
-    await updateAgent.mutateAsync({
-      agentId: currentAgent.id,
-      payload: {
-        skills: integration.skill_identifier
-          ? (currentAgent.skills ?? []).filter((skill) => skill !== integration.skill_identifier)
-          : currentAgent.skills,
-        integration_configs: nextConfigs,
-      },
-    });
+    setIntegrationPending((p) => ({ ...p, [integrationSlug]: "disable" }));
+    try {
+      await updateAgent.mutateAsync({
+        agentId: currentAgent.id,
+        payload: {
+          skills: integration.skill_identifier
+            ? (currentAgent.skills ?? []).filter((skill) => skill !== integration.skill_identifier)
+            : currentAgent.skills,
+          integration_configs: nextConfigs,
+        },
+      });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Failed to disable integration");
+    } finally {
+      setIntegrationPending((p) => ({ ...p, [integrationSlug]: null }));
+    }
   }
 
   async function onTestIntegration(integrationSlug: string) {
@@ -579,6 +589,8 @@ export function AgentDetailPage() {
         config: currentDraft,
       });
       setIntegrationTestResults((current) => ({ ...current, [integrationSlug]: result }));
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Integration test failed");
     } finally {
       setIntegrationPending((p) => ({ ...p, [integrationSlug]: null }));
     }
@@ -598,6 +610,8 @@ export function AgentDetailPage() {
         ...current,
         [integrationSlug]: { ...(current[integrationSlug] ?? {}), [actionSlug]: result },
       }));
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Integration action failed");
     } finally {
       setIntegrationPending((p) => ({ ...p, [integrationSlug]: null }));
     }
