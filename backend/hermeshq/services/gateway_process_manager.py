@@ -139,6 +139,25 @@ class GatewayProcessManager:
                 await session.commit()
                 return
 
+            # Check if a gateway process is already running with this platform.
+            # During bootstrap, multiple channels for the same agent share one
+            # subprocess. If the process is alive and already handles this
+            # platform, there is no need to kill and relaunch — just mark running.
+            existing_handle = self.processes.get(agent_id)
+            if (
+                existing_handle
+                and existing_handle.process.poll() is None
+                and platform in existing_handle.platforms
+            ):
+                channel.status = "running"
+                channel.last_error = None
+                channel.updated_at = utcnow()
+                await session.commit()
+                await self.event_broker.publish(
+                    {"type": "messaging.status_changed", "agent_id": agent_id, "status": "running", "message": platform}
+                )
+                return
+
             if platform == "telegram" and not channel.secret_ref:
                 channel.status = "error"
                 channel.last_error = "Telegram bot token secret is required"
@@ -206,11 +225,13 @@ class GatewayProcessManager:
             async with self.session_factory() as session:
                 agent_row = await session.get(Agent, agent_id)
                 channels = await self._get_channels(session, agent_id)
-                active_platforms = {item.platform for item in active_channels}
                 for item in channels:
-                    if item.platform in active_platforms:
+                    if item.platform == platform:
                         item.status = "error"
                         item.last_error = str(exc)
+                    elif self._channel_runtime_enabled(item):
+                        item.status = "stopped"
+                        item.last_error = None
                 failed_channel = next((item for item in channels if item.platform == platform), None)
                 if agent_row and failed_channel:
                     await self._log_channel_event(
