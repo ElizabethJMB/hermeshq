@@ -24,12 +24,13 @@ def _task_user_id() -> str | None:
     return os.environ.get("HERMESHQ_RESOLVED_USER_ID") or None
 
 
-def _get_m365_token(user_id: str) -> tuple[str | None, str]:
+def _get_m365_token(user_id: str) -> tuple[str | None, str | None, str]:
+    """Returns (access_token, sharepoint_site_url, error_detail)."""
     base_url = os.environ.get("HERMESHQ_INTERNAL_API_URL", "").rstrip("/")
     agent_id = os.environ.get("HERMESHQ_AGENT_ID", "")
     agent_token = os.environ.get("HERMESHQ_AGENT_TOKEN", "")
     if not base_url or not agent_id or not agent_token:
-        return None, "HermesHQ internal control no configurado"
+        return None, None, "HermesHQ internal control no configurado"
     url = f"{base_url}/control/m365/agent-token?user_id={user_id}"
     req = urllib.request.Request(
         url, method="GET",
@@ -38,16 +39,17 @@ def _get_m365_token(user_id: str) -> tuple[str | None, str]:
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            return data.get("access_token"), ""
+            site_url = (data.get("sharepoint_site_url") or "").strip().rstrip("/") or None
+            return data.get("access_token"), site_url, ""
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         try:
             detail = json.loads(body).get("detail", body)
         except (json.JSONDecodeError, ValueError):
             detail = body
-        return None, str(detail)
+        return None, None, str(detail)
     except Exception as exc:  # noqa: BLE001  # HTTP request catch-all
-        return None, str(exc)
+        return None, None, str(exc)
 
 
 def _graph(method: str, path: str, access_token: str, payload: dict | None = None) -> dict:
@@ -78,22 +80,17 @@ def _auth_error(detail: str) -> str:
 
 # ── Tool handlers ─────────────────────────────────────────────────────────────
 
-def _default_site_url() -> str:
-    """Get the SharePoint site URL configured for this agent (may be empty)."""
-    return os.environ.get("HERMESHQ_SHAREPOINT_SITE_URL", "").strip().rstrip("/")
-
-
 def _list_files_tool(args: dict, **_kwargs) -> str:
     """List files using Files.Read.All - works with OneDrive and SharePoint."""
     user_id = _task_user_id()
     if not user_id:
         return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
-    token, err = _get_m365_token(user_id)
+    token, user_site_url, err = _get_m365_token(user_id)
     if not token:
         return _auth_error(err)
 
-    # Use arg site_url, fallback to agent-configured site, fallback to OneDrive
-    site_url = str(args.get("site_url") or _default_site_url()).strip().rstrip("/")
+    # Use arg site_url, fallback to user-configured site, fallback to OneDrive
+    site_url = str(args.get("site_url") or user_site_url or "").strip().rstrip("/")
     folder_path = str(args.get("folder_path") or "").strip().strip("/")
 
     if site_url:
@@ -127,12 +124,12 @@ def _get_file_tool(args: dict, **_kwargs) -> str:
     user_id = _task_user_id()
     if not user_id:
         return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
-    token, err = _get_m365_token(user_id)
+    token, user_site_url, err = _get_m365_token(user_id)
     if not token:
         return _auth_error(err)
 
     file_path = str(args.get("file_path") or "").strip().strip("/")
-    site_url = str(args.get("site_url") or _default_site_url()).strip().rstrip("/")
+    site_url = str(args.get("site_url") or user_site_url or "").strip().rstrip("/")
 
     if not file_path:
         return json.dumps({"success": False, "error": "Se requiere file_path."})
@@ -156,7 +153,7 @@ def _list_drives_tool(args: dict, **_kwargs) -> str:
     user_id = _task_user_id()
     if not user_id:
         return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
-    token, err = _get_m365_token(user_id)
+    token, _, err = _get_m365_token(user_id)
     if not token:
         return _auth_error(err)
 
@@ -176,7 +173,7 @@ def _search_tool(args: dict, **_kwargs) -> str:
     user_id = _task_user_id()
     if not user_id:
         return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
-    token, err = _get_m365_token(user_id)
+    token, _, err = _get_m365_token(user_id)
     if not token:
         return _auth_error(err)
 

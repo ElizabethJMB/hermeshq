@@ -1107,12 +1107,6 @@ class HermesInstallationManager:
             config_dict = config if isinstance(config, dict) else {}
             env_map = integration.get("env_map") or {}
 
-            # SharePoint: expose site_url as env var for the plugin
-            if slug == "sharepoint":
-                site_url = str(config_dict.get("site_url") or "").strip()
-                if site_url:
-                    managed["HERMESHQ_SHAREPOINT_SITE_URL"] = site_url
-
             base_url = str(config_dict.get("base_url") or "").strip()
             if base_url and env_map.get("base_url"):
                 managed[env_map["base_url"]] = base_url
@@ -1128,7 +1122,6 @@ class HermesInstallationManager:
         # Keys managed by the integration system — these get stripped and rewritten
         managed_keys: set[str] = {
             "OPENAI_BASE_URL",
-            "HERMESHQ_SHAREPOINT_SITE_URL",
             "TELEGRAM_BOT_TOKEN",
             "TELEGRAM_ALLOWED_USERS",
             "TELEGRAM_HOME_CHANNEL",
