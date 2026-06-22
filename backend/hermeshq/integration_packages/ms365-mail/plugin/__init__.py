@@ -20,7 +20,7 @@ def _task_user_id() -> str | None:
                 return uid
         except (json.JSONDecodeError, ValueError):
             pass
-    return os.environ.get("HERMESHQ_RESOLVED_USER_ID") or None
+    return None
 
 
 def _get_m365_token(user_id: str) -> tuple[str | None, str]:
@@ -55,8 +55,7 @@ def _get_m365_token(user_id: str) -> tuple[str | None, str]:
 
 
 def _graph(method: str, path: str, access_token: str, payload: dict | None = None) -> dict:
-    # Ensure no raw spaces or control chars in URL (encode spaces as %20)
-    url = f"{GRAPH_BASE}{path}".replace(" ", "%20")
+    url = (path if path.startswith("https://") else f"{GRAPH_BASE}{path}").replace(" ", "%20")
     data = json.dumps(payload).encode("utf-8") if payload else None
     req = urllib.request.Request(
         url,
@@ -73,10 +72,25 @@ def _graph(method: str, path: str, access_token: str, payload: dict | None = Non
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
+        retry_after = exc.headers.get("Retry-After") if exc.headers else None
         try:
-            return {"error": json.loads(body)}
+            parsed = json.loads(body)
+            err = parsed.get("error", {})
+            code = err.get("code", "")
+            msg = err.get("message", body)
         except (json.JSONDecodeError, ValueError):
-            return {"error": body, "status": exc.code}
+            code, msg = "", body
+        _FRIENDLY = {
+            "Authorization_RequestDenied": "Sin permiso para acceder a este recurso (403).",
+            "accessDenied": "Sin permiso para acceder a este recurso (403).",
+            "itemNotFound": "Correo no encontrado (404).",
+            "ActivityLimitReached": f"Límite de peticiones alcanzado. Reintenta en {retry_after or '60'} segundos.",
+        }
+        friendly = _FRIENDLY.get(code) or (f"Error {exc.code}: {msg}" if msg else f"Error HTTP {exc.code}")
+        result: dict = {"error": friendly, "_graph_code": code}
+        if retry_after:
+            result["retry_after"] = retry_after
+        return result
 
 
 def _auth_error(detail: str) -> str:

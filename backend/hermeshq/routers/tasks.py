@@ -50,6 +50,12 @@ async def create_task(
         raise HTTPException(status_code=400, detail="Archived agents cannot receive new tasks")
     payload_data = payload.model_dump()
     metadata = payload_data.pop("metadata", {}) or {}
+    # Security: never let the caller spoof the invoking identity. M365 plugins read
+    # thread_user_id / created_by_user_id from this metadata to fetch the user's
+    # delegated token, so pin them to the authenticated user and drop any
+    # client-supplied override.
+    metadata.pop("created_by_user_id", None)
+    metadata["thread_user_id"] = current_user.id
     inferred_conversation = (payload.title or "").strip() == "Chat message"
     if inferred_conversation and not metadata.get("conversation"):
         metadata["conversation"] = True
@@ -72,7 +78,6 @@ async def create_task(
             db.add(thread)
             await db.flush()
         metadata["thread_id"] = thread.id
-        metadata["thread_user_id"] = current_user.id
     task = Task(**payload_data, metadata_json=metadata, created_by_user_id=current_user.id)
     task.board_column = runtime_status_to_board_column(task.status)
     task.board_order = next_board_order()
