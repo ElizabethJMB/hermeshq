@@ -111,7 +111,25 @@ export function RuntimeTab() {
           </label>
           <label className="panel-field">
             <span className="panel-label">{t("agents.model")}</span>
-            <input value={defaultModel} onChange={(event) => setDefaultModel(event.target.value)} />
+            {(() => {
+              const models = selectedDefaultProvider?.available_models;
+              if (models && models.length > 0) {
+                const merged = [
+                  ...(selectedDefaultProvider.default_model ? [selectedDefaultProvider.default_model] : []),
+                  ...models,
+                ].filter((v, i, a) => a.indexOf(v) === i);
+                return (
+                  <select value={defaultModel} onChange={(e) => setDefaultModel(e.target.value)}>
+                    {merged.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                );
+              }
+              return (
+                <input value={defaultModel} onChange={(event) => setDefaultModel(event.target.value)} placeholder={settings?.default_model ?? "Model ID"} />
+              );
+            })()}
           </label>
           <label className="panel-field">
             <span className="panel-label">{t("agents.secretRef")}</span>
