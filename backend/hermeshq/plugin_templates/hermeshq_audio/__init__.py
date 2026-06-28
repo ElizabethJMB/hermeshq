@@ -3,66 +3,35 @@ from __future__ import annotations
 import json
 import os
 import platform
-import threading
+import subprocess
+import tempfile
 from pathlib import Path
 
 
-_WHISPER_LOCK = threading.Lock()
-_WHISPER_MODEL = None
-_WHISPER_MODEL_NAME: str | None = None
-
 SUPPORTED_EXTS = {".m4a", ".ogg", ".mp3", ".wav", ".webm", ".flac", ".aac", ".opus", ".wma"}
 
+_TRANSCRIBE_SCRIPT = """
+import sys, json, asyncio
+sys.path.insert(0, "/app")
+from hermeshq.services.voice import transcribe
 
-def _default_whisper_model() -> str:
-    machine = platform.machine().lower()
-    if machine in ("aarch64", "arm64"):
-        return "base"
-    return "small"
+file_path = sys.argv[1]
+language = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None
 
+with open(file_path, "rb") as f:
+    audio_bytes = f.read()
 
-def _load_whisper(model_name: str):
-    global _WHISPER_MODEL, _WHISPER_MODEL_NAME
-    with _WHISPER_LOCK:
-        if _WHISPER_MODEL is not None and _WHISPER_MODEL_NAME == model_name:
-            return _WHISPER_MODEL
-        from faster_whisper import WhisperModel
-        _WHISPER_MODEL = WhisperModel(model_name, device="cpu", compute_type="int8")
-        _WHISPER_MODEL_NAME = model_name
-        return _WHISPER_MODEL
+text, lang = asyncio.run(transcribe(audio_bytes, language=language))
+print(json.dumps({"text": text, "language": lang}))
+"""
 
 
-def _decode_audio(file_path: str):
-    """Decode any audio file to 16kHz mono float32 numpy array using PyAV."""
-    import io
-
-    import av
-    import numpy as np
-
-    container = av.open(file_path)
-    resampler = av.AudioResampler(format="fltp", layout="mono", rate=16000)
-
-    audio_frames: list[np.ndarray] = []
-    for frame in container.decode(audio=0):
-        for rf in resampler.resample(frame):
-            array = rf.to_ndarray()
-            if array.ndim > 1:
-                array = array.reshape(-1)
-            audio_frames.append(array.astype(np.float32))
-
-    for rf in resampler.resample(None):
-        array = rf.to_ndarray()
-        if array.ndim > 1:
-            array = array.reshape(-1)
-        audio_frames.append(array.astype(np.float32))
-
-    container.close()
-
-    if not audio_frames:
-        return None
-
-    audio = np.concatenate(audio_frames).astype(np.float32)
-    return np.clip(audio, -1.0, 1.0)
+def _find_backend_python() -> str:
+    """Find the backend Python that has faster_whisper + av installed."""
+    for candidate in ("/usr/local/bin/python3.11", "/usr/local/bin/python3", "/usr/bin/python3"):
+        if os.path.isfile(candidate):
+            return candidate
+    return sys.executable
 
 
 def _handle_transcribe_audio(args, **_kwargs):
@@ -86,46 +55,44 @@ def _handle_transcribe_audio(args, **_kwargs):
     if not os.path.isfile(file_path):
         return json.dumps({"success": False, "error": f"File not found: {file_path}"})
 
-    try:
-        audio_array = _decode_audio(file_path)
-    except Exception as exc:
-        return json.dumps({"success": False, "error": f"Failed to decode audio: {exc}"})
-
-    if audio_array is None or len(audio_array) < 100:
-        return json.dumps({"success": False, "error": "Audio file is empty or too short"})
-
-    model_name = _default_whisper_model()
-    try:
-        model = _load_whisper(model_name)
-    except ImportError:
-        return json.dumps({
-            "success": False,
-            "error": "faster-whisper is not installed. Audio transcription is unavailable.",
-        })
-
-    kwargs = {"beam_size": 5}
     lang = language.strip().lower() if language else ""
-    if lang and lang != "auto":
-        kwargs["language"] = lang
 
     try:
-        segments, info = model.transcribe(audio_array, **kwargs)
-        text = " ".join(seg.text.strip() for seg in segments).strip()
-        detected_lang = getattr(info, "language", lang or "unknown")
+        result = subprocess.run(
+            [_find_backend_python(), "-c", _TRANSCRIBE_SCRIPT, file_path, lang],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        return json.dumps({"success": False, "error": "Transcription timed out (>120s)"})
     except Exception as exc:
-        return json.dumps({"success": False, "error": f"Transcription failed: {exc}"})
+        return json.dumps({"success": False, "error": f"Failed to run transcription: {exc}"})
 
-    duration = len(audio_array) / 16000.0
+    if result.returncode != 0:
+        stderr = result.stderr.strip()[:500]
+        return json.dumps({"success": False, "error": f"Transcription failed: {stderr}"})
+
+    try:
+        data = json.loads(result.stdout.strip().split("\n")[-1])
+    except Exception:
+        return json.dumps({"success": False, "error": f"Unexpected output: {result.stdout[:200]}"})
+
+    text = data.get("text", "").strip()
+    detected_lang = data.get("language", lang or "unknown")
+
+    if not text:
+        return json.dumps({"success": False, "error": "No speech detected in audio file"})
 
     return json.dumps({
         "success": True,
         "text": text,
         "language": detected_lang,
-        "duration_seconds": round(duration, 1),
-        "model": model_name,
         "file": file_path,
     })
 
+
+import sys  # needed by _find_backend_python fallback
 
 def register(ctx):
     spec = {
@@ -144,7 +111,7 @@ def register(ctx):
                 },
                 "language": {
                     "type": "string",
-                    "description": "Language code (e.g. 'es' for Spanish, 'en' for English). Use 'auto' for auto-detection. Defaults to 'auto'.",
+                    "description": "Language code (e.g. 'es' for Spanish, 'en' for English). Use 'auto' for auto-detection.",
                 },
             },
             "required": ["file_path"],
