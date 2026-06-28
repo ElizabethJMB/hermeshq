@@ -9,6 +9,7 @@ import { useManagedIntegrations } from "../api/managedIntegrations";
 import { useRuntimeLedger } from "../api/runtimeLedger";
 import { useRuntimeCapabilityOverview, useRuntimeProfiles } from "../api/runtimeProfiles";
 import { useProviders } from "../api/providers";
+import { applyProviderPreset, findMatchingProvider } from "../lib/providers";
 import { useSecrets } from "../api/secrets";
 import { useCreateTask, useTasks } from "../api/tasks";
 import { AgentAvatar } from "../components/AgentAvatar";
@@ -884,7 +885,10 @@ export function AgentDetailPage() {
                     </div>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                       {[
-                        { label: t("agents.provider"), value: agent.provider },
+                        { label: t("agents.provider"), value: (() => {
+                          const matched = findMatchingProvider(providers, agent.provider, agent.base_url);
+                          return matched ? matched.name : agent.provider;
+                        })() },
                         { label: t("agents.model"), value: agent.use_provider_default ? `${agent.model} (provider default)` : agent.model },
                         { label: t("agents.runtimeProfile"), value: currentRuntimeCapabilityProfile?.name ?? agent.runtime_profile },
                         {
@@ -895,7 +899,12 @@ export function AgentDetailPage() {
                           ),
                         },
                         { label: t("agents.secretRef"), value: agent.api_key_ref ?? t("agent.none") },
-                        { label: t("agent.fallbackProvider"), value: agent.fallback_provider ? `${agent.fallback_provider} / ${agent.fallback_model ?? "—"}` : t("agent.none") },
+                        { label: t("agent.fallbackProvider"), value: (() => {
+                          if (!agent.fallback_provider) return t("agent.none");
+                          const fb = findMatchingProvider(providers, agent.fallback_provider, null);
+                          const fbName = fb ? fb.name : agent.fallback_provider;
+                          return `${fbName} / ${agent.fallback_model ?? "—"}`;
+                        })() },
                         { label: t("agents.node"), value: agent.node?.name ?? t("agent.localRuntime") },
                       ].map((item) => (
                         <div

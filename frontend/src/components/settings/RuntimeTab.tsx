@@ -181,7 +181,10 @@ export function RuntimeTab() {
         <div className="mt-4 space-y-3">
           <div className="border-b border-[var(--border)] pb-3">
             <p className="panel-label">Provider</p>
-            <p className="mt-2 text-sm text-[var(--text-display)]">{String(settings?.default_provider ?? "unset")}</p>
+            <p className="mt-2 text-sm text-[var(--text-display)]">{(() => {
+              const matched = findMatchingProvider(providers, settings?.default_provider, settings?.default_base_url);
+              return matched ? matched.name : String(settings?.default_provider ?? "unset");
+            })()}</p>
           </div>
           <div className="border-b border-[var(--border)] pb-3">
             <p className="panel-label">Model</p>
