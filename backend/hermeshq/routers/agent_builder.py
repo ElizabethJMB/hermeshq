@@ -18,6 +18,7 @@ from hermeshq.schemas.agent_builder import (
     AgentBuilderTurn,
 )
 from hermeshq.services.agent_builder import (
+    _compute_required_connectors,
     create_builder_session,
     finalize_agent_from_draft,
     get_builder_session,
@@ -112,12 +113,12 @@ async def finalize_agent(
             request.app.state,
             created_by_user_id=str(user.id),
         )
-        await db.commit();
+        await db.commit()
     except ValueError as e:
         raise HTTPException(
             status_code=422,
             detail={"error": str(e), "recoverable": True},
-        );
+        )
     except Exception:
         logger.error("Agent creation from builder failed", exc_info=True)
         raise HTTPException(
@@ -126,7 +127,6 @@ async def finalize_agent(
         )
 
     from hermeshq.models.app_settings import AppSettings
-    from hermeshq.services.agent_builder import _compute_required_connectors
     from hermeshq.services.managed_capabilities import list_available_integration_packages
 
     settings = await db.get(AppSettings, "default")

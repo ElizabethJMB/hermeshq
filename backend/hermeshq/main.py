@@ -185,11 +185,13 @@ async def bootstrap_defaults() -> None:
             # ── Inherit new standard toolsets ──────────────────────────
             # Any toolset added to STANDARD_ENABLED_TOOLSETS is automatically
             # inherited by existing agents on upgrade. This is additive only —
-            # it never removes toolsets an agent already has.
+            # it never removes toolsets an agent already has, and respects
+            # any toolsets the agent has explicitly disabled.
             current_toolsets = list(agent.enabled_toolsets or [])
+            disabled_set = set(agent.disabled_toolsets or [])
             changed = False
             for ts in STANDARD_ENABLED_TOOLSETS:
-                if ts not in current_toolsets:
+                if ts not in current_toolsets and ts not in disabled_set:
                     current_toolsets.append(ts)
                     changed = True
             if changed:

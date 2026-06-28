@@ -4,11 +4,13 @@ import json
 import os
 import platform
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 
 SUPPORTED_EXTS = {".m4a", ".ogg", ".mp3", ".wav", ".webm", ".flac", ".aac", ".opus", ".wma"}
+MAX_AUDIO_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
 _TRANSCRIBE_SCRIPT = """
 import sys, json, asyncio
@@ -55,6 +57,12 @@ def _handle_transcribe_audio(args, **_kwargs):
     if not os.path.isfile(file_path):
         return json.dumps({"success": False, "error": f"File not found: {file_path}"})
 
+    file_size = os.path.getsize(file_path)
+    if file_size > MAX_AUDIO_FILE_SIZE:
+        return json.dumps({"success": False, "error": f"Audio file too large ({file_size // 1024 // 1024}MB). Max {MAX_AUDIO_FILE_SIZE // 1024 // 1024}MB."})
+    if file_size < 100:
+        return json.dumps({"success": False, "error": "Audio file is empty or too small"})
+
     lang = language.strip().lower() if language else ""
 
     try:
@@ -91,8 +99,6 @@ def _handle_transcribe_audio(args, **_kwargs):
         "file": file_path,
     })
 
-
-import sys  # needed by _find_backend_python fallback
 
 def register(ctx):
     spec = {

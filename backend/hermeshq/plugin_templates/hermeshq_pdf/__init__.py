@@ -83,7 +83,11 @@ code {
 
 
 def _check_requirements():
-    return True
+    try:
+        import weasyprint  # noqa: F401
+        return True
+    except ImportError:
+        return False
 
 
 def _handle_generate_pdf(args, **_kwargs):

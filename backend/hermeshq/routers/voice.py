@@ -80,6 +80,8 @@ async def speech_to_text(
     audio_bytes = await file.read()
     if len(audio_bytes) > MAX_AUDIO_BYTES:
         raise HTTPException(status_code=413, detail="Audio file too large (max 25 MB)")
+    if len(audio_bytes) < 100:
+        raise HTTPException(status_code=400, detail="Audio file is empty or too short")
 
     engine, config = await resolve_active_voice_engine(db)
     if engine is None:
