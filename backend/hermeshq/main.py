@@ -65,7 +65,7 @@ from hermeshq.services.hermes_version_manager import HermesVersionManager
 from hermeshq.services.instance_backup import InstanceBackupService
 from hermeshq.services.provider_catalog import BUILTIN_PROVIDERS, normalize_runtime_provider, seed_provider_defaults
 from hermeshq.services.pty_manager import PTYManager
-from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug, terminal_allowed_for_profile
+from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug, terminal_allowed_for_profile, STANDARD_ENABLED_TOOLSETS
 from hermeshq.services.scheduler import SchedulerService
 from hermeshq.services.secret_vault import SecretVault
 from hermeshq.services.workspace_manager import WorkspaceManager
@@ -181,6 +181,19 @@ async def bootstrap_defaults() -> None:
             if normalized_provider != agent.provider:
                 agent.provider = normalized_provider
             agent.runtime_profile = normalize_runtime_profile_slug(agent.runtime_profile)
+
+            # ── Inherit new standard toolsets ──────────────────────────
+            # Any toolset added to STANDARD_ENABLED_TOOLSETS is automatically
+            # inherited by existing agents on upgrade. This is additive only —
+            # it never removes toolsets an agent already has.
+            current_toolsets = list(agent.enabled_toolsets or [])
+            changed = False
+            for ts in STANDARD_ENABLED_TOOLSETS:
+                if ts not in current_toolsets:
+                    current_toolsets.append(ts)
+                    changed = True
+            if changed:
+                agent.enabled_toolsets = current_toolsets
         await session.commit()
 
 
