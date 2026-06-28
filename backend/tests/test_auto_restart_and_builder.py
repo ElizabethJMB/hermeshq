@@ -345,9 +345,6 @@ class TestAutoRestartDecision(unittest.IsolatedAsyncioTestCase):
         # Should have tried exactly MAX_ATTEMPTS times
         self.assertEqual(mgr._launch_gateway_process.call_count, GATEWAY_AUTO_RESTART_MAX_ATTEMPTS)
 
-        # Last session should have status=error
-        last_session = sessions[-1] if sessions else None
-
 
 # ---------------------------------------------------------------------------
 # Test: PDF plugin
@@ -391,6 +388,88 @@ class TestPdfPlugin(unittest.TestCase):
         # weasyprint not installed in test env — should return success=False
         self.assertFalse(data["success"])
         self.assertIn("error", data)
+
+
+# ---------------------------------------------------------------------------
+# Test: Audio plugin
+# ---------------------------------------------------------------------------
+
+class TestAudioPlugin(unittest.TestCase):
+    def test_plugin_yaml_exists(self):
+        from pathlib import Path
+        from hermeshq.services.managed_capabilities import plugin_templates_root
+        plugin_dir = plugin_templates_root() / "hermeshq_audio"
+        self.assertTrue(plugin_dir.is_dir(), f"Plugin dir not found: {plugin_dir}")
+        yaml_file = plugin_dir / "plugin.yaml"
+        self.assertTrue(yaml_file.is_file(), f"plugin.yaml not found")
+        init_file = plugin_dir / "__init__.py"
+        self.assertTrue(init_file.is_file(), f"__init__.py not found")
+
+    def test_plugin_in_core_catalog(self):
+        from hermeshq.services.managed_capabilities import CORE_MANAGED_PLUGIN_CATALOG
+        slugs = [p["slug"] for p in CORE_MANAGED_PLUGIN_CATALOG]
+        self.assertIn("hermeshq_audio", slugs)
+
+    def test_audio_in_standard_profile(self):
+        from hermeshq.services.runtime_profiles import STANDARD_ENABLED_TOOLSETS
+        self.assertIn("hermeshq_audio", STANDARD_ENABLED_TOOLSETS)
+
+    def test_register_callable(self):
+        from hermeshq.plugin_templates.hermeshq_audio import register
+        ctx = Mock()
+        ctx.register_tool = Mock()
+        register(ctx)
+        self.assertTrue(ctx.register_tool.called)
+        call_args = ctx.register_tool.call_args
+        self.assertEqual(call_args.kwargs["toolset"], "hermeshq_audio")
+
+    def test_transcribe_missing_file_path(self):
+        from hermeshq.plugin_templates.hermeshq_audio import _handle_transcribe_audio
+        result = _handle_transcribe_audio({})
+        data = json.loads(result)
+        self.assertFalse(data["success"])
+        self.assertIn("file_path", data["error"])
+
+    def test_transcribe_unsupported_format(self):
+        from hermeshq.plugin_templates.hermeshq_audio import _handle_transcribe_audio
+        result = _handle_transcribe_audio({"file_path": "test.txt"})
+        data = json.loads(result)
+        self.assertFalse(data["success"])
+        self.assertIn("Unsupported", data["error"])
+
+    def test_transcribe_file_not_found(self):
+        from hermeshq.plugin_templates.hermeshq_audio import _handle_transcribe_audio
+        result = _handle_transcribe_audio({"file_path": "/nonexistent/audio.m4a"})
+        data = json.loads(result)
+        self.assertFalse(data["success"])
+        self.assertIn("not found", data["error"])
+
+    def test_no_duplicates_in_standard_toolsets(self):
+        from hermeshq.services.runtime_profiles import STANDARD_ENABLED_TOOLSETS
+        seen = set()
+        dupes = [x for x in STANDARD_ENABLED_TOOLSETS if x in seen or seen.add(x)]
+        self.assertEqual(dupes, [], f"Duplicate toolsets found: {dupes}")
+
+
+# ---------------------------------------------------------------------------
+# Test: Bootstrap toolset inheritance respects disabled_toolsets
+# ---------------------------------------------------------------------------
+
+class TestBootstrapInheritance(unittest.TestCase):
+    def test_inheritance_respects_disabled_toolsets(self):
+        """Verify that the inheritance logic skips toolsets in disabled_toolsets."""
+        from hermeshq.services.runtime_profiles import STANDARD_ENABLED_TOOLSETS
+
+        current_toolsets = ["hermeshq_web_search"]
+        disabled_set = {"hermeshq_pdf"}
+
+        for ts in STANDARD_ENABLED_TOOLSETS:
+            if ts not in current_toolsets and ts not in disabled_set:
+                current_toolsets.append(ts)
+
+        self.assertIn("hermeshq_web_search", current_toolsets)
+        self.assertIn("hermeshq_audio", current_toolsets)
+        self.assertNotIn("hermeshq_pdf", current_toolsets)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ integration packages already bundled with HermesHQ.
 import asyncio
 import importlib
 import logging
+import os
 import platform
 import shutil
 from pathlib import Path
@@ -37,7 +38,7 @@ def _cpu_count() -> int:
     try:
         return len(os.sched_getaffinity(0))  # type: ignore[attr-defined]
     except AttributeError:
-        return platform.machine().count("arm") and 4 or 2
+        return os.cpu_count() or 2
 
 
 def _default_whisper_model() -> str:
@@ -204,25 +205,26 @@ def _bytes_to_numpy(audio_bytes: bytes):
 
         container = av.open(io.BytesIO(audio_bytes))
 
-        # Resample to 16kHz mono float32 — exactly what faster-whisper expects
-        resampler = av.AudioResampler(format="fltp", layout="mono", rate=16000)
+        try:
+            # Resample to 16kHz mono float32 — exactly what faster-whisper expects
+            resampler = av.AudioResampler(format="fltp", layout="mono", rate=16000)
 
-        audio_frames: list[np.ndarray] = []
-        for frame in container.decode(audio=0):
-            for rf in resampler.resample(frame):
+            audio_frames: list[np.ndarray] = []
+            for frame in container.decode(audio=0):
+                for rf in resampler.resample(frame):
+                    array = rf.to_ndarray()
+                    if array.ndim > 1:
+                        array = array.reshape(-1)
+                    audio_frames.append(array.astype(np.float32))
+
+            # Flush any samples still buffered in the resampler
+            for rf in resampler.resample(None):
                 array = rf.to_ndarray()
                 if array.ndim > 1:
                     array = array.reshape(-1)
                 audio_frames.append(array.astype(np.float32))
-
-        # Flush any samples still buffered in the resampler
-        for rf in resampler.resample(None):
-            array = rf.to_ndarray()
-            if array.ndim > 1:
-                array = array.reshape(-1)
-            audio_frames.append(array.astype(np.float32))
-
-        container.close()
+        finally:
+            container.close()
 
         if not audio_frames:
             logger.warning("No audio frames decoded from input")
@@ -285,6 +287,3 @@ async def _synthesize_piper(text: str, voice: str) -> bytes:
     )
     stdout, _stderr = await proc.communicate(text.encode("utf-8"))
     return stdout
-
-
-import os  # noqa: E402  — used by _cpu_count on Linux

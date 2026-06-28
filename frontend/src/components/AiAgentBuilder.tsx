@@ -103,6 +103,8 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
             const audioBlob = await synthesizeText(fullText, voiceConfig.default_voice ?? undefined);
             const audioUrl = URL.createObjectURL(audioBlob);
             const audio = new Audio(audioUrl);
+            audio.onended = () => URL.revokeObjectURL(audioUrl);
+            audio.onerror = () => URL.revokeObjectURL(audioUrl);
             audio.play().catch(() => {});
           } catch {
             // TTS failed, continue silently
@@ -151,6 +153,7 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
         ? new MediaRecorder(stream, { mimeType })
         : new MediaRecorder(stream);
       audioChunksRef.current = [];
+      const recordedMimeType = recorder.mimeType || "audio/webm";
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
@@ -158,7 +161,7 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
 
       recorder.onstop = async () => {
         stream.getTracks().forEach((track) => track.stop());
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(audioChunksRef.current, { type: recordedMimeType });
         if (blob.size < 500) {
           setError("Recording too short — try speaking for longer");
           return;
