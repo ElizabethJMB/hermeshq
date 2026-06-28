@@ -740,7 +740,10 @@ export function AgentsPage() {
                   <p className="panel-label">Runtime</p>
                   <p className="mt-2 text-sm text-[var(--text-primary)]">{agent.model}</p>
                   <p className="mt-1 text-xs uppercase tracking-[0.1em] text-[var(--text-disabled)]">
-                    {agent.provider} / {agent.runtime_profile}
+                    {(() => {
+                      const mp = findMatchingProvider(enabledProviders, agent.provider, agent.base_url);
+                      return `${mp ? mp.name : agent.provider} / ${agent.runtime_profile}`;
+                    })()}
                   </p>
                   {agent.is_archived ? (
                     <p className="mt-2 text-xs uppercase tracking-[0.1em] text-[var(--accent)]">
