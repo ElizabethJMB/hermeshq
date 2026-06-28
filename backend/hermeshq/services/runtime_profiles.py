@@ -15,8 +15,6 @@ STANDARD_ENABLED_TOOLSETS = [
     "messaging",
     "delegation",
     "vision",
-    "hermeshq_pdf",
-    "hermeshq_audio",
 ] + list_standard_compatible_toolsets()
 
 
