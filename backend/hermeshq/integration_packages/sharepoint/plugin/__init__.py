@@ -24,12 +24,13 @@ def _task_user_id() -> str | None:
     return os.environ.get("HERMESHQ_RESOLVED_USER_ID") or None
 
 
-def _get_m365_token(user_id: str) -> tuple[str | None, str]:
+def _get_m365_token(user_id: str) -> tuple[str | None, str | None, str]:
+    """Returns (access_token, sharepoint_site_url, error_detail)."""
     base_url = os.environ.get("HERMESHQ_INTERNAL_API_URL", "").rstrip("/")
     agent_id = os.environ.get("HERMESHQ_AGENT_ID", "")
     agent_token = os.environ.get("HERMESHQ_AGENT_TOKEN", "")
     if not base_url or not agent_id or not agent_token:
-        return None, "HermesHQ internal control no configurado"
+        return None, None, "HermesHQ internal control no configurado"
     url = f"{base_url}/control/m365/agent-token?user_id={user_id}"
     req = urllib.request.Request(
         url, method="GET",
@@ -38,20 +39,21 @@ def _get_m365_token(user_id: str) -> tuple[str | None, str]:
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            return data.get("access_token"), ""
+            site_url = (data.get("sharepoint_site_url") or "").strip().rstrip("/") or None
+            return data.get("access_token"), site_url, ""
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         try:
             detail = json.loads(body).get("detail", body)
         except (json.JSONDecodeError, ValueError):
             detail = body
-        return None, str(detail)
+        return None, None, str(detail)
     except Exception as exc:  # noqa: BLE001  # HTTP request catch-all
-        return None, str(exc)
+        return None, None, str(exc)
 
 
 def _graph(method: str, path: str, access_token: str, payload: dict | None = None) -> dict:
-    url = f"{GRAPH_BASE}{path}".replace(" ", "%20")
+    url = (path if path.startswith("https://") else f"{GRAPH_BASE}{path}").replace(" ", "%20")
     data = json.dumps(payload).encode("utf-8") if payload else None
     req = urllib.request.Request(
         url, data=data, method=method.upper(),
@@ -63,10 +65,25 @@ def _graph(method: str, path: str, access_token: str, payload: dict | None = Non
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
+        retry_after = exc.headers.get("Retry-After") if exc.headers else None
         try:
-            return {"error": json.loads(body)}
+            parsed = json.loads(body)
+            err = parsed.get("error", {})
+            code = err.get("code", "")
+            msg = err.get("message", body)
         except (json.JSONDecodeError, ValueError):
-            return {"error": body, "status": exc.code}
+            code, msg = "", body
+        _FRIENDLY = {
+            "Authorization_RequestDenied": "Sin permiso para acceder a este recurso (403).",
+            "accessDenied": "Sin permiso para acceder a este recurso (403).",
+            "itemNotFound": "Archivo o carpeta no encontrado (404).",
+            "ActivityLimitReached": f"Límite de peticiones alcanzado. Reintenta en {retry_after or '60'} segundos.",
+        }
+        friendly = _FRIENDLY.get(code) or (f"Error {exc.code}: {msg}" if msg else f"Error HTTP {exc.code}")
+        result: dict = {"error": friendly, "_graph_code": code}
+        if retry_after:
+            result["retry_after"] = retry_after
+        return result
 
 
 def _auth_error(detail: str) -> str:
@@ -78,22 +95,17 @@ def _auth_error(detail: str) -> str:
 
 # ── Tool handlers ─────────────────────────────────────────────────────────────
 
-def _default_site_url() -> str:
-    """Get the SharePoint site URL configured for this agent (may be empty)."""
-    return os.environ.get("HERMESHQ_SHAREPOINT_SITE_URL", "").strip().rstrip("/")
-
-
 def _list_files_tool(args: dict, **_kwargs) -> str:
     """List files using Files.Read.All - works with OneDrive and SharePoint."""
     user_id = _task_user_id()
     if not user_id:
         return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
-    token, err = _get_m365_token(user_id)
+    token, user_site_url, err = _get_m365_token(user_id)
     if not token:
         return _auth_error(err)
 
-    # Use arg site_url, fallback to agent-configured site, fallback to OneDrive
-    site_url = str(args.get("site_url") or _default_site_url()).strip().rstrip("/")
+    # Use arg site_url, fallback to user-configured site, fallback to OneDrive
+    site_url = str(args.get("site_url") or user_site_url or "").strip().rstrip("/")
     folder_path = str(args.get("folder_path") or "").strip().strip("/")
 
     if site_url:
@@ -107,18 +119,23 @@ def _list_files_tool(args: dict, **_kwargs) -> str:
         # Default: user's OneDrive root
         base_path = "/me/drive/root"
 
-    path = f"{base_path}:/{folder_path}:/children" if folder_path else f"{base_path}/children"
+    path: str | None = f"{base_path}:/{folder_path}:/children" if folder_path else f"{base_path}/children"
 
-    result = _graph("GET", path, token)
-    if "error" in result:
-        return json.dumps({"success": False, "error": result["error"]})
-    items = result.get("value", [])
+    raw_items: list = []
+    while path and len(raw_items) < 200:
+        result = _graph("GET", path, token)
+        if "error" in result:
+            return json.dumps({"success": False, "error": result["error"]})
+        raw_items.extend(result.get("value", []))
+        next_link: str = result.get("@odata.nextLink") or ""
+        path = next_link if (next_link and len(raw_items) < 200) else None
+
     simplified = [
         {"id": i.get("id"), "name": i.get("name"),
          "type": "folder" if "folder" in i else "file",
          "size": i.get("size"), "url": i.get("webUrl"),
          "modified": i.get("lastModifiedDateTime")}
-        for i in items
+        for i in raw_items
     ]
     return json.dumps({"success": True, "count": len(simplified), "items": simplified}, ensure_ascii=False)
 
@@ -127,12 +144,12 @@ def _get_file_tool(args: dict, **_kwargs) -> str:
     user_id = _task_user_id()
     if not user_id:
         return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
-    token, err = _get_m365_token(user_id)
+    token, user_site_url, err = _get_m365_token(user_id)
     if not token:
         return _auth_error(err)
 
     file_path = str(args.get("file_path") or "").strip().strip("/")
-    site_url = str(args.get("site_url") or _default_site_url()).strip().rstrip("/")
+    site_url = str(args.get("site_url") or user_site_url or "").strip().rstrip("/")
 
     if not file_path:
         return json.dumps({"success": False, "error": "Se requiere file_path."})
@@ -156,18 +173,24 @@ def _list_drives_tool(args: dict, **_kwargs) -> str:
     user_id = _task_user_id()
     if not user_id:
         return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
-    token, err = _get_m365_token(user_id)
+    token, _, err = _get_m365_token(user_id)
     if not token:
         return _auth_error(err)
 
-    result = _graph("GET", "/me/drives", token)
-    if "error" in result:
-        return json.dumps({"success": False, "error": result["error"]})
-    drives = result.get("value", [])
+    path: str | None = "/me/drives"
+    raw_drives: list = []
+    while path and len(raw_drives) < 200:
+        result = _graph("GET", path, token)
+        if "error" in result:
+            return json.dumps({"success": False, "error": result["error"]})
+        raw_drives.extend(result.get("value", []))
+        next_link: str = result.get("@odata.nextLink") or ""
+        path = next_link if (next_link and len(raw_drives) < 200) else None
+
     simplified = [
         {"id": d.get("id"), "name": d.get("name"),
          "type": d.get("driveType"), "url": d.get("webUrl")}
-        for d in drives
+        for d in raw_drives
     ]
     return json.dumps({"success": True, "count": len(simplified), "drives": simplified}, ensure_ascii=False)
 
@@ -176,7 +199,7 @@ def _search_tool(args: dict, **_kwargs) -> str:
     user_id = _task_user_id()
     if not user_id:
         return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
-    token, err = _get_m365_token(user_id)
+    token, _, err = _get_m365_token(user_id)
     if not token:
         return _auth_error(err)
 

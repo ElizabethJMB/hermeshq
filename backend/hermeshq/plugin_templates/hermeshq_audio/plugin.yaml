@@ -1,0 +1,6 @@
+name: hermeshq_audio
+version: "1.0.0"
+description: Audio transcription tool for agents. Transcribe m4a, ogg, mp3, wav, webm, and flac files using faster-whisper.
+author: HermesHQ
+provides_tools:
+  - hq_transcribe_audio
