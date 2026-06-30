@@ -17,6 +17,7 @@ import {
 import { useSessionStore } from "./stores/sessionStore";
 import { AgentDetailPage } from "./pages/AgentDetailPage";
 import { AgentsPage } from "./pages/AgentsPage";
+import { BuilderPage } from "./pages/BuilderPage";
 import { CommsPage } from "./pages/CommsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -125,6 +126,7 @@ export default function App() {
             <Route path="/" element={<DashboardPage />} />
             <Route path="/agents" element={<AgentsPage />} />
             <Route path="/agents/:agentId" element={<AgentDetailPage />} />
+            <Route path="/builder" element={<BuilderPage />} />
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/schedules" element={<ScheduledTasksPage />} />
             <Route path="/account" element={<MyAccountPage />} />
