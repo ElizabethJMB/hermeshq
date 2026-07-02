@@ -331,6 +331,12 @@ export function AgentsPage() {
           <p className="text-sm leading-6 text-[var(--text-secondary)]">
             {t("agents.createDescription")}
           </p>
+          <Link
+            to="/builder"
+            className="mt-3 inline-flex items-center gap-2 rounded-xl border border-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--accent)] transition hover:bg-[var(--accent)] hover:text-white"
+          >
+            ✨ {t("agentBuilder.createWithAI")}
+          </Link>
         </div>
 
         <form className="mt-8 space-y-5" onSubmit={onSubmit}>
@@ -734,7 +740,10 @@ export function AgentsPage() {
                   <p className="panel-label">Runtime</p>
                   <p className="mt-2 text-sm text-[var(--text-primary)]">{agent.model}</p>
                   <p className="mt-1 text-xs uppercase tracking-[0.1em] text-[var(--text-disabled)]">
-                    {agent.provider} / {agent.runtime_profile}
+                    {(() => {
+                      const mp = findMatchingProvider(enabledProviders, agent.provider, agent.base_url);
+                      return `${mp ? mp.name : agent.provider} / ${agent.runtime_profile}`;
+                    })()}
                   </p>
                   {agent.is_archived ? (
                     <p className="mt-2 text-xs uppercase tracking-[0.1em] text-[var(--accent)]">

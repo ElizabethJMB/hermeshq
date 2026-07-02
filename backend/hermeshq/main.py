@@ -48,8 +48,10 @@ from hermeshq.routers import (
     templates,
     terminal_sessions,
     users,
+    voice,
     webhooks,
 )
+from hermeshq.routers import agent_builder
 from hermeshq.routers import settings as settings_router
 from hermeshq.schemas.common import HealthResponse
 from hermeshq.services.agent_identity import derive_agent_identity
@@ -63,7 +65,7 @@ from hermeshq.services.hermes_version_manager import HermesVersionManager
 from hermeshq.services.instance_backup import InstanceBackupService
 from hermeshq.services.provider_catalog import BUILTIN_PROVIDERS, normalize_runtime_provider, seed_provider_defaults
 from hermeshq.services.pty_manager import PTYManager
-from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug, terminal_allowed_for_profile
+from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug, terminal_allowed_for_profile, STANDARD_ENABLED_TOOLSETS
 from hermeshq.services.scheduler import SchedulerService
 from hermeshq.services.secret_vault import SecretVault
 from hermeshq.services.workspace_manager import WorkspaceManager
@@ -179,6 +181,21 @@ async def bootstrap_defaults() -> None:
             if normalized_provider != agent.provider:
                 agent.provider = normalized_provider
             agent.runtime_profile = normalize_runtime_profile_slug(agent.runtime_profile)
+
+            # ── Inherit new standard toolsets ──────────────────────────
+            # Any toolset added to STANDARD_ENABLED_TOOLSETS is automatically
+            # inherited by existing agents on upgrade. This is additive only —
+            # it never removes toolsets an agent already has, and respects
+            # any toolsets the agent has explicitly disabled.
+            current_toolsets = list(agent.enabled_toolsets or [])
+            disabled_set = set(agent.disabled_toolsets or [])
+            changed = False
+            for ts in STANDARD_ENABLED_TOOLSETS:
+                if ts not in current_toolsets and ts not in disabled_set:
+                    current_toolsets.append(ts)
+                    changed = True
+            if changed:
+                agent.enabled_toolsets = current_toolsets
         await session.commit()
 
 
@@ -355,6 +372,8 @@ app.include_router(mcp_server.router)
 app.include_router(webhooks.router)
 app.include_router(attachments.router, prefix=settings.api_prefix)
 app.include_router(m365.router, prefix=settings.api_prefix)
+app.include_router(voice.router, prefix=settings.api_prefix)
+app.include_router(agent_builder.router, prefix=settings.api_prefix)
 
 
 @app.get("/health", response_model=HealthResponse)

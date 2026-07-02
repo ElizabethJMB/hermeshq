@@ -23,6 +23,18 @@ CORE_MANAGED_PLUGIN_CATALOG: list[dict] = [
         "standard_compatible": False,
         "system_only": True,
     },
+    {
+        "slug": "hermeshq_pdf",
+        "template_dir": "hermeshq_pdf",
+        "toolset": "hermeshq_pdf",
+        "standard_compatible": True,
+    },
+    {
+        "slug": "hermeshq_audio",
+        "template_dir": "hermeshq_audio",
+        "toolset": "hermeshq_audio",
+        "standard_compatible": True,
+    },
 ]
 
 

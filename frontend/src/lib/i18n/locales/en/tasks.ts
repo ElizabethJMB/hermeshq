@@ -8,6 +8,8 @@ const ns: Record<string, string> = {
   "tasks.sendTask": "Send task",
   "tasks.operatorTask": "Operator task",
   "tasks.cancel": "Cancel",
+  "tasks.delete": "Delete",
+  "tasks.deleteConfirm": "Delete this task and all its attachments? This cannot be undone.",
   "tasks.kanban": "Kanban",
   "tasks.boardTitle": "Task board",
   "tasks.boardCopy": "Track operational work as cards on a lightweight Kanban board. Runtime status and board progress are related, but not the same thing.",

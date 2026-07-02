@@ -7,6 +7,7 @@ Centralises the agent-creation logic that was previously duplicated between
 from __future__ import annotations
 
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.models.agent import Agent

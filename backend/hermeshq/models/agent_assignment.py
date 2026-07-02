@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from sqlalchemy import JSON, ForeignKey, String, UniqueConstraint
+from sqlalchemy import JSON, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hermeshq.models.base import Base, TimestampMixin
@@ -15,6 +15,7 @@ class AgentAssignment(TimestampMixin, Base):
     agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), index=True)
     assigned_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     m365_allowed_scopes: Mapped[list | None] = mapped_column(JSON, nullable=True, default=None)
+    sharepoint_site_url: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
 
     user = relationship("User", foreign_keys=[user_id], back_populates="agent_assignments")
     agent = relationship("Agent", foreign_keys=[agent_id])

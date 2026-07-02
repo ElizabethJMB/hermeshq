@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import desc, false, or_, select
@@ -50,6 +51,12 @@ async def create_task(
         raise HTTPException(status_code=400, detail="Archived agents cannot receive new tasks")
     payload_data = payload.model_dump()
     metadata = payload_data.pop("metadata", {}) or {}
+    # Security: never let the caller spoof the invoking identity. M365 plugins read
+    # thread_user_id / created_by_user_id from this metadata to fetch the user's
+    # delegated token, so pin them to the authenticated user and drop any
+    # client-supplied override.
+    metadata.pop("created_by_user_id", None)
+    metadata["thread_user_id"] = current_user.id
     inferred_conversation = (payload.title or "").strip() == "Chat message"
     if inferred_conversation and not metadata.get("conversation"):
         metadata["conversation"] = True
@@ -72,7 +79,6 @@ async def create_task(
             db.add(thread)
             await db.flush()
         metadata["thread_id"] = thread.id
-        metadata["thread_user_id"] = current_user.id
     task = Task(**payload_data, metadata_json=metadata, created_by_user_id=current_user.id)
     task.board_column = runtime_status_to_board_column(task.status)
     task.board_order = next_board_order()
@@ -144,6 +150,40 @@ async def update_task_board(
     await db.commit()
     await db.refresh(task)
     return TaskRead.model_validate(task)
+
+
+@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_task(
+    task_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> None:
+    task = await db.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    await ensure_agent_access(db, current_user, task.agent_id)
+    if not is_admin(current_user) and task.created_by_user_id and task.created_by_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if task.status == "running":
+        raise HTTPException(status_code=409, detail="Cannot delete a running task. Cancel it first.")
+
+    # Clean up attachment files from disk before removing the DB record.
+    workspace_manager = getattr(request.app.state, "workspace_manager", None)
+    if workspace_manager:
+        try:
+            workspace: Path = workspace_manager.build_workspace_path(task.agent_id)
+            for att in (task.metadata_json or {}).get("attachments", []):
+                rel = att.get("path", "")
+                if rel:
+                    file_path = workspace / rel
+                    if file_path.is_file():
+                        file_path.unlink()
+        except Exception:
+            logger.warning("Could not clean up attachments for task %s", task_id, exc_info=True)
+
+    await db.delete(task)
+    await db.commit()
 
 
 @router.get("/queue/state", response_model=TaskQueueStateRead)
