@@ -3,7 +3,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useAgents } from "../api/agents";
-import { useCancelTask, useCreateTask, useTasks, useUpdateTaskBoard } from "../api/tasks";
+import { useCancelTask, useCreateTask, useDeleteTask, useTasks, useUpdateTaskBoard } from "../api/tasks";
 import { useI18n } from "../lib/i18n";
 import type { Task } from "../types/api";
 
@@ -41,6 +41,7 @@ export function TasksPage() {
   const { t, formatDateTime } = useI18n();
   const createTask = useCreateTask();
   const cancelTask = useCancelTask();
+  const deleteTask = useDeleteTask();
   const updateTaskBoard = useUpdateTaskBoard();
 
   const [agentId, setAgentId] = useState("");
@@ -319,6 +320,20 @@ export function TasksPage() {
                             type="button"
                           >
                             {t("tasks.cancel")}
+                          </button>
+                        ) : null}
+                        {task.status !== "running" ? (
+                          <button
+                            className="panel-button-secondary w-full !border-[color-mix(in_srgb,var(--accent)_40%,transparent)] !text-[var(--accent)] hover:!bg-[color-mix(in_srgb,var(--accent)_8%,transparent)]"
+                            onClick={() => {
+                              if (window.confirm(t("tasks.deleteConfirm"))) {
+                                deleteTask.mutate(task.id);
+                              }
+                            }}
+                            disabled={deleteTask.isPending}
+                            type="button"
+                          >
+                            {t("tasks.delete")}
                           </button>
                         ) : null}
                       </div>
