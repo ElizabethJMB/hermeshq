@@ -43,6 +43,19 @@ export function useCancelTask() {
   });
 }
 
+export function useDeleteTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (taskId: string) => {
+      await apiClient.delete(`/tasks/${taskId}`);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
 export function useUpdateTaskBoard() {
   const queryClient = useQueryClient();
   return useMutation({
