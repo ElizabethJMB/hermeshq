@@ -8,6 +8,8 @@ const ns: Record<string, string> = {
   "tasks.sendTask": "Enviar tarea",
   "tasks.operatorTask": "Tarea del operador",
   "tasks.cancel": "Cancelar",
+  "tasks.delete": "Eliminar",
+  "tasks.deleteConfirm": "¿Eliminar esta tarea y todos sus archivos adjuntos? Esta acción no se puede deshacer.",
   "tasks.kanban": "Kanban",
   "tasks.boardTitle": "Tablero de tareas",
   "tasks.boardCopy": "Sigue el trabajo operativo como tarjetas en un tablero Kanban liviano. El estado runtime y el avance del tablero se relacionan, pero no son lo mismo.",
