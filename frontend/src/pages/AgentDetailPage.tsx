@@ -9,6 +9,7 @@ import { useManagedIntegrations } from "../api/managedIntegrations";
 import { useRuntimeLedger } from "../api/runtimeLedger";
 import { useRuntimeCapabilityOverview, useRuntimeProfiles } from "../api/runtimeProfiles";
 import { useProviders } from "../api/providers";
+import { applyProviderPreset, findMatchingProvider } from "../lib/providers";
 import { useSecrets } from "../api/secrets";
 import { useCreateTask, useTasks } from "../api/tasks";
 import { AgentAvatar } from "../components/AgentAvatar";
@@ -528,45 +529,55 @@ export function AgentDetailPage() {
 
   async function onSaveIntegration(integrationSlug: string) {
     const integration = (managedIntegrations ?? []).find((item) => item.slug === integrationSlug);
-    if (!integration) {
-      return;
-    }
+    if (!integration) return;
     const currentDraft = integrationDrafts[integrationSlug] ?? {};
     const normalizedConfig = Object.fromEntries(
       integration.fields
         .map((field) => [field.name, (currentDraft[field.name] ?? "").trim()] as const)
         .filter(([, value]) => value),
     );
-    await updateAgent.mutateAsync({
-      agentId: currentAgent.id,
-      payload: {
-        skills: integration.skill_identifier
-          ? Array.from(new Set([...(currentAgent.skills ?? []), integration.skill_identifier]))
-          : currentAgent.skills,
-        integration_configs: {
-          ...(currentAgent.integration_configs ?? {}),
-          [integrationSlug]: normalizedConfig,
+    setIntegrationPending((p) => ({ ...p, [integrationSlug]: "save" }));
+    try {
+      await updateAgent.mutateAsync({
+        agentId: currentAgent.id,
+        payload: {
+          skills: integration.skill_identifier
+            ? Array.from(new Set([...(currentAgent.skills ?? []), integration.skill_identifier]))
+            : currentAgent.skills,
+          integration_configs: {
+            ...(currentAgent.integration_configs ?? {}),
+            [integrationSlug]: normalizedConfig,
+          },
         },
-      },
-    });
+      });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Failed to save integration");
+    } finally {
+      setIntegrationPending((p) => ({ ...p, [integrationSlug]: null }));
+    }
   }
 
   async function onDisableIntegration(integrationSlug: string) {
     const integration = (managedIntegrations ?? []).find((item) => item.slug === integrationSlug);
-    if (!integration) {
-      return;
-    }
+    if (!integration) return;
     const nextConfigs = { ...(currentAgent.integration_configs ?? {}) };
     delete nextConfigs[integrationSlug];
-    await updateAgent.mutateAsync({
-      agentId: currentAgent.id,
-      payload: {
-        skills: integration.skill_identifier
-          ? (currentAgent.skills ?? []).filter((skill) => skill !== integration.skill_identifier)
-          : currentAgent.skills,
-        integration_configs: nextConfigs,
-      },
-    });
+    setIntegrationPending((p) => ({ ...p, [integrationSlug]: "disable" }));
+    try {
+      await updateAgent.mutateAsync({
+        agentId: currentAgent.id,
+        payload: {
+          skills: integration.skill_identifier
+            ? (currentAgent.skills ?? []).filter((skill) => skill !== integration.skill_identifier)
+            : currentAgent.skills,
+          integration_configs: nextConfigs,
+        },
+      });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Failed to disable integration");
+    } finally {
+      setIntegrationPending((p) => ({ ...p, [integrationSlug]: null }));
+    }
   }
 
   async function onTestIntegration(integrationSlug: string) {
@@ -579,6 +590,8 @@ export function AgentDetailPage() {
         config: currentDraft,
       });
       setIntegrationTestResults((current) => ({ ...current, [integrationSlug]: result }));
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Integration test failed");
     } finally {
       setIntegrationPending((p) => ({ ...p, [integrationSlug]: null }));
     }
@@ -598,6 +611,8 @@ export function AgentDetailPage() {
         ...current,
         [integrationSlug]: { ...(current[integrationSlug] ?? {}), [actionSlug]: result },
       }));
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Integration action failed");
     } finally {
       setIntegrationPending((p) => ({ ...p, [integrationSlug]: null }));
     }
@@ -870,7 +885,10 @@ export function AgentDetailPage() {
                     </div>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                       {[
-                        { label: t("agents.provider"), value: agent.provider },
+                        { label: t("agents.provider"), value: (() => {
+                          const matched = findMatchingProvider(providers, agent.provider, agent.base_url);
+                          return matched ? matched.name : agent.provider;
+                        })() },
                         { label: t("agents.model"), value: agent.use_provider_default ? `${agent.model} (provider default)` : agent.model },
                         { label: t("agents.runtimeProfile"), value: currentRuntimeCapabilityProfile?.name ?? agent.runtime_profile },
                         {
@@ -881,7 +899,12 @@ export function AgentDetailPage() {
                           ),
                         },
                         { label: t("agents.secretRef"), value: agent.api_key_ref ?? t("agent.none") },
-                        { label: t("agent.fallbackProvider"), value: agent.fallback_provider ? `${agent.fallback_provider} / ${agent.fallback_model ?? "—"}` : t("agent.none") },
+                        { label: t("agent.fallbackProvider"), value: (() => {
+                          if (!agent.fallback_provider) return t("agent.none");
+                          const fb = findMatchingProvider(providers, agent.fallback_provider, null);
+                          const fbName = fb ? fb.name : agent.fallback_provider;
+                          return `${fbName} / ${agent.fallback_model ?? "—"}`;
+                        })() },
                         { label: t("agents.node"), value: agent.node?.name ?? t("agent.localRuntime") },
                       ].map((item) => (
                         <div
@@ -1682,7 +1705,7 @@ export function AgentDetailPage() {
         </div>,
       )}
 
-      {!isAdmin && renderSectionShell(
+      {renderSectionShell(
         "m365-scopes",
         "Microsoft 365",
         t("agent.m365AgentPermissions"),

@@ -102,6 +102,7 @@ class GatewayLogManager:
                 )
                 if not new_entries:
                     continue
+                created_task_ids: list[str] = []
                 async with self.session_factory() as session:
                     existing_keys = {
                         source_key
@@ -130,6 +131,9 @@ class GatewayLogManager:
                                 },
                             )
                         )
+                    created_task_ids = await self._create_gateway_tasks_in_session(
+                        session, agent_id, platform, new_entries, existing_keys
+                    )
                     await session.commit()
                 for entry in new_entries:
                     if entry["key"] in existing_keys:
@@ -143,10 +147,95 @@ class GatewayLogManager:
                             "direction": entry["direction"],
                         }
                     )
+                for task_id in created_task_ids:
+                    await self.event_broker.publish(
+                        {
+                            "type": "task.completed",
+                            "task_id": task_id,
+                            "agent_id": agent_id,
+                        }
+                    )
             except asyncio.CancelledError:
                 return
             except Exception:  # noqa: BLE001  # asyncio task — WebSocket stale
                 continue
+
+    # ------------------------------------------------------------------
+    # Native gateway Task creation
+    # ------------------------------------------------------------------
+
+    _PLATFORM_LABELS: dict[str, str] = {
+        "telegram": "Telegram",
+        "whatsapp": "WhatsApp",
+        "microsoft_teams": "Teams",
+    }
+
+    async def _create_gateway_tasks_in_session(
+        self,
+        session: AsyncSession,
+        agent_id: str,
+        platform: str,
+        new_entries: list[dict],
+        existing_keys: set[str],
+    ) -> list[str]:
+        """Create completed Task records for new inbound messages from native gateways.
+
+        Runs inside an already-open session; caller must commit.
+        Returns the list of created task IDs so the caller can publish events.
+        """
+        from hermeshq.models.task import Task
+        from hermeshq.services.task_board import next_board_order
+        from hermeshq.models.base import utcnow
+
+        truly_new = [e for e in new_entries if e["key"] not in existing_keys]
+        inbound_entries = [e for e in truly_new if e["direction"] == "inbound"]
+        if not inbound_entries:
+            return []
+
+        # Build outbound lookup (session_id → list of outbound entries) for response pairing
+        outbound_by_session: dict[str, list[dict]] = {}
+        for e in truly_new:
+            if e["direction"] == "outbound":
+                outbound_by_session.setdefault(e["session_id"], []).append(e)
+
+        label = self._PLATFORM_LABELS.get(platform, platform.replace("_", " ").title())
+        created_ids: list[str] = []
+
+        for entry in inbound_entries:
+            prompt = entry["content"]
+            session_id = entry["session_id"]
+
+            # Pair with the first outbound message after this inbound in the same session
+            response: str | None = None
+            for outbound in outbound_by_session.get(session_id, []):
+                if outbound["message_index"] > entry["message_index"]:
+                    response = outbound["content"]
+                    break
+
+            title = prompt[:60] + ("…" if len(prompt) > 60 else "")
+            task = Task(
+                agent_id=agent_id,
+                title=f"{label}: {title}",
+                prompt=prompt,
+                response=response,
+                status="completed",
+                board_column="done",
+                board_order=next_board_order(),
+                board_manual=False,
+                completed_at=utcnow(),
+                metadata_json={
+                    "source": platform,
+                    "platform": platform,
+                    "gateway_source_key": entry["key"],
+                    "session_id": session_id,
+                    "native_gateway": True,
+                },
+            )
+            session.add(task)
+            await session.flush()
+            created_ids.append(task.id)
+
+        return created_ids
 
     # ------------------------------------------------------------------
     # Activity collection helpers

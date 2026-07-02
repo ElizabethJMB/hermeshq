@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from hermeshq.core.security import get_current_user, require_admin
+from hermeshq.core.security import get_current_user, is_admin, require_admin
 from hermeshq.database import get_db_session
 from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.user import User
@@ -272,9 +272,15 @@ async def get_agent_m365_scopes(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> AgentM365ScopesRead:
-    from hermeshq.models.agent import Agent
+    from hermeshq.core.security import ensure_agent_access
     from hermeshq.models.agent_assignment import AgentAssignment
     from hermeshq.services.m365_oauth import AVAILABLE_SCOPES
+
+    # Authorization: only users who already have access to this agent (assigned, or
+    # admin) may read/configure its M365 scopes. This endpoint used to auto-create an
+    # AgentAssignment for any agent_id, which let any user grant themselves access to
+    # an agent and was the entry point for cross-user M365 token theft.
+    await ensure_agent_access(db, current_user, agent_id)
     result = await db.execute(
         select(AgentAssignment).where(
             AgentAssignment.user_id == current_user.id,
@@ -282,34 +288,16 @@ async def get_agent_m365_scopes(
         )
     )
     assignment = result.scalar_one_or_none()
-    if not assignment:
-        # Auto-create assignment so users can configure M365 scopes for any agent
-        from uuid import uuid4
-
-        from hermeshq.models.agent_assignment import AgentAssignment as _AgentAssignment
-        assignment = _AgentAssignment(
-            id=str(uuid4()),
-            user_id=current_user.id,
-            agent_id=agent_id,
-            m365_allowed_scopes=None,
-        )
-        db.add(assignment)
-        await db.commit()
     token_result = await db.execute(
         select(UserM365Token).where(UserM365Token.user_id == current_user.id)
     )
     token = token_result.scalar_one_or_none()
     user_scopes = token.scopes.split() if token and token.scopes else []
-    # Get SharePoint site URL from agent integration_configs if set
-    agent = await db.get(Agent, agent_id)
-    sharepoint_site_url = None
-    if agent and isinstance((agent.integration_configs or {}).get("sharepoint"), dict):
-        sharepoint_site_url = agent.integration_configs["sharepoint"].get("site_url") or None
     return {
-        "allowed_scopes": assignment.m365_allowed_scopes,
+        "allowed_scopes": assignment.m365_allowed_scopes if assignment else None,
         "user_scopes": user_scopes,
         "available_scopes": {k: v for k, v in AVAILABLE_SCOPES.items() if k in user_scopes},
-        "sharepoint_site_url": sharepoint_site_url,
+        "sharepoint_site_url": assignment.sharepoint_site_url if assignment else None,
     }
 
 
@@ -369,48 +357,44 @@ async def update_agent_m365_scopes(
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found.")
     assignment.m365_allowed_scopes = payload.allowed_scopes
+    site_url = (payload.sharepoint_site_url or "").strip() or None
+    assignment.sharepoint_site_url = site_url
 
-    # Auto-enable delegated M365 integrations based on the scopes granted
-    agent = await db.get(Agent, agent_id)
-    if agent:
-        scopes = payload.allowed_scopes or []
-        activated_integrations = {_SCOPE_TO_INTEGRATION[s] for s in scopes if s in _SCOPE_TO_INTEGRATION}
-        current_configs = dict(agent.integration_configs or {})
-        current_skills = list(agent.skills or [])
-        current_toolsets = list(agent.enabled_toolsets or [])
-        changed = False
-        for integration_slug in activated_integrations:
-            # 1. Enable in integration_configs (preserve existing config like site_url)
-            if integration_slug not in current_configs:
-                current_configs[integration_slug] = {}
-                changed = True
-                logger.info("Auto-enabled integration '%s' for agent %s", integration_slug, agent_id)
-            # 2. Add companion skill (provides SKILL.md context)
-            skill_id = _INTEGRATION_SKILL.get(integration_slug)
-            if skill_id and skill_id not in current_skills:
-                current_skills.append(skill_id)
-                changed = True
-                logger.info("Auto-added skill '%s' to agent %s", skill_id, agent_id)
-            # 3. Add plugin to enabled_toolsets (provides actual tools)
-            plugin_id = _INTEGRATION_PLUGIN.get(integration_slug)
-            if plugin_id and plugin_id not in current_toolsets:
-                current_toolsets.append(plugin_id)
-                changed = True
-                logger.info("Auto-added toolset '%s' to agent %s", plugin_id, agent_id)
+    # Only admins may mutate shared agent properties (toolsets/skills/integration_configs).
+    # Non-admin users configure only their own scopes and SharePoint site (per-assignment).
+    agent = None
+    if is_admin(current_user):
+        agent = await db.get(Agent, agent_id)
+        if agent:
+            scopes = payload.allowed_scopes or []
+            activated_integrations = {_SCOPE_TO_INTEGRATION[s] for s in scopes if s in _SCOPE_TO_INTEGRATION}
+            current_configs = dict(agent.integration_configs or {})
+            current_skills = list(agent.skills or [])
+            current_toolsets = list(agent.enabled_toolsets or [])
+            changed = False
+            for integration_slug in activated_integrations:
+                # 1. Enable in integration_configs
+                if integration_slug not in current_configs:
+                    current_configs[integration_slug] = {}
+                    changed = True
+                    logger.info("Auto-enabled integration '%s' for agent %s", integration_slug, agent_id)
+                # 2. Add companion skill (provides SKILL.md context)
+                skill_id = _INTEGRATION_SKILL.get(integration_slug)
+                if skill_id and skill_id not in current_skills:
+                    current_skills.append(skill_id)
+                    changed = True
+                    logger.info("Auto-added skill '%s' to agent %s", skill_id, agent_id)
+                # 3. Add plugin to enabled_toolsets (provides actual tools)
+                plugin_id = _INTEGRATION_PLUGIN.get(integration_slug)
+                if plugin_id and plugin_id not in current_toolsets:
+                    current_toolsets.append(plugin_id)
+                    changed = True
+                    logger.info("Auto-added toolset '%s' to agent %s", plugin_id, agent_id)
 
-        # Save SharePoint site URL in integration_configs["sharepoint"]["site_url"]
-        site_url = (payload.sharepoint_site_url or "").strip() or None
-        if "sharepoint" in current_configs:
-            existing_cfg = current_configs["sharepoint"] if isinstance(current_configs["sharepoint"], dict) else {}
-            new_cfg = {**existing_cfg, "site_url": site_url}
-            if new_cfg != existing_cfg:
-                current_configs["sharepoint"] = new_cfg
-                changed = True
-
-        if changed:
-            agent.integration_configs = current_configs
-            agent.skills = current_skills
-            agent.enabled_toolsets = current_toolsets
+            if changed:
+                agent.integration_configs = current_configs
+                agent.skills = current_skills
+                agent.enabled_toolsets = current_toolsets
 
     await db.commit()
 
@@ -423,7 +407,7 @@ async def update_agent_m365_scopes(
 
     return {
         "allowed_scopes": assignment.m365_allowed_scopes,
-        "sharepoint_site_url": (payload.sharepoint_site_url or "").strip() or None,
+        "sharepoint_site_url": assignment.sharepoint_site_url,
     }
 
 
@@ -476,7 +460,11 @@ async def get_agent_m365_token(
     if allowed is not None:
         granted_scopes = [s for s in (granted_scopes or []) if s in allowed]
 
-    return {"access_token": access_token, "scopes": granted_scopes}
+    return {
+        "access_token": access_token,
+        "scopes": granted_scopes,
+        "sharepoint_site_url": assignment.sharepoint_site_url,
+    }
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
