@@ -240,6 +240,18 @@ class HermesRuntime:
             for key, value in fallback_override.items():
                 if value is not None:
                     payload[key] = value
+            logger.warning(
+                "Fallback payload: model=%s provider=%s base_url=%s api_key=%s",
+                payload.get("model"),
+                payload.get("provider"),
+                payload.get("base_url"),
+                (str(payload.get("api_key", ""))[:12] + "...") if payload.get("api_key") else None,
+            )
+            logger.warning(
+                "Fallback env: OPENAI_API_KEY=%s OPENAI_BASE_URL=%s",
+                (process_env.get("OPENAI_API_KEY", "")[:12] + "...") if process_env.get("OPENAI_API_KEY") else "NOT SET",
+                process_env.get("OPENAI_BASE_URL", "NOT SET"),
+            )
 
         process = await asyncio.create_subprocess_exec(
             runtime_python_bin,
