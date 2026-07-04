@@ -109,6 +109,7 @@ class HermesRuntime:
                 raise
             try:
                 fallback_api_key = await self._resolve_api_key(agent.fallback_api_key_ref)
+                fallback_provider_normalized = normalize_runtime_provider(agent.fallback_provider)
                 return await self._run_real(
                     agent,
                     task,
@@ -120,7 +121,7 @@ class HermesRuntime:
                     session_id=session_id,
                     fallback_override={
                         "model": agent.fallback_model,
-                        "provider": agent.fallback_provider,
+                        "provider": fallback_provider_normalized,
                         "base_url": agent.fallback_base_url,
                         "api_key": fallback_api_key,
                     },
@@ -260,6 +261,13 @@ class HermesRuntime:
             "Connection",
             "service unavailable",
             "internal server error",
+            "insufficient_quota",
+            "insufficient quota",
+            "quota exceeded",
+            "credits",
+            "billing",
+            "overloaded",
+            "capacity",
         )
         if any(p.lower() in raw_response.lower() for p in _PROVIDER_ERROR_PATTERNS) and len(raw_response) < 300:
             raise RuntimeExecutionError(raw_response)
@@ -359,16 +367,22 @@ class HermesRuntime:
     def _fallback_env(self, agent: Agent, fallback_api_key: str | None) -> dict[str, str]:
         """Build extra env vars for the fallback provider."""
         env: dict[str, str] = {}
-        if not agent.fallback_provider:
+        fallback_provider = normalize_runtime_provider(agent.fallback_provider)
+        if not fallback_provider:
             return env
-        provider = normalize_runtime_provider(agent.fallback_provider)
-        for env_name in self.installation_manager._provider_env_names(provider):
+        for env_name in self.installation_manager._provider_env_names(fallback_provider):
             if fallback_api_key:
                 env[env_name] = fallback_api_key
         if agent.fallback_base_url:
-            base_env = self.installation_manager._provider_base_url_env_name(provider)
+            base_env = self.installation_manager._provider_base_url_env_name(fallback_provider)
             if base_env:
                 env[base_env] = agent.fallback_base_url
+        # Override auxiliary models to use fallback credentials too,
+        # so vision/compression/web_extract don't hit the failing primary.
+        if fallback_api_key and agent.fallback_base_url:
+            for _aux_task in ("vision", "compression", "web_extract"):
+                env[f"AUXILIARY_{_aux_task.upper()}_API_KEY"] = fallback_api_key
+                env[f"AUXILIARY_{_aux_task.upper()}_BASE_URL"] = agent.fallback_base_url
         return env
 
     def _has_credentials(self, agent: Agent) -> bool:

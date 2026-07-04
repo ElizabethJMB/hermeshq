@@ -472,5 +472,131 @@ class TestBootstrapInheritance(unittest.TestCase):
         self.assertNotIn("hermeshq_pdf", current_toolsets)
 
 
+# ---------------------------------------------------------------------------
+# Test: Provider fallback — normalize_runtime_provider for all catalog slugs
+# ---------------------------------------------------------------------------
+
+class TestProviderFallbackAliases(unittest.TestCase):
+    """Verify that all provider catalog slugs resolve to their runtime_provider."""
+
+    def test_nvidia_nim_resolves_to_openai_codex(self):
+        from hermeshq.services.provider_catalog import normalize_runtime_provider
+        self.assertEqual(normalize_runtime_provider("nvidia-nim"), "openai-codex")
+
+    def test_nous_api_resolves_to_openai_codex(self):
+        from hermeshq.services.provider_catalog import normalize_runtime_provider
+        self.assertEqual(normalize_runtime_provider("nous-api"), "openai-codex")
+
+    def test_openai_api_resolves_to_openai_codex(self):
+        from hermeshq.services.provider_catalog import normalize_runtime_provider
+        self.assertEqual(normalize_runtime_provider("openai-api"), "openai-codex")
+
+    def test_openai_compatible_resolves_to_openai_codex(self):
+        from hermeshq.services.provider_catalog import normalize_runtime_provider
+        self.assertEqual(normalize_runtime_provider("openai-compatible"), "openai-codex")
+
+    def test_gemini_api_resolves_to_openai_codex(self):
+        from hermeshq.services.provider_catalog import normalize_runtime_provider
+        self.assertEqual(normalize_runtime_provider("gemini-api"), "openai-codex")
+
+    def test_anthropic_api_resolves_to_anthropic(self):
+        from hermeshq.services.provider_catalog import normalize_runtime_provider
+        self.assertEqual(normalize_runtime_provider("anthropic-api"), "anthropic")
+
+    def test_aws_bedrock_resolves_to_bedrock(self):
+        from hermeshq.services.provider_catalog import normalize_runtime_provider
+        self.assertEqual(normalize_runtime_provider("aws-bedrock"), "bedrock")
+
+    def test_zai_passthrough(self):
+        from hermeshq.services.provider_catalog import normalize_runtime_provider
+        self.assertEqual(normalize_runtime_provider("zai"), "zai")
+
+    def test_all_catalog_slugs_resolve_to_their_runtime_provider(self):
+        """Every provider in BUILTIN_PROVIDERS should normalize correctly."""
+        from hermeshq.services.provider_catalog import (
+            BUILTIN_PROVIDERS,
+            normalize_runtime_provider,
+        )
+        for p in BUILTIN_PROVIDERS:
+            slug = p["slug"]
+            rt = p.get("runtime_provider", "")
+            if not rt:
+                continue
+            normalized = normalize_runtime_provider(slug)
+            self.assertEqual(
+                normalized,
+                rt,
+                f"Provider '{slug}' normalizes to '{normalized}' but runtime_provider is '{rt}'",
+            )
+
+
+class TestProviderEnvResolution(unittest.TestCase):
+    """Verify that env vars resolve correctly after normalization."""
+
+    def test_nvidia_nim_gets_openai_env_vars(self):
+        """After normalization, nvidia-nim should get OPENAI_API_KEY env var."""
+        from hermeshq.services.hermes_installation import HermesInstallationManager
+        from hermeshq.services.provider_catalog import normalize_runtime_provider
+
+        class FakeMgr:
+            pass
+
+        rt = normalize_runtime_provider("nvidia-nim")
+        env_names = HermesInstallationManager._provider_env_names(FakeMgr(), rt)
+        self.assertIn("OPENAI_API_KEY", env_names)
+
+        base_env = HermesInstallationManager._provider_base_url_env_name(FakeMgr(), rt)
+        self.assertEqual(base_env, "OPENAI_BASE_URL")
+
+    def test_anthropic_api_gets_anthropic_env_vars(self):
+        from hermeshq.services.hermes_installation import HermesInstallationManager
+        from hermeshq.services.provider_catalog import normalize_runtime_provider
+
+        class FakeMgr:
+            pass
+
+        rt = normalize_runtime_provider("anthropic-api")
+        env_names = HermesInstallationManager._provider_env_names(FakeMgr(), rt)
+        self.assertIn("ANTHROPIC_API_KEY", env_names)
+
+
+class TestProviderErrorDetection(unittest.TestCase):
+    """Verify that provider errors (429, auth, quota) are detected correctly."""
+
+    def setUp(self):
+        self.patterns = (
+            "API call failed", "rate limit", "Rate limit", "429", "401", "403",
+            "Authentication", "timeout", "Connection", "service unavailable",
+            "internal server error", "insufficient_quota", "insufficient quota",
+            "quota exceeded", "credits", "billing", "overloaded", "capacity",
+        )
+
+    def _detect(self, text: str) -> bool:
+        return any(p.lower() in text.lower() for p in self.patterns) and len(text) < 300
+
+    def test_detects_429(self):
+        self.assertTrue(self._detect("429 Too Many Requests"))
+
+    def test_detects_rate_limit(self):
+        self.assertTrue(self._detect("Rate limit exceeded"))
+
+    def test_detects_insufficient_quota(self):
+        self.assertTrue(self._detect("insufficient_quota: quota exceeded"))
+
+    def test_detects_no_credits(self):
+        self.assertTrue(self._detect("You have insufficient credits"))
+
+    def test_detects_overloaded(self):
+        self.assertTrue(self._detect("The model is overloaded"))
+
+    def test_does_not_flag_normal_response(self):
+        self.assertFalse(self._detect("Hello! How can I help you today?"))
+
+    def test_does_not_flag_long_response_with_429(self):
+        """Long responses that happen to contain '429' should NOT be flagged."""
+        long_text = "This is a very long response. " * 50 + " The number 429 appeared."
+        self.assertFalse(self._detect(long_text))
+
+
 if __name__ == "__main__":
     unittest.main()
