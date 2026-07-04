@@ -116,6 +116,30 @@ class HermesRuntime:
             try:
                 fallback_api_key = await self._resolve_api_key(agent.fallback_api_key_ref)
                 fallback_provider_normalized = normalize_runtime_provider(agent.fallback_provider)
+
+                # ── Re-sync installation with fallback config ─────────
+                # The on-disk config.yaml and auth store have the PRIMARY
+                # provider's base_url and credentials. Hermes Agent reads
+                # these files when initialising the provider client. Without
+                # re-syncing, the fallback would hit the primary's (broken)
+                # API endpoint even though the env vars and payload have
+                # the fallback credentials.
+                _orig_provider = agent.provider
+                _orig_model = agent.model
+                _orig_api_key_ref = agent.api_key_ref
+                _orig_base_url = agent.base_url
+                agent.provider = fallback_provider_normalized
+                agent.model = agent.fallback_model
+                agent.api_key_ref = agent.fallback_api_key_ref
+                agent.base_url = agent.fallback_base_url
+                try:
+                    await self.installation_manager.sync_agent_installation(agent)
+                finally:
+                    agent.provider = _orig_provider
+                    agent.model = _orig_model
+                    agent.api_key_ref = _orig_api_key_ref
+                    agent.base_url = _orig_base_url
+
                 logger.info(
                     "Fallback resolved: provider=%s (normalized=%s), base_url=%s, api_key=%s",
                     agent.fallback_provider,
