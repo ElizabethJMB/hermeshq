@@ -133,6 +133,8 @@ class HermesRuntime:
                 agent.api_key_ref = agent.fallback_api_key_ref
                 agent.base_url = agent.fallback_base_url
                 try:
+                    from hermeshq.services.hermes_installation import _invalidate_install_cached
+                    _invalidate_install_cached(agent.id)
                     await self.installation_manager.sync_agent_installation(agent)
                 finally:
                     agent.provider = _orig_provider
