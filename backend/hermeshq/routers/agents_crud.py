@@ -300,6 +300,14 @@ async def update_agent(
         "approval_mode",
         "tool_progress_mode",
         "gateway_notifications_mode",
+        "provider",
+        "model",
+        "api_key_ref",
+        "base_url",
+        "fallback_provider",
+        "fallback_model",
+        "fallback_api_key_ref",
+        "fallback_base_url",
     }
     should_restart_gateways = bool(set(update_data).intersection(restart_gateway_fields))
     should_reset_session = runtime_profile_changed or hermes_version_changed or bool(
@@ -343,6 +351,8 @@ async def update_agent(
     gateway_supervisor = request.app.state.gateway_supervisor
 
     async def _post_save_background() -> None:
+        from hermeshq.services.hermes_installation import _invalidate_install_cached
+        _invalidate_install_cached(agent.id)
         await installation_manager.sync_agent_installation(agent)
         if should_reset_session:
             await pty_manager.destroy_session(agent_id)
