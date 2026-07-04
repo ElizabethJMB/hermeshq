@@ -2,6 +2,13 @@ from hermeshq.models.provider import ProviderDefinition
 
 PROVIDER_RUNTIME_ALIASES: dict[str, str] = {
     "openai": "openai-codex",
+    "nvidia-nim": "openai-codex",
+    "nous-api": "openai-codex",
+    "openai-api": "openai-codex",
+    "openai-compatible": "openai-codex",
+    "gemini-api": "openai-codex",
+    "anthropic-api": "anthropic",
+    "aws-bedrock": "bedrock",
 }
 
 
