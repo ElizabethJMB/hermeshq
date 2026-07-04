@@ -245,17 +245,11 @@ class HermesRuntime:
             for key, value in fallback_override.items():
                 if value is not None:
                     payload[key] = value
-            logger.warning(
-                "Fallback payload: model=%s provider=%s base_url=%s api_key=%s",
+            logger.info(
+                "Fallback payload: model=%s provider=%s base_url=%s",
                 payload.get("model"),
                 payload.get("provider"),
                 payload.get("base_url"),
-                (str(payload.get("api_key", ""))[:12] + "...") if payload.get("api_key") else None,
-            )
-            logger.warning(
-                "Fallback env: OPENAI_API_KEY=%s OPENAI_BASE_URL=%s",
-                (process_env.get("OPENAI_API_KEY", "")[:12] + "...") if process_env.get("OPENAI_API_KEY") else "NOT SET",
-                process_env.get("OPENAI_BASE_URL", "NOT SET"),
             )
 
         process = await asyncio.create_subprocess_exec(
@@ -269,6 +263,18 @@ class HermesRuntime:
         )
 
         final_result: dict | None = None
+
+        # Read stderr concurrently to prevent pipe deadlock — if the process
+        # writes a lot to stderr while we're reading stdout, the stderr pipe
+        # buffer fills up and the process blocks on stderr write, causing a
+        # deadlock (we're blocked on stdout readline, process is blocked on
+        # stderr write).
+        async def _drain_stderr() -> str:
+            if process.stderr is None:
+                return ""
+            return (await process.stderr.read()).decode("utf-8", errors="replace").strip()
+
+        stderr_task = asyncio.create_task(_drain_stderr())
 
         assert process.stdout is not None
         while True:
@@ -291,9 +297,7 @@ class HermesRuntime:
             elif event.get("event") == "error":
                 raise RuntimeExecutionError(str(event.get("error") or "Hermes runtime process failed"))
 
-        stderr_output = ""
-        if process.stderr is not None:
-            stderr_output = (await process.stderr.read()).decode("utf-8", errors="replace").strip()
+        stderr_output = await stderr_task
 
         return_code = await process.wait()
         if return_code != 0 and not final_result:
