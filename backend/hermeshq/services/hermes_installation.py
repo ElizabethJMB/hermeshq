@@ -224,6 +224,14 @@ class HermesInstallationManager:
         env = await self.build_process_env(agent, include_channels=False)
         for key, value in (await self._build_managed_env_map(agent, platform)).items():
             env[key] = value
+        # ── Inject fallback provider env vars ───────────────────────────
+        # The gateway subprocess runs its own conversation loop and needs
+        # the fallback credentials in its environment so that Hermes Agent
+        # can retry with the secondary provider on a primary failure (429,
+        # auth, timeout, etc.).
+        if agent.fallback_provider or agent.fallback_api_key_ref:
+            fallback_env = await self._build_fallback_gateway_env(agent)
+            env.update(fallback_env)
         # WhatsApp pairing requires scanning a QR code — give enough time for the
         # user to open the app and scan before the gateway times out.
         if platform == "whatsapp" or (platform is None and env.get("WHATSAPP_ENABLED") == "true"):
@@ -234,6 +242,27 @@ class HermesInstallationManager:
             resolved = await self._resolve_gateway_user_id(agent, platform)
             if resolved:
                 env["HERMESHQ_RESOLVED_USER_ID"] = resolved
+        return env
+
+    async def _build_fallback_gateway_env(self, agent: Agent) -> dict[str, str]:
+        """Build env vars for the fallback provider (used by the gateway subprocess)."""
+        env: dict[str, str] = {}
+        fallback_provider = normalize_runtime_provider(agent.fallback_provider)
+        if not fallback_provider:
+            return env
+        fallback_api_key = await self._resolve_api_key(agent.fallback_api_key_ref)
+        if fallback_api_key:
+            for env_name in self._provider_env_names(fallback_provider):
+                env[env_name] = fallback_api_key
+        if agent.fallback_base_url:
+            base_env = self._provider_base_url_env_name(fallback_provider)
+            if base_env:
+                env[base_env] = agent.fallback_base_url
+        # Expose fallback config via dedicated env vars so Hermes Agent or
+        # future retry logic can read them.
+        env["HERMESHQ_FALLBACK_MODEL"] = agent.fallback_model or ""
+        env["HERMESHQ_FALLBACK_PROVIDER"] = fallback_provider
+        env["HERMESHQ_FALLBACK_BASE_URL"] = agent.fallback_base_url or ""
         return env
 
     async def _resolve_gateway_user_id(self, agent: Agent, platform: str | None) -> str | None:
