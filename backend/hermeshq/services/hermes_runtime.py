@@ -107,9 +107,22 @@ class HermesRuntime:
             # ── Fallback provider retry ────────────────────────────────
             if not self._has_fallback(agent):
                 raise
+            logger.warning(
+                "Primary provider failed for agent %s, attempting fallback: provider=%s model=%s",
+                agent.id,
+                agent.fallback_provider,
+                agent.fallback_model,
+            )
             try:
                 fallback_api_key = await self._resolve_api_key(agent.fallback_api_key_ref)
                 fallback_provider_normalized = normalize_runtime_provider(agent.fallback_provider)
+                logger.info(
+                    "Fallback resolved: provider=%s (normalized=%s), base_url=%s, api_key=%s",
+                    agent.fallback_provider,
+                    fallback_provider_normalized,
+                    agent.fallback_base_url,
+                    (fallback_api_key[:12] + "...") if fallback_api_key else None,
+                )
                 return await self._run_real(
                     agent,
                     task,
@@ -126,7 +139,8 @@ class HermesRuntime:
                         "api_key": fallback_api_key,
                     },
                 )
-            except Exception:  # noqa: BLE001  # fallback failed — re-raise
+            except Exception:
+                logger.error("Fallback provider also failed for agent %s", agent.id, exc_info=True)
                 raise  # Fallback also failed — raise its error
         except Exception as exc:  # noqa: BLE001  # runtime execution catch-all → RuntimeExecutionError
             raise RuntimeExecutionError(str(exc)) from exc
