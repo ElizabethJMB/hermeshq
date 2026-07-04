@@ -136,6 +136,11 @@ class HermesRuntime:
                     from hermeshq.services.hermes_installation import _invalidate_install_cached
                     _invalidate_install_cached(agent.id)
                     await self.installation_manager.sync_agent_installation(agent)
+                    # Resolve the provider key AFTER re-sync — this may be
+                    # "hermeshq-openai-compatible" for custom OpenAI providers,
+                    # which is what Hermes Agent expects in the payload to
+                    # match the config.yaml providers section.
+                    fallback_provider_key = self.installation_manager._model_provider_for_agent(agent)
                 finally:
                     agent.provider = _orig_provider
                     agent.model = _orig_model
@@ -160,7 +165,7 @@ class HermesRuntime:
                     session_id=session_id,
                     fallback_override={
                         "model": agent.fallback_model,
-                        "provider": fallback_provider_normalized,
+                        "provider": fallback_provider_key,
                         "base_url": agent.fallback_base_url,
                         "api_key": fallback_api_key,
                     },
