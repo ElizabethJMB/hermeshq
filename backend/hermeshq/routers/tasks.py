@@ -1,8 +1,5 @@
 import logging
-<<<<<<< HEAD
 import os
-=======
->>>>>>> 7948d66 (Feat/delete task with attachments (#105))
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -177,7 +174,6 @@ async def delete_task(
     if workspace_manager:
         try:
             workspace: Path = workspace_manager.build_workspace_path(task.agent_id)
-<<<<<<< HEAD
             workspace_root = str(workspace.resolve())
             for att in (task.metadata_json or {}).get("attachments", []):
                 rel = att.get("path", "")
@@ -189,14 +185,6 @@ async def delete_task(
                     continue
                 if file_path.is_file():
                     file_path.unlink()
-=======
-            for att in (task.metadata_json or {}).get("attachments", []):
-                rel = att.get("path", "")
-                if rel:
-                    file_path = workspace / rel
-                    if file_path.is_file():
-                        file_path.unlink()
->>>>>>> 7948d66 (Feat/delete task with attachments (#105))
         except Exception:
             logger.warning("Could not clean up attachments for task %s", task_id, exc_info=True)
 
