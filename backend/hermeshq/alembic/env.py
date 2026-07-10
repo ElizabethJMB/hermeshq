@@ -37,6 +37,7 @@ import hermeshq.models.template  # noqa: F401, E402
 import hermeshq.models.terminal_session  # noqa: F401, E402
 import hermeshq.models.user  # noqa: F401, E402
 import hermeshq.models.user_m365_token  # noqa: F401, E402
+import hermeshq.models.public_chat  # noqa: F401, E402
 
 # --- Project imports --------------------------------------------------------
 from hermeshq.config import get_settings  # noqa: E402

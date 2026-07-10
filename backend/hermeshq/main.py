@@ -52,6 +52,10 @@ from hermeshq.routers import (
     webhooks,
 )
 from hermeshq.routers import agent_builder
+from hermeshq.routers.public_chat import management_router as public_chat_management_router
+from hermeshq.routers.public_chat import public_router as public_chat_router
+from hermeshq.routers.public_chat_test_page import router as public_chat_test_router
+from hermeshq.services.public_chat_service import PublicChatService
 from hermeshq.routers import settings as settings_router
 from hermeshq.schemas.common import HealthResponse
 from hermeshq.services.agent_identity import derive_agent_identity
@@ -303,6 +307,11 @@ async def lifespan(app: FastAPI):
     app.state.pty_manager = PTYManager(settings.pty_shell, audit_callback=log_terminal_activity)
     app.state.supervisor.pty_manager = app.state.pty_manager
     app.state.scheduler = SchedulerService(AsyncSessionLocal, app.state.supervisor.submit_task)
+    app.state.public_chat_service = PublicChatService(
+        session_factory=AsyncSessionLocal,
+        supervisor=app.state.supervisor,
+        event_broker=app.state.event_broker,
+    )
     await app.state.supervisor.bootstrap_runtime()
     await app.state.scheduler.start()
     app.state.gateway_bootstrap_task = asyncio.create_task(app.state.gateway_supervisor.bootstrap_gateways())
@@ -374,6 +383,9 @@ app.include_router(attachments.router, prefix=settings.api_prefix)
 app.include_router(m365.router, prefix=settings.api_prefix)
 app.include_router(voice.router, prefix=settings.api_prefix)
 app.include_router(agent_builder.router, prefix=settings.api_prefix)
+app.include_router(public_chat_router)
+app.include_router(public_chat_management_router, prefix=settings.api_prefix)
+app.include_router(public_chat_test_router)
 
 
 @app.get("/health", response_model=HealthResponse)
