@@ -83,8 +83,11 @@ code {
 
 
 def _check_requirements():
+    import warnings
     try:
-        import weasyprint  # noqa: F401
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            import weasyprint  # noqa: F401
         return True
     except ImportError:
         return False
@@ -96,8 +99,11 @@ def _handle_generate_pdf(args, **_kwargs):
     css_content = args.get("css_content", "")
     filename = args.get("filename", "")
 
+    import warnings
     try:
-        from weasyprint import HTML, CSS
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            from weasyprint import HTML, CSS
     except ImportError:
         return json.dumps({
             "success": False,

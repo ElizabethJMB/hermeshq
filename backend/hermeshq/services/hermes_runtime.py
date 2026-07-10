@@ -287,7 +287,7 @@ class HermesRuntime:
             try:
                 event = json.loads(text)
             except json.JSONDecodeError:
-                await stream_callback(text)
+                logger.debug("Non-JSON stdout from runner: %s", text[:200])
                 continue
 
             if event.get("event") == "delta" and event.get("data"):

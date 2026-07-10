@@ -1,10 +1,12 @@
 import asyncio
+import contextlib
 import hashlib
 import logging
 import secrets
 import time
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from urllib.parse import urlparse
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -28,6 +30,21 @@ PUBLIC_CHAT_USER_ID = "__public_chat__"
 
 def _hash_key(raw_key: str) -> str:
     return hashlib.sha256(raw_key.encode()).hexdigest()
+
+
+def _origin_allowed(origin: str | None, allowed_domains: list[str]) -> bool:
+    if not allowed_domains:
+        return True
+    if "*" in allowed_domains:
+        return True
+    if not origin:
+        return False
+    parsed = urlparse(origin)
+    host = parsed.hostname or ""
+    for domain in allowed_domains:
+        if host == domain or host.endswith("." + domain):
+            return True
+    return False
 
 
 class SimpleRateLimiter:
@@ -56,8 +73,13 @@ class PublicChatService:
         self.supervisor = supervisor
         self.event_broker = event_broker
         self.rate_limiter = SimpleRateLimiter(max_requests=10, window_seconds=60)
+        self.ip_rate_limiter = SimpleRateLimiter(max_requests=20, window_seconds=60)
+        self.session_create_limiter = SimpleRateLimiter(max_requests=5, window_seconds=60)
+        self._purge_task: asyncio.Task | None = None
 
-    async def validate_api_key(self, raw_key: str, db: AsyncSession) -> PublicChatApiKey:
+    async def validate_api_key(
+        self, raw_key: str, db: AsyncSession, *, origin: str | None = None
+    ) -> PublicChatApiKey:
         key_hash = _hash_key(raw_key)
         result = await db.execute(
             select(PublicChatApiKey).where(
@@ -68,11 +90,21 @@ class PublicChatService:
         api_key = result.scalar_one_or_none()
         if not api_key:
             raise ValueError("Invalid or inactive API key")
+        if not _origin_allowed(origin, api_key.allowed_domains):
+            raise ValueError("Origin not allowed")
         return api_key
 
     async def create_session(
-        self, api_key: PublicChatApiKey, agent_slug: str | None, db: AsyncSession
+        self,
+        api_key: PublicChatApiKey,
+        agent_slug: str | None,
+        db: AsyncSession,
+        *,
+        client_ip: str = "",
     ) -> dict:
+        if client_ip and not self.session_create_limiter.check(client_ip):
+            raise ValueError("Rate limit exceeded")
+
         agent_id = api_key.agent_id
         if agent_slug:
             result = await db.execute(
@@ -127,10 +159,18 @@ class PublicChatService:
         return session
 
     async def send_message(
-        self, session_id: str, session_token: str, content: str, db: AsyncSession
+        self,
+        session_id: str,
+        session_token: str,
+        content: str,
+        db: AsyncSession,
+        *,
+        client_ip: str = "",
     ) -> tuple[str, str]:
         """Returns (task_id, agent_id) for SSE streaming."""
         if not self.rate_limiter.check(session_id):
+            raise ValueError("Rate limit exceeded")
+        if client_ip and not self.ip_rate_limiter.check(client_ip):
             raise ValueError("Rate limit exceeded")
 
         session = await self.validate_session(session_id, session_token, db)
@@ -143,20 +183,13 @@ class PublicChatService:
         )
         db.add(user_msg)
 
-        # Build conversation history from previous messages
-        result = await db.execute(
-            select(PublicChatMessage)
-            .where(PublicChatMessage.session_id == session_id)
-            .order_by(PublicChatMessage.created_at.asc())
-        )
-        previous_messages = result.scalars().all()
-
         agent = await db.get(Agent, session.agent_id)
         if not agent or agent.status != "running":
             raise ValueError("Agent is not available")
 
         task = Task(
             agent_id=session.agent_id,
+            created_by_user_id=None,
             title="Public chat message",
             prompt=content,
             metadata_json={
@@ -223,6 +256,28 @@ class PublicChatService:
             "message_count": count,
         }
 
+    # ── Session purge loop ──
+
+    async def start_purge_loop(self) -> None:
+        self._purge_task = asyncio.create_task(self._purge_loop())
+
+    async def stop_purge_loop(self) -> None:
+        if self._purge_task:
+            self._purge_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._purge_task
+            self._purge_task = None
+
+    async def _purge_loop(self) -> None:
+        while True:
+            try:
+                count = await self.purge_expired_sessions()
+                if count:
+                    logger.info("Purged %d expired public chat sessions", count)
+            except Exception:
+                logger.exception("Public chat purge failed")
+            await asyncio.sleep(300)
+
     async def purge_expired_sessions(self) -> int:
         count = 0
         async with self.session_factory() as db:
@@ -241,8 +296,7 @@ class PublicChatService:
                     count += 1
             await db.commit()
 
-            # Delete closed/expired sessions older than 1 hour (keep transcripts)
-            cutoff = now.replace(hour=now.hour - 1) if now.hour > 0 else now
+            cutoff = now - timedelta(hours=1)
             await db.execute(
                 delete(PublicChatSession).where(
                     PublicChatSession.status.in_(["closed", "expired"]),

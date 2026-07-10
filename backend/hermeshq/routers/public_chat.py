@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from hermeshq.core.security import get_current_user
+from hermeshq.core.security import get_current_user, require_admin
 from hermeshq.database import get_db_session
 from hermeshq.models.user import User
 from hermeshq.schemas.public_chat import (
@@ -24,7 +24,7 @@ from hermeshq.schemas.public_chat import (
 logger = logging.getLogger(__name__)
 
 public_router = APIRouter(prefix="/api/public/chat", tags=["public-chat"])
-management_router = APIRouter(prefix="/api/settings/public-chat-keys", tags=["public-chat-management"])
+management_router = APIRouter(prefix="/settings/public-chat-keys", tags=["public-chat-management"])
 
 
 def _get_service(request: Request):
@@ -42,14 +42,18 @@ async def create_session(
     db: AsyncSession = Depends(get_db_session),
 ):
     service = _get_service(request)
+    origin = request.headers.get("origin")
+    client_ip = request.client.host if request.client else ""
     try:
-        api_key = await service.validate_api_key(x_api_key, db)
+        api_key = await service.validate_api_key(x_api_key, db, origin=origin)
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
     try:
-        result = await service.create_session(api_key, payload.agent_slug, db)
+        result = await service.create_session(
+            api_key, payload.agent_slug, db, client_ip=client_ip
+        )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=429 if "Rate limit" in str(e) else 400, detail=str(e))
     return result
 
 
@@ -62,12 +66,14 @@ async def send_message(
     db: AsyncSession = Depends(get_db_session),
 ):
     service = _get_service(request)
+    client_ip = request.client.host if request.client else ""
     try:
         task_id, agent_id = await service.send_message(
-            session_id, x_session_token, payload.content, db
+            session_id, x_session_token, payload.content, db, client_ip=client_ip
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        status = 429 if "Rate limit" in str(e) else 400
+        raise HTTPException(status_code=status, detail=str(e))
 
     async def sse_stream():
         broker = request.app.state.event_broker
@@ -83,7 +89,9 @@ async def send_message(
             elif event_type == "task.completed":
                 await queue.put(("done", event.get("response", "")))
             elif event_type == "task.failed":
-                await queue.put(("error", event.get("error", "Unknown error")))
+                raw_error = event.get("error", "Unknown error")
+                logger.error("Public chat task %s failed: %s", task_id, raw_error)
+                await queue.put(("error", "The agent encountered an error processing your message."))
 
         broker.subscribe(event_handler)
         try:
@@ -144,14 +152,14 @@ async def session_status(
     return result
 
 
-# ── Management endpoints (JWT auth) ──
+# ── Management endpoints (admin-only JWT auth) ──
 
 
 @management_router.post("", response_model=ApiKeyCreatedResponse)
 async def create_api_key(
     payload: CreateApiKeyRequest,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
 ):
     service = _get_service(request)
@@ -172,7 +180,7 @@ async def create_api_key(
 @management_router.get("", response_model=list[ApiKeyRead])
 async def list_api_keys(
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
 ):
     service = _get_service(request)
@@ -183,7 +191,7 @@ async def list_api_keys(
 async def delete_api_key(
     key_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
 ):
     service = _get_service(request)
@@ -198,7 +206,7 @@ async def delete_api_key(
 async def list_transcripts(
     key_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
 ):
     service = _get_service(request)

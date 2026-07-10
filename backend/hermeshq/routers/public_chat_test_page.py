@@ -12,284 +12,105 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 <title>Public Chat Widget — Test</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; color: #333; padding: 40px; }
-  h1 { margin-bottom: 8px; }
-  .subtitle { color: #666; margin-bottom: 32px; }
-  .config-panel {
-    background: white; border-radius: 8px; padding: 20px; margin-bottom: 24px;
-    box-shadow: 0 1px 3px rgba(0,0,0,.1); max-width: 500px;
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #f0f2f5; color: #333;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 20px;
   }
-  .config-panel label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 14px; }
-  .config-panel input { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
-  .config-panel button { background: #0066ff; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; }
-  .config-panel button:hover { background: #0052cc; }
-  .config-panel button:disabled { background: #ccc; cursor: default; }
-
-  /* Chat widget */
-  #chat-widget {
-    position: fixed; bottom: 20px; right: 20px; width: 380px; height: 560px;
-    background: white; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,.15);
-    display: none; flex-direction: column; overflow: hidden; z-index: 9999;
+  .card {
+    background: #fff; border-radius: 16px; padding: 32px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.08); max-width: 480px; width: 100%;
   }
-  #chat-widget.open { display: flex; }
-  #chat-header {
-    background: #0066ff; color: white; padding: 16px 20px;
-    display: flex; justify-content: space-between; align-items: center;
-    font-weight: 600; font-size: 15px;
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .subtitle { color: #888; font-size: 14px; margin-bottom: 24px; }
+  label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px; color: #555; }
+  input {
+    width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 10px;
+    margin-bottom: 16px; font-size: 14px; outline: none; transition: border .2s;
   }
-  #chat-header button { background: none; border: none; color: white; font-size: 20px; cursor: pointer; padding: 0 4px; }
-  #chat-messages {
-    flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px;
+  input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+  .row { display: flex; gap: 12px; margin-bottom: 16px; }
+  .row input { margin-bottom: 0; }
+  select {
+    width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 10px;
+    font-size: 14px; outline: none; background: #fff; cursor: pointer;
   }
-  .msg {
-    max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 14px;
-    line-height: 1.5; word-wrap: break-word; white-space: pre-wrap;
+  button {
+    width: 100%; padding: 12px; background: #6366f1; color: #fff; border: none;
+    border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer;
+    transition: background .2s;
   }
-  .msg-user { align-self: flex-end; background: #0066ff; color: white; border-bottom-right-radius: 4px; }
-  .msg-assistant { align-self: flex-start; background: #f0f0f0; color: #333; border-bottom-left-radius: 4px; }
-  .msg-system { align-self: center; background: #fff3cd; color: #856404; font-size: 12px; border-radius: 8px; }
-  #chat-input-area {
-    padding: 12px 16px; border-top: 1px solid #eee; display: flex; gap: 8px;
+  button:hover { background: #4f46e5; }
+  button:disabled { background: #ccc; cursor: default; }
+  .status {
+    margin-top: 16px; padding: 10px 14px; border-radius: 10px;
+    font-size: 13px; display: none; text-align: center;
   }
-  #msg-input {
-    flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 20px;
-    font-size: 14px; outline: none;
-  }
-  #msg-input:focus { border-color: #0066ff; }
-  #send-btn {
-    background: #0066ff; color: white; border: none; width: 40px; height: 40px;
-    border-radius: 50%; cursor: pointer; font-size: 18px; display: flex;
-    align-items: center; justify-content: center;
-  }
-  #send-btn:disabled { background: #ccc; }
-
-  /* FAB */
-  #chat-fab {
-    position: fixed; bottom: 20px; right: 20px; width: 56px; height: 56px;
-    background: #0066ff; border-radius: 50%; border: none; color: white;
-    font-size: 24px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,102,255,.4);
-    z-index: 9998; display: none; align-items: center; justify-content: center;
-  }
-  #chat-fab.visible { display: flex; }
-
-  #status-bar {
-    background: #e8f5e9; padding: 8px 16px; font-size: 12px; color: #2e7d32;
-    border-top: 1px solid #c8e6c9; text-align: center; display: none;
-  }
-  #status-bar.visible { display: block; }
-  #status-bar.error { background: #ffebee; color: #c62828; border-color: #ef9a9a; }
+  .status.visible { display: block; }
+  .status.ok { background: #ecfdf5; color: #065f46; }
+  .status.err { background: #fef2f2; color: #991b1b; }
 </style>
 </head>
 <body>
+<div class="card">
+  <h1>Public Chat Widget</h1>
+  <p class="subtitle">Test the embeddable chat widget.</p>
 
-<h1>Public Chat Widget Test</h1>
-<p class="subtitle">Simula un sitio web del cliente con el widget embebido.</p>
+  <label for="key">API Key</label>
+  <input type="text" id="key" placeholder="pk_live_...">
 
-<div class="config-panel">
-  <label>API Key</label>
-  <input type="text" id="api-key-input" placeholder="pk_live_...">
-  <label>Base URL (opcional)</label>
-  <input type="text" id="base-url-input" placeholder="Deja vacío para usar esta misma URL">
-  <button id="init-btn" onclick="initWidget()">Iniciar widget</button>
-</div>
-
-<button id="chat-fab" onclick="openChat()">💬</button>
-
-<div id="chat-widget">
-  <div id="chat-header">
-    <span id="agent-name">Agente</span>
-    <div>
-      <button onclick="clearChat()" title="Limpiar">🗑</button>
-      <button onclick="closeChat()" title="Cerrar">✕</button>
+  <div class="row">
+    <div style="flex:1">
+      <label for="theme">Theme</label>
+      <select id="theme">
+        <option value="auto">Auto (system)</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+    <div style="flex:1">
+      <label for="accent">Accent color</label>
+      <input type="color" id="accent" value="#6366f1" style="height:42px;padding:4px;">
     </div>
   </div>
-  <div id="chat-messages"></div>
-  <div id="status-bar"></div>
-  <div id="chat-input-area">
-    <input type="text" id="msg-input" placeholder="Escribe un mensaje..." onkeydown="if(event.key==='Enter')sendMessage()">
-    <button id="send-btn" onclick="sendMessage()">➤</button>
-  </div>
+
+  <label for="title">Widget title (optional)</label>
+  <input type="text" id="title" placeholder="My AI Assistant">
+
+  <button id="load-btn">Load Widget</button>
+  <div class="status" id="status"></div>
 </div>
 
 <script>
-let API_KEY = '';
-let BASE = '';
-let sessionId = null;
-let sessionToken = null;
-let inactivityTimer = null;
-let sending = false;
+document.getElementById('load-btn').addEventListener('click', function() {
+  var key = document.getElementById('key').value.trim();
+  if (!key) { showStatus('Enter an API key.', true); return; }
 
-function initWidget() {
-  API_KEY = document.getElementById('api-key-input').value.trim();
-  BASE = document.getElementById('base-url-input').value.trim() || window.location.origin;
-  if (!API_KEY) { alert('Ingresa un API Key'); return; }
-  document.getElementById('chat-fab').classList.add('visible');
-  document.getElementById('init-btn').disabled = true;
-  showStatus('Widget listo. Haz click en el botón azul.');
+  var existing = document.getElementById('hermeshq-widget-script');
+  if (existing) existing.remove();
+  var host = document.getElementById('hermeshq-chat-widget');
+  if (host) host.remove();
+
+  var s = document.createElement('script');
+  s.id = 'hermeshq-widget-script';
+  s.src = '/api/public/chat/widget.js';
+  s.setAttribute('data-api-key', key);
+  s.setAttribute('data-theme', document.getElementById('theme').value);
+  s.setAttribute('data-accent-color', document.getElementById('accent').value);
+  var title = document.getElementById('title').value.trim();
+  if (title) s.setAttribute('data-title', title);
+  document.body.appendChild(s);
+
+  this.disabled = true;
+  showStatus('Widget loaded. Click the chat bubble.', false);
+});
+
+function showStatus(msg, isErr) {
+  var el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status visible ' + (isErr ? 'err' : 'ok');
 }
-
-async function openChat() {
-  document.getElementById('chat-fab').classList.remove('visible');
-  document.getElementById('chat-widget').classList.add('open');
-  if (!sessionId) await createSession();
-}
-
-function closeChat() {
-  destroySession();
-  document.getElementById('chat-widget').classList.remove('open');
-  document.getElementById('chat-fab').classList.add('visible');
-}
-
-function clearChat() {
-  destroySession();
-  createSession();
-}
-
-async function createSession() {
-  try {
-    const res = await fetch(BASE + '/api/public/chat/sessions', {
-      method: 'POST',
-      headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({})
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      showStatus('Error: ' + (err.detail || res.statusText), true);
-      return;
-    }
-    const data = await res.json();
-    sessionId = data.session_id;
-    sessionToken = data.session_token;
-    document.getElementById('agent-name').textContent = data.agent_name;
-    document.getElementById('chat-messages').innerHTML = '';
-    appendMessage('system', 'Sesión iniciada. Escribe un mensaje.');
-    resetInactivityTimer();
-    showStatus('Conectado — sesión ' + sessionId.slice(0, 8) + '...');
-  } catch (e) {
-    showStatus('Error de conexión: ' + e.message, true);
-  }
-}
-
-async function sendMessage() {
-  if (sending) return;
-  const input = document.getElementById('msg-input');
-  const content = input.value.trim();
-  if (!content || !sessionId) return;
-
-  input.value = '';
-  appendMessage('user', content);
-  resetInactivityTimer();
-  sending = true;
-  document.getElementById('send-btn').disabled = true;
-
-  try {
-    const res = await fetch(BASE + '/api/public/chat/sessions/' + sessionId + '/messages', {
-      method: 'POST',
-      headers: {
-        'X-Session-Token': sessionToken,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ content })
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      appendMessage('system', 'Error: ' + (err.detail || res.statusText));
-      return;
-    }
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let assistantContent = '';
-    const msgEl = appendMessage('assistant', '');
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split('\\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        try {
-          const data = JSON.parse(line.slice(6));
-          if (data.type === 'stream') {
-            assistantContent += data.content;
-            msgEl.textContent = assistantContent;
-            scrollToBottom();
-          } else if (data.type === 'done') {
-            if (!assistantContent && data.content) {
-              assistantContent = data.content;
-              msgEl.textContent = assistantContent;
-            }
-          } else if (data.type === 'error') {
-            appendMessage('system', 'Error del agente: ' + data.content);
-          } else if (data.type === 'timeout') {
-            appendMessage('system', 'Timeout — el agente no respondió a tiempo.');
-          }
-        } catch (e) { /* ignore parse errors on partial chunks */ }
-      }
-    }
-
-    if (!assistantContent) {
-      msgEl.textContent = '(sin respuesta)';
-    }
-  } catch (e) {
-    appendMessage('system', 'Error: ' + e.message);
-  } finally {
-    sending = false;
-    document.getElementById('send-btn').disabled = false;
-    resetInactivityTimer();
-  }
-}
-
-function destroySession() {
-  if (sessionId && sessionToken) {
-    const body = JSON.stringify({ session_token: sessionToken });
-    navigator.sendBeacon(
-      BASE + '/api/public/chat/sessions/' + sessionId + '/close',
-      new Blob([body], { type: 'application/json' })
-    );
-  }
-  sessionId = null;
-  sessionToken = null;
-  clearTimeout(inactivityTimer);
-  document.getElementById('chat-messages').innerHTML = '';
-  showStatus('Sesión destruida.');
-}
-
-function resetInactivityTimer() {
-  clearTimeout(inactivityTimer);
-  inactivityTimer = setTimeout(() => {
-    appendMessage('system', 'Sesión cerrada por inactividad (5 min).');
-    destroySession();
-  }, 5 * 60 * 1000);
-}
-
-function appendMessage(role, content) {
-  const el = document.createElement('div');
-  el.className = 'msg msg-' + role;
-  el.textContent = content;
-  document.getElementById('chat-messages').appendChild(el);
-  scrollToBottom();
-  return el;
-}
-
-function scrollToBottom() {
-  const container = document.getElementById('chat-messages');
-  container.scrollTop = container.scrollHeight;
-}
-
-function showStatus(text, isError) {
-  const bar = document.getElementById('status-bar');
-  bar.textContent = text;
-  bar.className = 'visible' + (isError ? ' error' : '');
-}
-
-window.addEventListener('beforeunload', destroySession);
 </script>
 </body>
 </html>"""

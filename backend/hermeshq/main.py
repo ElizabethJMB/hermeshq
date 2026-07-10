@@ -55,6 +55,7 @@ from hermeshq.routers import agent_builder
 from hermeshq.routers.public_chat import management_router as public_chat_management_router
 from hermeshq.routers.public_chat import public_router as public_chat_router
 from hermeshq.routers.public_chat_test_page import router as public_chat_test_router
+from hermeshq.routers.public_chat_widget import router as public_chat_widget_router
 from hermeshq.services.public_chat_service import PublicChatService
 from hermeshq.routers import settings as settings_router
 from hermeshq.schemas.common import HealthResponse
@@ -312,6 +313,7 @@ async def lifespan(app: FastAPI):
         supervisor=app.state.supervisor,
         event_broker=app.state.event_broker,
     )
+    await app.state.public_chat_service.start_purge_loop()
     await app.state.supervisor.bootstrap_runtime()
     await app.state.scheduler.start()
     app.state.gateway_bootstrap_task = asyncio.create_task(app.state.gateway_supervisor.bootstrap_gateways())
@@ -327,6 +329,7 @@ async def lifespan(app: FastAPI):
         enterprise_bootstrap_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await enterprise_bootstrap_task
+    await app.state.public_chat_service.stop_purge_loop()
     await app.state.scheduler.stop()
     await app.state.gateway_supervisor.shutdown()
     await app.state.enterprise_gateways.shutdown()
@@ -346,7 +349,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin", "X-Api-Key", "X-Session-Token"],
 )
 
 app.include_router(auth.router, prefix=settings.api_prefix)
@@ -385,6 +388,7 @@ app.include_router(voice.router, prefix=settings.api_prefix)
 app.include_router(agent_builder.router, prefix=settings.api_prefix)
 app.include_router(public_chat_router)
 app.include_router(public_chat_management_router, prefix=settings.api_prefix)
+app.include_router(public_chat_widget_router)
 app.include_router(public_chat_test_router)
 
 
