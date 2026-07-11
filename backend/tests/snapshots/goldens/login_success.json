@@ -1,0 +1,9 @@
+{
+  "body": {
+    "access_token": "<jwt>",
+    "expires_at": "<datetime>",
+    "token_type": "bearer"
+  },
+  "set_cookie": "hermeshq_token=<jwt>; HttpOnly; Max-Age=43200; Path=/; SameSite=lax",
+  "status": 200
+}

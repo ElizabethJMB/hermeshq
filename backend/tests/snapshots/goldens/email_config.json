@@ -1,0 +1,9 @@
+{
+  "body": {
+    "configured": false,
+    "from_email": "HermesHQ <noreply@resend.dev>",
+    "from_name": "HermesHQ",
+    "public_base_url": "http://localhost:3420"
+  },
+  "status": 200
+}

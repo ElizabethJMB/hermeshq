@@ -1,0 +1,6 @@
+{
+  "body": {
+    "detail": "Too many login attempts. Please try again later."
+  },
+  "status": 429
+}

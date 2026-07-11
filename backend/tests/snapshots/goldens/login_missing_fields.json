@@ -1,0 +1,18 @@
+{
+  "body": {
+    "detail": [
+      {
+        "input": {
+          "username": "admin"
+        },
+        "loc": [
+          "body",
+          "password"
+        ],
+        "msg": "Field required",
+        "type": "missing"
+      }
+    ]
+  },
+  "status": 422
+}

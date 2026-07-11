@@ -1,0 +1,16 @@
+{
+  "body": {
+    "auth_source": "local",
+    "avatar_url": null,
+    "display_name": "Hermes Operator",
+    "email": null,
+    "has_avatar": false,
+    "id": "<uuid>",
+    "is_active": true,
+    "locale_preference": "default",
+    "role": "admin",
+    "theme_preference": "default",
+    "username": "admin"
+  },
+  "status": 200
+}

@@ -1,0 +1,22 @@
+{
+  "body": {
+    "auth_mode": "local",
+    "local_login_enabled": true,
+    "oidc_enabled": false,
+    "providers": [
+      {
+        "enabled": false,
+        "kind": "oidc",
+        "name": "Google",
+        "slug": "google"
+      },
+      {
+        "enabled": false,
+        "kind": "oidc",
+        "name": "Microsoft",
+        "slug": "microsoft"
+      }
+    ]
+  },
+  "status": 200
+}

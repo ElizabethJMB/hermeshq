@@ -1,0 +1,5 @@
+{
+  "body": null,
+  "set_cookie": "hermeshq_token=<jwt>; HttpOnly; Max-Age=0; Path=/; SameSite=lax",
+  "status": 204
+}
