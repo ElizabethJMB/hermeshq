@@ -106,23 +106,16 @@ class PublicChatService:
             raise ValueError("Rate limit exceeded")
 
         agent_id = api_key.agent_id
-        if agent_slug:
-            result = await db.execute(
-                select(Agent).where(Agent.slug == agent_slug, Agent.is_archived.is_(False))
-            )
-            agent = result.scalar_one_or_none()
-            if agent:
-                agent_id = agent.id
-
         agent = await db.get(Agent, agent_id)
         if not agent:
             raise ValueError("Agent not found")
 
-        session_token = secrets.token_urlsafe(48)
+        raw_session_token = secrets.token_urlsafe(48)
+        session_token_hash = _hash_key(raw_session_token)
         chat_session = PublicChatSession(
             api_key_id=api_key.id,
             agent_id=agent_id,
-            session_token=session_token,
+            session_token=session_token_hash,
             ttl_minutes=10,
         )
         db.add(chat_session)
@@ -131,17 +124,18 @@ class PublicChatService:
 
         return {
             "session_id": chat_session.id,
-            "session_token": session_token,
+            "session_token": raw_session_token,
             "agent_name": agent.friendly_name or agent.name,
         }
 
     async def validate_session(
         self, session_id: str, session_token: str, db: AsyncSession
     ) -> PublicChatSession:
+        token_hash = _hash_key(session_token)
         result = await db.execute(
             select(PublicChatSession).where(
                 PublicChatSession.id == session_id,
-                PublicChatSession.session_token == session_token,
+                PublicChatSession.session_token == token_hash,
                 PublicChatSession.status == "active",
             )
         )
@@ -157,6 +151,25 @@ class PublicChatService:
             raise ValueError("Session expired")
 
         return session
+
+    async def _check_monthly_quota(
+        self, api_key_id: str, requests_per_month: int, db: AsyncSession,
+    ) -> None:
+        first_of_month = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        result = await db.execute(
+            select(func.count()).where(
+                PublicChatMessage.role == "user",
+                PublicChatMessage.session_id.in_(
+                    select(PublicChatSession.id).where(
+                        PublicChatSession.api_key_id == api_key_id,
+                        PublicChatSession.created_at >= first_of_month,
+                    )
+                ),
+            )
+        )
+        count = result.scalar() or 0
+        if count >= requests_per_month:
+            raise ValueError("Monthly request quota exceeded")
 
     async def send_message(
         self,
@@ -174,6 +187,10 @@ class PublicChatService:
             raise ValueError("Rate limit exceeded")
 
         session = await self.validate_session(session_id, session_token, db)
+
+        api_key = await db.get(PublicChatApiKey, session.api_key_id)
+        if api_key:
+            await self._check_monthly_quota(api_key.id, api_key.requests_per_month, db)
         session.last_activity = utcnow()
 
         user_msg = PublicChatMessage(
@@ -225,10 +242,11 @@ class PublicChatService:
     async def close_session(
         self, session_id: str, session_token: str, db: AsyncSession
     ) -> None:
+        token_hash = _hash_key(session_token)
         result = await db.execute(
             select(PublicChatSession).where(
                 PublicChatSession.id == session_id,
-                PublicChatSession.session_token == session_token,
+                PublicChatSession.session_token == token_hash,
             )
         )
         session = result.scalar_one_or_none()
@@ -375,7 +393,7 @@ class PublicChatService:
         api_key = await db.get(PublicChatApiKey, key_id)
         if not api_key:
             raise ValueError("API key not found")
-        update_data = payload.model_dump(exclude_unset=True)
+        update_data = payload.safe_update_dict()
         for field, value in update_data.items():
             setattr(api_key, field, value)
         await db.commit()

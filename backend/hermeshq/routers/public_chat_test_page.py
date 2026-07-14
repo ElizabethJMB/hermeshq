@@ -1,6 +1,9 @@
-"""Test page for the public chat widget. NOT for production use."""
-from fastapi import APIRouter
+"""Test page for the public chat widget. Admin-only."""
+from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
+
+from hermeshq.core.security import require_admin
+from hermeshq.models.user import User
 
 router = APIRouter(tags=["public-chat-test"])
 
@@ -117,5 +120,5 @@ function showStatus(msg, isErr) {
 
 
 @router.get("/public-chat-test")
-async def test_page():
+async def test_page(current_user: User = Depends(require_admin)):
     return HTMLResponse(content=TEST_PAGE_HTML)
