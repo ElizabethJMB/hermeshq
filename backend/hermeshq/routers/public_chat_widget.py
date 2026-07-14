@@ -54,8 +54,8 @@ var CSS = (function(){
 .hq-fab svg { width: 26px; height: 26px; fill: currentColor; }\
 \
 .hq-widget {\
-  position: fixed; bottom: 84px; ' + posChat + ' width: 380px; max-width: calc(100vw - 32px);\
-  height: 520px; max-height: calc(100vh - 104px); border-radius: 16px;\
+  position: fixed; bottom: 20px; ' + posChat + ' width: 380px; max-width: calc(100vw - 32px);\
+  height: 520px; max-height: calc(100vh - 40px); border-radius: 16px;\
   display: flex; flex-direction: column; overflow: hidden; z-index: 2147483647;\
   opacity: 0; pointer-events: none;\
   transform: translateY(12px) scale(.96);\
