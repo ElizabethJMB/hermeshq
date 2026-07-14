@@ -159,6 +159,8 @@ const ns: Record<string, string> = {
   "settings.noProviders": "No hay proveedores configurados.",
   "settings.editProvider": "Editar proveedor",
   "settings.newProvider": "Nuevo proveedor",
+  "settings.tabPublicChatKeys": "Chat público",
+  "settings.tabPublicChatKeysCopy": "Crea y administra API keys para el widget de chat embebible que permite a visitantes anónimos interactuar con tus agentes.",
 };
 
 export default ns;

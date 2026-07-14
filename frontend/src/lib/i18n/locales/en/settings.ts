@@ -159,6 +159,8 @@ const ns: Record<string, string> = {
   "settings.noProviders": "No providers configured.",
   "settings.editProvider": "Edit provider",
   "settings.newProvider": "New provider",
+  "settings.tabPublicChatKeys": "Public chat",
+  "settings.tabPublicChatKeysCopy": "Create and manage API keys for the embeddable chat widget that lets anonymous visitors interact with your agents.",
 };
 
 export default ns;

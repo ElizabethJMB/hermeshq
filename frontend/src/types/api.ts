@@ -80,6 +80,25 @@ export interface McpAccessTokenCreateResult {
   access: McpAccessToken;
 }
 
+export interface PublicChatApiKey {
+  id: string;
+  key_prefix: string;
+  label: string;
+  agent_id: string;
+  allowed_domains: string[];
+  requests_per_month: number;
+  tokens_per_month: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface PublicChatApiKeyCreated {
+  id: string;
+  raw_key: string;
+  key_prefix: string;
+  label: string;
+}
+
 export interface Secret {
   id: string;
   name: string;

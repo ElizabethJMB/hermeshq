@@ -35,6 +35,11 @@ import {
   useRevokeMcpAccessToken,
   useUpdateMcpAccessToken,
 } from "../api/mcpAccess";
+import {
+  useCreatePublicChatKey,
+  useDeletePublicChatKey,
+  usePublicChatKeys,
+} from "../api/publicChatKeys";
 import { useProviders, useUpdateProvider } from "../api/providers";
 import { useRuntimeCapabilityOverview } from "../api/runtimeProfiles";
 import { useCreateSecret, useSecrets } from "../api/secrets";
@@ -64,14 +69,15 @@ const AuthenticationTab = lazy(() => import("../components/settings/Authenticati
 const EmailTab = lazy(() => import("../components/settings/EmailTab").then((m) => ({ default: m.EmailTab })));
 const ResourcesTab = lazy(() => import("../components/settings/ResourcesTab"));
 const M365Tab = lazy(() => import("../components/settings/M365Tab").then((m) => ({ default: m.default })));
+const PublicChatKeysTab = lazy(() => import("../components/settings/PublicChatKeysTab").then((m) => ({ default: m.default })));
 
-type SettingsTab = "general" | "runtime" | "providers" | "integrations" | "factory" | "externalAccess" | "hermesVersions" | "secrets" | "templates" | "authentication" | "email" | "resources" | "m365";
+type SettingsTab = "general" | "runtime" | "providers" | "integrations" | "factory" | "externalAccess" | "hermesVersions" | "secrets" | "templates" | "authentication" | "email" | "resources" | "m365" | "publicChatKeys";
 
 const SETTINGS_TAB_STORAGE_KEY = "hermeshq.settings.activeTab";
 
 const ALL_TABS: SettingsTab[] = [
   "general", "runtime", "providers", "integrations",
-  "factory", "externalAccess", "hermesVersions", "secrets", "templates", "authentication", "email", "resources", "m365",
+  "factory", "externalAccess", "hermesVersions", "secrets", "templates", "authentication", "email", "resources", "m365", "publicChatKeys",
 ];
 
 function LoadingFallback() {
@@ -94,6 +100,7 @@ export function SettingsPage() {
   const { data: integrationPackages } = useIntegrationPackages(isAdmin);
   const { data: integrationDrafts } = useIntegrationDrafts(isAdmin);
   const { data: mcpAccessTokens } = useMcpAccessTokens(isAdmin);
+  const { data: publicChatKeys } = usePublicChatKeys(isAdmin);
   const { data: templates } = useTemplates(isAdmin);
   const { data: settings } = useSettings(isAdmin);
 
@@ -124,6 +131,8 @@ export function SettingsPage() {
   const createMcpAccessToken = useCreateMcpAccessToken();
   const updateMcpAccessToken = useUpdateMcpAccessToken();
   const revokeMcpAccessToken = useRevokeMcpAccessToken();
+  const createPublicChatKey = useCreatePublicChatKey();
+  const deletePublicChatKey = useDeletePublicChatKey();
 
   /* ─── Tab state ─── */
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
@@ -166,6 +175,7 @@ export function SettingsPage() {
     { id: "email", label: t("settings.tabEmail"), copy: t("settings.tabEmailCopy") },
     { id: "resources", label: t("settings.tabResources"), copy: t("settings.tabResourcesCopy") },
     { id: "m365", label: t("settings.tabM365"), copy: t("settings.tabM365Copy") },
+    { id: "publicChatKeys", label: t("settings.tabPublicChatKeys"), copy: t("settings.tabPublicChatKeysCopy") },
   ];
 
   const activeTabMeta = settingsTabs.find((tab) => tab.id === activeTab) ?? settingsTabs[0];
@@ -287,6 +297,14 @@ export function SettingsPage() {
           )}
           {activeTab === "m365" && isAdmin && (
             <M365Tab />
+          )}
+          {activeTab === "publicChatKeys" && isAdmin && (
+            <PublicChatKeysTab
+              agents={agents}
+              publicChatKeys={publicChatKeys}
+              createPublicChatKey={createPublicChatKey}
+              deletePublicChatKey={deletePublicChatKey}
+            />
           )}
         </Suspense>
       </div>
