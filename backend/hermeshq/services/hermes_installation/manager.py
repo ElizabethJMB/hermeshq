@@ -1,10 +1,8 @@
 import json
 import logging
-import os
 import re
 import shutil
 import stat
-import time
 from pathlib import Path
 
 import yaml
@@ -33,17 +31,14 @@ from hermeshq.services.provider_catalog import normalize_runtime_provider
 from hermeshq.services.runtime_profiles import get_runtime_profile
 from hermeshq.services.secret_vault import SecretVault
 
-logger = logging.getLogger(__name__)
-
-# Keys from os.environ that should NEVER leak into agent subprocesses.
-_SENSITIVE_ENV_PREFIXES = (
-    "AWS_", "GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CREDENTIALS",
-    "KUBECONFIG", "DOCKER_", "GITHUB_TOKEN", "GITLAB_TOKEN",
-    "HEROKU_API_KEY", "STRIPE_", "TWILIO_", "SENDGRID_",
-    "DATABASE_URL", "REDIS_URL", "RABBITMQ_", "KAFKA_",
-    "LDAP_", "VAULT_TOKEN", "VAULT_ADDR",
-    "HERMESHQ_",  # our own internal secrets
+from .cache import (
+    _get_install_cached,
+    _invalidate_install_cached,
+    _set_install_cached,
 )
+from .gateway_env import build_safe_env
+
+logger = logging.getLogger(__name__)
 
 
 def _protect_file(path: Path) -> None:
@@ -54,46 +49,13 @@ def _protect_file(path: Path) -> None:
         logger.warning("Could not set restrictive permissions on %s", path)
 
 
-def _build_safe_env() -> dict[str, str]:
-    """Build a sanitized copy of os.environ with sensitive keys removed."""
-    safe: dict[str, str] = {}
-    for key, value in os.environ.items():
-        if any(key.upper().startswith(prefix) for prefix in _SENSITIVE_ENV_PREFIXES):
-            continue
-        safe[key] = value
-    return safe
-
-
-# ---------------------------------------------------------------------------
-# In-memory cache for sync_agent_installation results (avoids redundant
-# disk I/O + DB queries when the same agent is checked repeatedly).
-# ---------------------------------------------------------------------------
-_INSTALL_CACHE: dict[str, tuple[float, list[dict]]] = {}
-_INSTALL_CACHE_TTL = 60  # seconds
-
-
-def _get_install_cached(agent_id: str) -> list[dict] | None:
-    entry = _INSTALL_CACHE.get(agent_id)
-    if entry and (time.monotonic() - entry[0]) < _INSTALL_CACHE_TTL:
-        return entry[1]
-    return None
-
-
-def _set_install_cached(agent_id: str, result: list[dict]) -> None:
-    _INSTALL_CACHE[agent_id] = (time.monotonic(), result)
-
-
-def _invalidate_install_cached(agent_id: str) -> None:
-    _INSTALL_CACHE.pop(agent_id, None)
-
-
 class HermesInstallationError(RuntimeError):
     pass
 
 
 class HermesInstallationManager:
     _DESC_RE = re.compile(r"^\s*description:\s*(.+?)\s*$", re.MULTILINE)
-    _WHATSAPP_BRIDGE_SOURCE = Path(__file__).resolve().parents[1] / "assets" / "whatsapp-bridge"
+    _WHATSAPP_BRIDGE_SOURCE = Path(__file__).resolve().parents[2] / "assets" / "whatsapp-bridge"
     _CUSTOM_OPENAI_PROVIDER_KEY = "hermeshq-openai-compatible"
     _CUSTOM_OPENAI_PROVIDER_NAME = "HermesHQ OpenAI-compatible"
     _VOICE_PRESET_DEFAULTS = {
@@ -121,7 +83,7 @@ class HermesInstallationManager:
         path = Path(workspace_path)
         if path.is_absolute():
             return path
-        project_root = Path(__file__).resolve().parents[2]
+        project_root = Path(__file__).resolve().parents[3]
         return (project_root / path).resolve()
 
     def build_hermes_home(self, workspace_path: str) -> Path:
@@ -160,7 +122,7 @@ class HermesInstallationManager:
         profile = get_runtime_profile(agent.runtime_profile)
         runtime_provider = normalize_runtime_provider(agent.provider)
         effective_base_url = self._effective_provider_base_url(agent)
-        env = {**_build_safe_env(), "HERMES_HOME": str(hermes_home), "TERM": "xterm-256color"}
+        env = {**build_safe_env(), "HERMES_HOME": str(hermes_home), "TERM": "xterm-256color"}
         env["HERMESHQ_AGENT_ID"] = agent.id
         env["HERMESHQ_AGENT_TOKEN"] = create_agent_service_token(agent.id)
         env["HERMESHQ_INTERNAL_API_URL"] = get_settings().internal_api_base_url.rstrip("/")
