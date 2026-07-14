@@ -8,11 +8,10 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from hermeshq.models.agent import Agent
-from hermeshq.models.conversation_thread import ConversationThread
 from hermeshq.models.public_chat import (
     PublicChatApiKey,
     PublicChatMessage,
@@ -26,6 +25,8 @@ from hermeshq.services.task_board import next_board_order, runtime_status_to_boa
 logger = logging.getLogger(__name__)
 
 PUBLIC_CHAT_USER_ID = "__public_chat__"
+MAX_ACTIVE_SESSIONS_PER_KEY = 50
+MAX_ASSISTANT_MESSAGE_LENGTH = 32_768
 
 
 def _hash_key(raw_key: str) -> str:
@@ -104,6 +105,15 @@ class PublicChatService:
     ) -> dict:
         if client_ip and not self.session_create_limiter.check(client_ip):
             raise ValueError("Rate limit exceeded")
+
+        active_count_result = await db.execute(
+            select(func.count()).where(
+                PublicChatSession.api_key_id == api_key.id,
+                PublicChatSession.status == "active",
+            )
+        )
+        if (active_count_result.scalar() or 0) >= MAX_ACTIVE_SESSIONS_PER_KEY:
+            raise ValueError("Too many active sessions")
 
         agent_id = api_key.agent_id
         agent = await db.get(Agent, agent_id)
@@ -230,11 +240,12 @@ class PublicChatService:
     async def save_assistant_message(
         self, session_id: str, content: str
     ) -> None:
+        truncated = content[:MAX_ASSISTANT_MESSAGE_LENGTH] if content else ""
         async with self.session_factory() as db:
             msg = PublicChatMessage(
                 session_id=session_id,
                 role="assistant",
-                content=content,
+                content=truncated,
             )
             db.add(msg)
             await db.commit()
@@ -300,10 +311,12 @@ class PublicChatService:
         count = 0
         async with self.session_factory() as db:
             now = datetime.now(UTC)
+            # Find expired sessions in small batches to avoid loading all into memory
             result = await db.execute(
                 select(PublicChatSession).where(
                     PublicChatSession.status == "active",
-                )
+                    PublicChatSession.last_activity < now - timedelta(minutes=10),
+                ).limit(100)
             )
             sessions = result.scalars().all()
             for session in sessions:

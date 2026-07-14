@@ -17,7 +17,6 @@ var THEME = script ? script.getAttribute('data-theme') || 'auto' : 'auto';
 var ACCENT = script ? script.getAttribute('data-accent-color') || '#6366f1' : '#6366f1';
 var POSITION = script ? script.getAttribute('data-position') || 'right' : 'right';
 var TITLE = script ? script.getAttribute('data-title') || '' : '';
-var AGENT_SLUG = script ? script.getAttribute('data-agent-slug') || '' : '';
 
 var sessionId = null;
 var sessionToken = null;
@@ -323,13 +322,10 @@ function createSession() {
   var msgs = widget.querySelector('.hq-messages');
   msgs.innerHTML = '';
 
-  var body = {};
-  if (AGENT_SLUG) body.agent_slug = AGENT_SLUG;
-
   fetch(BASE + '/api/public/chat/sessions', {
     method: 'POST',
     headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify({})
   }).then(function(res) {
     if (!res.ok) return res.json().then(function(e) { throw new Error(e.detail || res.statusText); });
     return res.json();
@@ -519,5 +515,5 @@ async def serve_widget():
     return Response(
         content=WIDGET_JS,
         media_type="application/javascript",
-        headers={"Cache-Control": "public, max-age=3600"},
+        headers={"Cache-Control": "public, max-age=300"},
     )

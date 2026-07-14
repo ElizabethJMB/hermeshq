@@ -28,8 +28,33 @@ public_router = APIRouter(prefix="/api/public/chat", tags=["public-chat"])
 management_router = APIRouter(prefix="/settings/public-chat-keys", tags=["public-chat-management"])
 
 
+_PUBLIC_ERROR_MAP = {
+    "Invalid or inactive API key": ("Invalid or inactive API key", 401),
+    "Origin not allowed": ("Access denied", 403),
+    "Rate limit exceeded": ("Too many requests, please wait", 429),
+    "Monthly request quota exceeded": ("Monthly request limit reached", 429),
+    "Too many active sessions": ("Too many active sessions", 429),
+    "Session not found or inactive": ("Session unavailable", 400),
+    "Session expired": ("Session expired", 400),
+    "Agent is not available": ("Service temporarily unavailable", 503),
+    "Agent not found": ("Service temporarily unavailable", 503),
+}
+
+
 def _get_service(request: Request):
     return request.app.state.public_chat_service
+
+
+def _get_client_ip(request: Request) -> str:
+    return request.headers.get("x-real-ip") or (request.client.host if request.client else "")
+
+
+def _public_error(exc: ValueError) -> HTTPException:
+    msg = str(exc)
+    safe_msg, status = _PUBLIC_ERROR_MAP.get(msg, ("Something went wrong", 400))
+    if msg not in _PUBLIC_ERROR_MAP:
+        logger.warning("Unmapped public chat error: %s", msg)
+    return HTTPException(status_code=status, detail=safe_msg)
 
 
 # ── Public endpoints (API key + session token auth) ──
@@ -44,17 +69,17 @@ async def create_session(
 ):
     service = _get_service(request)
     origin = request.headers.get("origin")
-    client_ip = request.client.host if request.client else ""
+    client_ip = _get_client_ip(request)
     try:
         api_key = await service.validate_api_key(x_api_key, db, origin=origin)
     except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
+        raise _public_error(e)
     try:
         result = await service.create_session(
             api_key, payload.agent_slug, db, client_ip=client_ip
         )
     except ValueError as e:
-        raise HTTPException(status_code=429 if "Rate limit" in str(e) else 400, detail=str(e))
+        raise _public_error(e)
     return result
 
 
@@ -67,14 +92,13 @@ async def send_message(
     db: AsyncSession = Depends(get_db_session),
 ):
     service = _get_service(request)
-    client_ip = request.client.host if request.client else ""
+    client_ip = _get_client_ip(request)
     try:
         task_id, agent_id = await service.send_message(
             session_id, x_session_token, payload.content, db, client_ip=client_ip
         )
     except ValueError as e:
-        status = 429 if "Rate limit" in str(e) else 400
-        raise HTTPException(status_code=status, detail=str(e))
+        raise _public_error(e)
 
     async def sse_stream():
         broker = request.app.state.event_broker
@@ -96,12 +120,18 @@ async def send_message(
 
         broker.subscribe(event_handler)
         try:
+            keepalive_count = 0
             while True:
                 try:
-                    event_type, data = await asyncio.wait_for(queue.get(), timeout=120)
+                    event_type, data = await asyncio.wait_for(queue.get(), timeout=15)
+                    keepalive_count = 0
                 except asyncio.TimeoutError:
-                    yield f"data: {json.dumps({'type': 'timeout'})}\n\n"
-                    break
+                    keepalive_count += 1
+                    if keepalive_count >= 8:
+                        yield f"data: {json.dumps({'type': 'timeout'})}\n\n"
+                        break
+                    yield ": keepalive\n\n"
+                    continue
 
                 if event_type == "stream":
                     final_response.append(data)

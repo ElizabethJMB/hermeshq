@@ -24,7 +24,7 @@ export default function PublicChatKeysTab({
 
   const [label, setLabel] = useState("");
   const [agentId, setAgentId] = useState("");
-  const [allowedDomains, setAllowedDomains] = useState("*");
+  const [allowedDomains, setAllowedDomains] = useState("");
   const [requestsPerMonth, setRequestsPerMonth] = useState(1000);
   const [tokensPerMonth, setTokensPerMonth] = useState(100_000);
   const [lastCreatedKey, setLastCreatedKey] = useState<string | null>(null);
