@@ -37,6 +37,13 @@ import {
 } from "../api/mcpAccess";
 import { useProviders, useUpdateProvider } from "../api/providers";
 import { useRuntimeCapabilityOverview } from "../api/runtimeProfiles";
+import {
+  useCreatePublicChatKey,
+  useDeletePublicChatKey,
+  usePermanentlyDeletePublicChatKey,
+  usePublicChatKeys,
+  useUpdatePublicChatKey,
+} from "../api/publicChatKeys";
 import { useCreateSecret, useSecrets } from "../api/secrets";
 import {
   useDeleteBrandAsset,
@@ -64,14 +71,15 @@ const AuthenticationTab = lazy(() => import("../components/settings/Authenticati
 const EmailTab = lazy(() => import("../components/settings/EmailTab").then((m) => ({ default: m.EmailTab })));
 const ResourcesTab = lazy(() => import("../components/settings/ResourcesTab"));
 const M365Tab = lazy(() => import("../components/settings/M365Tab").then((m) => ({ default: m.default })));
+const PublicChatKeysTab = lazy(() => import("../components/settings/PublicChatKeysTab").then((m) => ({ default: m.default })));
 
-type SettingsTab = "general" | "runtime" | "providers" | "integrations" | "factory" | "externalAccess" | "hermesVersions" | "secrets" | "templates" | "authentication" | "email" | "resources" | "m365";
+type SettingsTab = "general" | "runtime" | "providers" | "integrations" | "factory" | "externalAccess" | "hermesVersions" | "secrets" | "templates" | "authentication" | "email" | "resources" | "m365" | "publicChatKeys";
 
 const SETTINGS_TAB_STORAGE_KEY = "hermeshq.settings.activeTab";
 
 const ALL_TABS: SettingsTab[] = [
   "general", "runtime", "providers", "integrations",
-  "factory", "externalAccess", "hermesVersions", "secrets", "templates", "authentication", "email", "resources", "m365",
+  "factory", "externalAccess", "hermesVersions", "secrets", "templates", "authentication", "email", "resources", "m365", "publicChatKeys",
 ];
 
 function LoadingFallback() {
@@ -96,6 +104,7 @@ export function SettingsPage() {
   const { data: mcpAccessTokens } = useMcpAccessTokens(isAdmin);
   const { data: templates } = useTemplates(isAdmin);
   const { data: settings } = useSettings(isAdmin);
+  const { data: publicChatKeys } = usePublicChatKeys(isAdmin);
 
   /* ─── Mutation hooks ─── */
   const updateProvider = useUpdateProvider();
@@ -124,6 +133,10 @@ export function SettingsPage() {
   const createMcpAccessToken = useCreateMcpAccessToken();
   const updateMcpAccessToken = useUpdateMcpAccessToken();
   const revokeMcpAccessToken = useRevokeMcpAccessToken();
+  const createPublicChatKey = useCreatePublicChatKey();
+  const updatePublicChatKey = useUpdatePublicChatKey();
+  const deletePublicChatKey = useDeletePublicChatKey();
+  const permanentlyDeletePublicChatKey = usePermanentlyDeletePublicChatKey();
 
   /* ─── Tab state ─── */
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
@@ -166,6 +179,7 @@ export function SettingsPage() {
     { id: "email", label: "Email", copy: "Configure Resend for transactional emails (password reset, notifications)." },
     { id: "resources", label: t("settings.tabResources"), copy: t("settings.tabResourcesCopy") },
     { id: "m365", label: "Microsoft 365", copy: "Configura la app Azure AD para autenticación delegada. Cada usuario conecta su propia cuenta M365." },
+    { id: "publicChatKeys", label: t("settings.tabPublicChatKeys"), copy: t("settings.tabPublicChatKeysCopy") },
   ];
 
   const activeTabMeta = settingsTabs.find((tab) => tab.id === activeTab) ?? settingsTabs[0];
@@ -287,6 +301,16 @@ export function SettingsPage() {
           )}
           {activeTab === "m365" && isAdmin && (
             <M365Tab />
+          )}
+          {activeTab === "publicChatKeys" && isAdmin && (
+            <PublicChatKeysTab
+              agents={agents}
+              publicChatKeys={publicChatKeys}
+              createPublicChatKey={createPublicChatKey}
+              updatePublicChatKey={updatePublicChatKey}
+              deletePublicChatKey={deletePublicChatKey}
+              permanentlyDeletePublicChatKey={permanentlyDeletePublicChatKey}
+            />
           )}
         </Suspense>
       </div>

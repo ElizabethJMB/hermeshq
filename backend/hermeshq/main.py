@@ -21,6 +21,11 @@ from hermeshq.models import ActivityLog, Agent, AppSettings, Node, ProviderDefin
 from hermeshq.routers import agents, audit, auth, backup, comms, dashboard, hermes_versions, integration_factory, integration_packages, internal_agents, internal_control, logs, managed_integrations, mcp_access, mcp_server, messaging_channels, nodes, oidc_admin, providers, runtime_ledger, runtime_profiles, scheduled_tasks, secrets, settings as settings_router, skills, tasks, templates, terminal_sessions, users, webhooks
 from hermeshq.routers import attachments
 from hermeshq.routers import m365
+from hermeshq.routers.public_chat import management_router as public_chat_management_router
+from hermeshq.routers.public_chat import public_router as public_chat_router
+from hermeshq.routers.public_chat_test_page import router as public_chat_test_router
+from hermeshq.routers.public_chat_widget import router as public_chat_widget_router
+from hermeshq.services.public_chat_service import PublicChatService
 from hermeshq.schemas.common import HealthResponse
 from hermeshq.services.agent_identity import derive_agent_identity, slugify_agent_value
 from hermeshq.services.agent_supervisor import AgentSupervisor
@@ -256,6 +261,12 @@ async def lifespan(app: FastAPI):
     app.state.pty_manager = PTYManager(settings.pty_shell, audit_callback=log_terminal_activity)
     app.state.supervisor.pty_manager = app.state.pty_manager
     app.state.scheduler = SchedulerService(AsyncSessionLocal, app.state.supervisor.submit_task)
+    app.state.public_chat_service = PublicChatService(
+        session_factory=AsyncSessionLocal,
+        supervisor=app.state.supervisor,
+        event_broker=app.state.event_broker,
+    )
+    await app.state.public_chat_service.start_purge_loop()
     await app.state.supervisor.bootstrap_runtime()
     await app.state.scheduler.start()
     app.state.gateway_bootstrap_task = asyncio.create_task(app.state.gateway_supervisor.bootstrap_gateways())
@@ -271,6 +282,7 @@ async def lifespan(app: FastAPI):
         enterprise_bootstrap_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await enterprise_bootstrap_task
+    await app.state.public_chat_service.stop_purge_loop()
     await app.state.scheduler.stop()
     await app.state.gateway_supervisor.shutdown()
     await app.state.enterprise_gateways.shutdown()
@@ -289,7 +301,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin", "X-Api-Key", "X-Session-Token"],
 )
 
 app.include_router(auth.router, prefix=settings.api_prefix)
@@ -324,6 +336,10 @@ app.include_router(mcp_server.router)
 app.include_router(webhooks.router)
 app.include_router(attachments.router, prefix=settings.api_prefix)
 app.include_router(m365.router, prefix=settings.api_prefix)
+app.include_router(public_chat_router)
+app.include_router(public_chat_management_router, prefix=settings.api_prefix)
+app.include_router(public_chat_widget_router)
+app.include_router(public_chat_test_router)
 
 
 @app.get("/health", response_model=HealthResponse)

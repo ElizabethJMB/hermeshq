@@ -110,6 +110,8 @@ const ns: Record<string, string> = {
   "settings.available": "Available",
   "settings.tabResources": "Resources",
   "settings.tabResourcesCopy": "Concurrency sizing, resource monitoring and deployment estimation for your HermesHQ instance.",
+  "settings.tabPublicChatKeys": "Public chat",
+  "settings.tabPublicChatKeysCopy": "Create and manage API keys for the embeddable chat widget that lets anonymous visitors interact with your agents.",
   "settings.resources": "Resources",
   "settings.concurrency": "Concurrency",
   "settings.maxConcurrentTasks": "Max concurrent tasks (semaphore)",
