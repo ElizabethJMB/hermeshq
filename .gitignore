@@ -12,3 +12,5 @@ frontend/dist/
 workspaces/
 backups/
 tmp-*.png
+*.apk
+*.ipa
