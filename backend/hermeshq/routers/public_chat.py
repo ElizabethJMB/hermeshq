@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from hermeshq.core.security import get_current_user, require_admin
+from hermeshq.core.security import require_admin
 from hermeshq.database import get_db_session
 from hermeshq.models.user import User
 from hermeshq.schemas.public_chat import (
@@ -76,7 +76,7 @@ async def create_session(
         raise _public_error(e)
     try:
         result = await service.create_session(
-            api_key, payload.agent_slug, db, client_ip=client_ip
+            api_key, db, client_ip=client_ip
         )
     except ValueError as e:
         raise _public_error(e)
@@ -179,7 +179,7 @@ async def session_status(
     try:
         result = await service.get_session_status(session_id, x_session_token, db)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise _public_error(e)
     return result
 
 

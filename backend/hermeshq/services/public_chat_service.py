@@ -35,7 +35,7 @@ def _hash_key(raw_key: str) -> str:
 
 def _origin_allowed(origin: str | None, allowed_domains: list[str]) -> bool:
     if not allowed_domains:
-        return True
+        return False
     if "*" in allowed_domains:
         return True
     if not origin:
@@ -53,6 +53,8 @@ class SimpleRateLimiter:
         self._requests: dict[str, list[float]] = defaultdict(list)
         self.max_requests = max_requests
         self.window = window_seconds
+        self._last_cleanup = time.time()
+        self._cleanup_interval = 300
 
     def check(self, key: str) -> bool:
         now = time.time()
@@ -60,7 +62,15 @@ class SimpleRateLimiter:
         if len(self._requests[key]) >= self.max_requests:
             return False
         self._requests[key].append(now)
+        if now - self._last_cleanup > self._cleanup_interval:
+            self._cleanup(now)
         return True
+
+    def _cleanup(self, now: float) -> None:
+        empty_keys = [k for k, v in self._requests.items() if not v or all(now - t >= self.window for t in v)]
+        for k in empty_keys:
+            del self._requests[k]
+        self._last_cleanup = now
 
 
 class PublicChatService:
@@ -98,7 +108,6 @@ class PublicChatService:
     async def create_session(
         self,
         api_key: PublicChatApiKey,
-        agent_slug: str | None,
         db: AsyncSession,
         *,
         client_ip: str = "",
@@ -417,6 +426,9 @@ class PublicChatService:
         api_key = await db.get(PublicChatApiKey, key_id)
         if not api_key:
             raise ValueError("API key not found")
+        await db.execute(
+            delete(PublicChatTranscript).where(PublicChatTranscript.api_key_id == key_id)
+        )
         await db.delete(api_key)
         await db.commit()
 

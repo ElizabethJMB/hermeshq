@@ -33,7 +33,7 @@ def _sanitize_title(v: str | None) -> str | None:
 
 
 class CreateSessionRequest(BaseModel):
-    agent_slug: str | None = None
+    pass
 
 
 class CreateSessionResponse(BaseModel):
