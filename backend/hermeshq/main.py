@@ -344,32 +344,6 @@ from hermeshq.core.structured_errors import StructuredErrorMiddleware
 app.add_middleware(StructuredErrorMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request as StarletteRequest
-from starlette.responses import Response as StarletteResponse
-
-class PublicChatCORSMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: StarletteRequest, call_next):
-        if request.url.path.startswith("/api/public/chat/"):
-            origin = request.headers.get("origin", "*")
-            if request.method == "OPTIONS":
-                return StarletteResponse(
-                    status_code=204,
-                    headers={
-                        "Access-Control-Allow-Origin": origin,
-                        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-                        "Access-Control-Allow-Headers": "Content-Type, X-Api-Key, X-Session-Token",
-                        "Access-Control-Max-Age": "86400",
-                    },
-                )
-            response = await call_next(request)
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Api-Key, X-Session-Token"
-            return response
-        return await call_next(request)
-
-app.add_middleware(PublicChatCORSMiddleware)
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
