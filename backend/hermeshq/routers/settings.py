@@ -447,7 +447,7 @@ async def update_semaphore(
         supervisor = get_supervisor()
         supervisor.update_semaphore(payload.semaphore)
     except Exception:  # noqa: BLE001  # supervisor update best-effort
-        pass
+        logger.warning("Failed to update concurrency semaphore", exc_info=True)
 
     logging.getLogger(__name__).info(
         "CONCURRENCY_SEMAPHORE updated to %d (applied immediately + persisted)",

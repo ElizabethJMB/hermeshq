@@ -389,6 +389,17 @@ app.include_router(m365.router, prefix=settings.api_prefix)
 app.include_router(voice.router, prefix=settings.api_prefix)
 app.include_router(agent_builder.router, prefix=settings.api_prefix)
 
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+    Instrumentator(
+        should_group_status_codes=True,
+        should_ignore_untemplated=True,
+        should_respect_env_var=False,
+        excluded_handlers=["/health", "/metrics"],
+    ).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+except ImportError:
+    logger.info("prometheus-fastapi-instrumentator not installed — /metrics disabled")
+
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
