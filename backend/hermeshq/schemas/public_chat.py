@@ -43,6 +43,22 @@ class CreateApiKeyRequest(BaseModel):
     allowed_domains: list[str] = Field(default_factory=list)
     requests_per_month: int = 1000
     tokens_per_month: int = 100_000
+    widget_title: str | None = None
+    widget_theme: str = "auto"
+    widget_accent: str = "#6366f1"
+    widget_position: str = "right"
+
+
+class UpdateApiKeyRequest(BaseModel):
+    label: str | None = None
+    allowed_domains: list[str] | None = None
+    requests_per_month: int | None = None
+    tokens_per_month: int | None = None
+    is_active: bool | None = None
+    widget_title: str | None = None
+    widget_theme: str | None = None
+    widget_accent: str | None = None
+    widget_position: str | None = None
 
 
 class ApiKeyRead(ORMModel):
@@ -54,6 +70,10 @@ class ApiKeyRead(ORMModel):
     requests_per_month: int
     tokens_per_month: int
     is_active: bool
+    widget_title: str | None
+    widget_theme: str
+    widget_accent: str
+    widget_position: str
     created_at: datetime
 
 

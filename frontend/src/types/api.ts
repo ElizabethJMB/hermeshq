@@ -89,6 +89,10 @@ export interface PublicChatApiKey {
   requests_per_month: number;
   tokens_per_month: number;
   is_active: boolean;
+  widget_title: string | null;
+  widget_theme: string;
+  widget_accent: string;
+  widget_position: string;
   created_at: string;
 }
 

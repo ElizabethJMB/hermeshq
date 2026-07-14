@@ -7,14 +7,18 @@ interface PublicChatKeysTabProps {
   agents: Agent[] | undefined;
   publicChatKeys: PublicChatApiKey[] | undefined;
   createPublicChatKey: UseMutationResult<PublicChatApiKeyCreated, Error, Record<string, unknown>>;
+  updatePublicChatKey: UseMutationResult<PublicChatApiKey, Error, { keyId: string; payload: Record<string, unknown> }>;
   deletePublicChatKey: UseMutationResult<string, Error, string>;
+  permanentlyDeletePublicChatKey: UseMutationResult<string, Error, string>;
 }
 
 export default function PublicChatKeysTab({
   agents,
   publicChatKeys,
   createPublicChatKey,
+  updatePublicChatKey,
   deletePublicChatKey,
+  permanentlyDeletePublicChatKey,
 }: PublicChatKeysTabProps) {
   const { t } = useI18n();
 
@@ -27,39 +31,55 @@ export default function PublicChatKeysTab({
   const [copied, setCopied] = useState(false);
   const [snippetCopied, setSnippetCopied] = useState(false);
 
-  // Widget appearance
+  // Widget appearance (for creation)
   const [widgetTitle, setWidgetTitle] = useState("");
-  const [widgetTheme, setWidgetTheme] = useState<"auto" | "light" | "dark">("auto");
+  const [widgetTheme, setWidgetTheme] = useState<string>("auto");
   const [widgetAccent, setWidgetAccent] = useState("#6366f1");
-  const [widgetPosition, setWidgetPosition] = useState<"right" | "left">("right");
+  const [widgetPosition, setWidgetPosition] = useState<string>("right");
+
+  // Registry UI state
+  const [expandedSnippet, setExpandedSnippet] = useState<string | null>(null);
+  const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{
+    widget_title: string;
+    widget_theme: string;
+    widget_accent: string;
+    widget_position: string;
+  }>({ widget_title: "", widget_theme: "auto", widget_accent: "#6366f1", widget_position: "right" });
 
   const activeAgents = (agents ?? []).filter((a) => !a.is_archived);
   const selectedAgent = activeAgents.find((a) => a.id === agentId);
 
-  function buildSnippet(apiKey: string): string {
+  function buildSnippet(apiKeyPrefix: string, appearance: { widget_title: string | null; widget_theme: string; widget_accent: string; widget_position: string }, rawKey?: string): string {
+    const key = rawKey || `${apiKeyPrefix}...`;
     const attrs = [
       `  src="${window.location.origin}/api/public/chat/widget.js"`,
-      `  data-api-key="${apiKey}"`,
+      `  data-api-key="${key}"`,
     ];
-    if (widgetTitle.trim()) attrs.push(`  data-title="${widgetTitle.trim()}"`);
-    if (widgetTheme !== "auto") attrs.push(`  data-theme="${widgetTheme}"`);
-    if (widgetAccent !== "#6366f1") attrs.push(`  data-accent-color="${widgetAccent}"`);
-    if (widgetPosition !== "right") attrs.push(`  data-position="${widgetPosition}"`);
+    if (appearance.widget_title?.trim()) attrs.push(`  data-title="${appearance.widget_title.trim()}"`);
+    if (appearance.widget_theme !== "auto") attrs.push(`  data-theme="${appearance.widget_theme}"`);
+    if (appearance.widget_accent !== "#6366f1") attrs.push(`  data-accent-color="${appearance.widget_accent}"`);
+    if (appearance.widget_position !== "right") attrs.push(`  data-position="${appearance.widget_position}"`);
     return `<script\n${attrs.join("\n")}>\n</script>`;
+  }
+
+  function buildSnippetForNew(apiKey: string): string {
+    return buildSnippet("", { widget_title: widgetTitle, widget_theme: widgetTheme, widget_accent: widgetAccent, widget_position: widgetPosition }, apiKey);
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const domains = allowedDomains
-      .split(",")
-      .map((d) => d.trim())
-      .filter(Boolean);
+    const domains = allowedDomains.split(",").map((d) => d.trim()).filter(Boolean);
     const result = await createPublicChatKey.mutateAsync({
       label: label.trim(),
       agent_id: agentId,
       allowed_domains: domains,
       requests_per_month: requestsPerMonth,
       tokens_per_month: tokensPerMonth,
+      widget_title: widgetTitle.trim() || null,
+      widget_theme: widgetTheme,
+      widget_accent: widgetAccent,
+      widget_position: widgetPosition,
     });
     setLastCreatedKey(result.raw_key);
     setCopied(false);
@@ -79,8 +99,36 @@ export default function PublicChatKeysTab({
 
   function copySnippet() {
     if (!lastCreatedKey) return;
-    navigator.clipboard.writeText(buildSnippet(lastCreatedKey));
+    navigator.clipboard.writeText(buildSnippetForNew(lastCreatedKey));
     setSnippetCopied(true);
+  }
+
+  function copyKeySnippet(key: PublicChatApiKey) {
+    navigator.clipboard.writeText(buildSnippet(key.key_prefix, key));
+  }
+
+  function startEditing(key: PublicChatApiKey) {
+    setEditingKeyId(key.id);
+    setEditForm({
+      widget_title: key.widget_title || "",
+      widget_theme: key.widget_theme,
+      widget_accent: key.widget_accent,
+      widget_position: key.widget_position,
+    });
+  }
+
+  async function saveEditing() {
+    if (!editingKeyId) return;
+    await updatePublicChatKey.mutateAsync({
+      keyId: editingKeyId,
+      payload: {
+        widget_title: editForm.widget_title.trim() || null,
+        widget_theme: editForm.widget_theme,
+        widget_accent: editForm.widget_accent,
+        widget_position: editForm.widget_position,
+      },
+    });
+    setEditingKeyId(null);
   }
 
   function agentDisplayName(id: string): string {
@@ -150,7 +198,7 @@ export default function PublicChatKeysTab({
                 </div>
                 <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
                   <p className="text-xs font-medium text-[var(--text-secondary)]">Embed snippet</p>
-                  <pre className="mt-1.5 whitespace-pre-wrap break-all text-[11px] leading-5 text-[var(--text-display)]">{buildSnippet(lastCreatedKey)}</pre>
+                  <pre className="mt-1.5 whitespace-pre-wrap break-all text-[11px] leading-5 text-[var(--text-display)]">{buildSnippetForNew(lastCreatedKey)}</pre>
                   <button type="button" className="panel-button-secondary mt-2 text-xs" onClick={copySnippet}>
                     {snippetCopied ? "Copied!" : "Copy snippet"}
                   </button>
@@ -160,12 +208,12 @@ export default function PublicChatKeysTab({
           </div>
         </form>
 
-        {/* Widget appearance */}
+        {/* Widget appearance for new keys */}
         <div className="panel-frame p-6">
           <p className="panel-label">Appearance</p>
           <h2 className="mt-2 text-2xl text-[var(--text-display)]">Widget customization</h2>
           <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
-            Customize how the chat widget looks on your site. These settings are included in the embed snippet above.
+            Customize how the chat widget looks. These settings are saved with each API key.
           </p>
           <div className="mt-6 space-y-4">
             <label className="panel-field">
@@ -176,7 +224,7 @@ export default function PublicChatKeysTab({
             <div className="grid grid-cols-2 gap-4">
               <label className="panel-field">
                 <span className="panel-label">Theme</span>
-                <select value={widgetTheme} onChange={(e) => setWidgetTheme(e.target.value as "auto" | "light" | "dark")} className={selectClass}>
+                <select value={widgetTheme} onChange={(e) => setWidgetTheme(e.target.value)} className={selectClass}>
                   <option value="auto">Auto (system)</option>
                   <option value="light">Light</option>
                   <option value="dark">Dark</option>
@@ -184,7 +232,7 @@ export default function PublicChatKeysTab({
               </label>
               <label className="panel-field">
                 <span className="panel-label">Position</span>
-                <select value={widgetPosition} onChange={(e) => setWidgetPosition(e.target.value as "right" | "left")} className={selectClass}>
+                <select value={widgetPosition} onChange={(e) => setWidgetPosition(e.target.value)} className={selectClass}>
                   <option value="right">Bottom right</option>
                   <option value="left">Bottom left</option>
                 </select>
@@ -193,52 +241,16 @@ export default function PublicChatKeysTab({
             <label className="panel-field">
               <span className="panel-label">Accent color</span>
               <div className="mt-1 flex items-center gap-3">
-                <input
-                  type="color"
-                  value={widgetAccent}
-                  onChange={(e) => setWidgetAccent(e.target.value)}
-                  className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-transparent p-1"
-                />
-                <input
-                  value={widgetAccent}
-                  onChange={(e) => setWidgetAccent(e.target.value)}
-                  className="w-28 font-mono text-sm"
-                  maxLength={7}
-                />
-                <span
-                  className="flex h-10 items-center rounded-xl px-4 text-xs font-medium text-white"
-                  style={{ background: widgetAccent }}
-                >
-                  Preview
-                </span>
+                <input type="color" value={widgetAccent} onChange={(e) => setWidgetAccent(e.target.value)} className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-transparent p-1" />
+                <input value={widgetAccent} onChange={(e) => setWidgetAccent(e.target.value)} className="w-28 font-mono text-sm" maxLength={7} />
+                <span className="flex h-10 items-center rounded-xl px-4 text-xs font-medium text-white" style={{ background: widgetAccent }}>Preview</span>
               </div>
             </label>
-          </div>
-
-          {/* Live preview */}
-          <div className="mt-6 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-            <p className="panel-label mb-3">Preview</p>
-            <div className={`overflow-hidden rounded-2xl ${widgetTheme === "dark" || (widgetTheme === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "bg-[#1c1f2e]" : "bg-white shadow-sm"}`} style={{ maxWidth: 320 }}>
-              <div className="flex items-center gap-2.5 px-4 py-3 text-white" style={{ background: widgetAccent }}>
-                <span className="flex h-8 w-8 items-center justify-content rounded-full text-sm" style={{ background: "rgba(255,255,255,.18)" }}>🤖</span>
-                <div>
-                  <p className="text-sm font-semibold">{widgetTitle.trim() || selectedAgent?.friendly_name || selectedAgent?.name || "Assistant"}</p>
-                  <p className="flex items-center gap-1 text-[10px] opacity-75"><span className="inline-block h-1.5 w-1.5 rounded-full bg-green-400" /> Online</p>
-                </div>
-              </div>
-              <div className={`space-y-2 px-4 py-3 ${widgetTheme === "dark" || (widgetTheme === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "bg-[#171a27]" : "bg-[#f7f8fa]"}`}>
-                <p className={`w-fit rounded-2xl rounded-bl-md px-3 py-2 text-xs ${widgetTheme === "dark" || (widgetTheme === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "bg-[#242839] text-[#e1e3ea]" : "bg-white text-[#1a1d23] shadow-sm"}`}>
-                  How can I help you?
-                </p>
-                <p className="ml-auto w-fit rounded-2xl rounded-br-md px-3 py-2 text-xs text-white" style={{ background: widgetAccent }}>
-                  Hello!
-                </p>
-              </div>
-            </div>
           </div>
         </div>
       </div>
 
+      {/* Registry */}
       <section className="panel-frame p-6">
         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[var(--border)] pb-4">
           <div>
@@ -264,9 +276,19 @@ export default function PublicChatKeysTab({
                 <p><strong>Domains:</strong> {key.allowed_domains.length ? key.allowed_domains.join(", ") : "any"}</p>
                 <p><strong>Requests/mo:</strong> {key.requests_per_month.toLocaleString()}</p>
                 <p><strong>Tokens/mo:</strong> {key.tokens_per_month.toLocaleString()}</p>
+                <p><strong>Theme:</strong> {key.widget_theme}</p>
+                <p><strong>Color:</strong> <span className="inline-block h-3 w-3 rounded-full align-middle" style={{ background: key.widget_accent }} /> {key.widget_accent}</p>
                 <p><strong>Created:</strong> {new Date(key.created_at).toLocaleDateString()}</p>
               </div>
+
+              {/* Actions */}
               <div className="mt-4 flex flex-wrap gap-3">
+                <button type="button" className="panel-button-secondary" onClick={() => setExpandedSnippet(expandedSnippet === key.id ? null : key.id)}>
+                  {expandedSnippet === key.id ? "Hide snippet" : "Show snippet"}
+                </button>
+                <button type="button" className="panel-button-secondary" onClick={() => editingKeyId === key.id ? setEditingKeyId(null) : startEditing(key)}>
+                  {editingKeyId === key.id ? "Cancel" : "Edit appearance"}
+                </button>
                 <button
                   type="button"
                   className="panel-button-secondary"
@@ -278,7 +300,71 @@ export default function PublicChatKeysTab({
                 >
                   Deactivate
                 </button>
+                <button
+                  type="button"
+                  className="panel-button-secondary !border-[var(--danger)]/40 !text-[var(--danger)]"
+                  onClick={() => {
+                    if (window.confirm(`Permanently delete API key "${key.label}"? This cannot be undone.`)) {
+                      void permanentlyDeletePublicChatKey.mutateAsync(key.id);
+                    }
+                  }}
+                >
+                  Delete
+                </button>
               </div>
+
+              {/* Snippet */}
+              {expandedSnippet === key.id ? (
+                <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                  <p className="text-xs font-medium text-[var(--text-secondary)]">Embed snippet</p>
+                  <pre className="mt-1.5 whitespace-pre-wrap break-all text-[11px] leading-5 text-[var(--text-display)]">{buildSnippet(key.key_prefix, key)}</pre>
+                  <button type="button" className="panel-button-secondary mt-2 text-xs" onClick={() => copyKeySnippet(key)}>
+                    Copy snippet
+                  </button>
+                  <p className="mt-2 text-[10px] text-[var(--text-secondary)]">Replace "{key.key_prefix}..." with the full API key (shown only at creation).</p>
+                </div>
+              ) : null}
+
+              {/* Edit appearance */}
+              {editingKeyId === key.id ? (
+                <div className="mt-4 space-y-3 rounded-xl border border-[var(--accent)]/30 bg-[var(--surface-muted)] p-4">
+                  <p className="panel-label">Edit appearance</p>
+                  <label className="panel-field">
+                    <span className="panel-label">Title</span>
+                    <input value={editForm.widget_title} onChange={(e) => setEditForm({ ...editForm, widget_title: e.target.value })} placeholder="Assistant" />
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="panel-field">
+                      <span className="panel-label">Theme</span>
+                      <select value={editForm.widget_theme} onChange={(e) => setEditForm({ ...editForm, widget_theme: e.target.value })} className={selectClass}>
+                        <option value="auto">Auto</option>
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                      </select>
+                    </label>
+                    <label className="panel-field">
+                      <span className="panel-label">Position</span>
+                      <select value={editForm.widget_position} onChange={(e) => setEditForm({ ...editForm, widget_position: e.target.value })} className={selectClass}>
+                        <option value="right">Right</option>
+                        <option value="left">Left</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label className="panel-field">
+                    <span className="panel-label">Accent color</span>
+                    <div className="mt-1 flex items-center gap-3">
+                      <input type="color" value={editForm.widget_accent} onChange={(e) => setEditForm({ ...editForm, widget_accent: e.target.value })} className="h-9 w-12 cursor-pointer rounded-lg border border-[var(--border)] bg-transparent p-1" />
+                      <input value={editForm.widget_accent} onChange={(e) => setEditForm({ ...editForm, widget_accent: e.target.value })} className="w-24 font-mono text-sm" maxLength={7} />
+                    </div>
+                  </label>
+                  <div className="flex gap-3">
+                    <button type="button" className="panel-button-primary" onClick={saveEditing} disabled={updatePublicChatKey.isPending}>
+                      {updatePublicChatKey.isPending ? "Saving…" : "Save"}
+                    </button>
+                    <button type="button" className="panel-button-secondary" onClick={() => setEditingKeyId(null)}>Cancel</button>
+                  </div>
+                </div>
+              ) : null}
             </article>
           ))}
           {!publicChatKeys?.length ? (

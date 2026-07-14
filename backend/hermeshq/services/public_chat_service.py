@@ -334,6 +334,8 @@ class PublicChatService:
     async def create_api_key(
         self, label: str, agent_id: str, allowed_domains: list[str],
         requests_per_month: int, tokens_per_month: int, db: AsyncSession,
+        widget_title: str | None = None, widget_theme: str = "auto",
+        widget_accent: str = "#6366f1", widget_position: str = "right",
     ) -> dict:
         agent = await db.get(Agent, agent_id)
         if not agent:
@@ -351,6 +353,10 @@ class PublicChatService:
             allowed_domains=allowed_domains,
             requests_per_month=requests_per_month,
             tokens_per_month=tokens_per_month,
+            widget_title=widget_title,
+            widget_theme=widget_theme,
+            widget_accent=widget_accent,
+            widget_position=widget_position,
         )
         db.add(api_key)
         await db.commit()
@@ -362,6 +368,26 @@ class PublicChatService:
             "key_prefix": key_prefix,
             "label": label,
         }
+
+    async def update_api_key(
+        self, key_id: str, payload, db: AsyncSession,
+    ) -> PublicChatApiKey:
+        api_key = await db.get(PublicChatApiKey, key_id)
+        if not api_key:
+            raise ValueError("API key not found")
+        update_data = payload.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(api_key, field, value)
+        await db.commit()
+        await db.refresh(api_key)
+        return api_key
+
+    async def permanently_delete_api_key(self, key_id: str, db: AsyncSession) -> None:
+        api_key = await db.get(PublicChatApiKey, key_id)
+        if not api_key:
+            raise ValueError("API key not found")
+        await db.delete(api_key)
+        await db.commit()
 
     async def list_api_keys(self, db: AsyncSession) -> list[PublicChatApiKey]:
         result = await db.execute(

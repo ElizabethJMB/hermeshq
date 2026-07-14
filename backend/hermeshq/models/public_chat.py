@@ -20,6 +20,10 @@ class PublicChatApiKey(TimestampMixin, Base):
     requests_per_month: Mapped[int] = mapped_column(Integer, default=1000)
     tokens_per_month: Mapped[int] = mapped_column(Integer, default=100_000)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    widget_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    widget_theme: Mapped[str] = mapped_column(String(10), default="auto")
+    widget_accent: Mapped[str] = mapped_column(String(10), default="#6366f1")
+    widget_position: Mapped[str] = mapped_column(String(10), default="right")
 
 
 class PublicChatSession(TimestampMixin, Base):

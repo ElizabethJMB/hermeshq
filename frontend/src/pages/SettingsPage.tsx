@@ -38,7 +38,9 @@ import {
 import {
   useCreatePublicChatKey,
   useDeletePublicChatKey,
+  usePermanentlyDeletePublicChatKey,
   usePublicChatKeys,
+  useUpdatePublicChatKey,
 } from "../api/publicChatKeys";
 import { useProviders, useUpdateProvider } from "../api/providers";
 import { useRuntimeCapabilityOverview } from "../api/runtimeProfiles";
@@ -132,7 +134,9 @@ export function SettingsPage() {
   const updateMcpAccessToken = useUpdateMcpAccessToken();
   const revokeMcpAccessToken = useRevokeMcpAccessToken();
   const createPublicChatKey = useCreatePublicChatKey();
+  const updatePublicChatKey = useUpdatePublicChatKey();
   const deletePublicChatKey = useDeletePublicChatKey();
+  const permanentlyDeletePublicChatKey = usePermanentlyDeletePublicChatKey();
 
   /* ─── Tab state ─── */
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
@@ -303,7 +307,9 @@ export function SettingsPage() {
               agents={agents}
               publicChatKeys={publicChatKeys}
               createPublicChatKey={createPublicChatKey}
+              updatePublicChatKey={updatePublicChatKey}
               deletePublicChatKey={deletePublicChatKey}
+              permanentlyDeletePublicChatKey={permanentlyDeletePublicChatKey}
             />
           )}
         </Suspense>

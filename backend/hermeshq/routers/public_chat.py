@@ -19,6 +19,7 @@ from hermeshq.schemas.public_chat import (
     SendMessageRequest,
     SessionStatusResponse,
     TranscriptRead,
+    UpdateApiKeyRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -171,6 +172,10 @@ async def create_api_key(
             requests_per_month=payload.requests_per_month,
             tokens_per_month=payload.tokens_per_month,
             db=db,
+            widget_title=payload.widget_title,
+            widget_theme=payload.widget_theme,
+            widget_accent=payload.widget_accent,
+            widget_position=payload.widget_position,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -187,8 +192,23 @@ async def list_api_keys(
     return await service.list_api_keys(db)
 
 
+@management_router.patch("/{key_id}", response_model=ApiKeyRead)
+async def update_api_key(
+    key_id: str,
+    payload: UpdateApiKeyRequest,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db_session),
+):
+    service = _get_service(request)
+    try:
+        return await service.update_api_key(key_id, payload, db)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 @management_router.delete("/{key_id}")
-async def delete_api_key(
+async def deactivate_api_key(
     key_id: str,
     request: Request,
     current_user: User = Depends(require_admin),
@@ -200,6 +220,21 @@ async def delete_api_key(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"status": "deactivated"}
+
+
+@management_router.delete("/{key_id}/permanent")
+async def permanently_delete_api_key(
+    key_id: str,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db_session),
+):
+    service = _get_service(request)
+    try:
+        await service.permanently_delete_api_key(key_id, db)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"status": "deleted"}
 
 
 @management_router.get("/{key_id}/transcripts", response_model=list[TranscriptRead])
