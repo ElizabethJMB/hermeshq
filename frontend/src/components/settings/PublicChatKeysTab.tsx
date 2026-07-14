@@ -39,6 +39,7 @@ export default function PublicChatKeysTab({
 
   // Registry UI state
   const [expandedSnippet, setExpandedSnippet] = useState<string | null>(null);
+  const [snippetKeyInput, setSnippetKeyInput] = useState<Record<string, string>>({});
   const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{
     widget_title: string;
@@ -104,7 +105,8 @@ export default function PublicChatKeysTab({
   }
 
   function copyKeySnippet(key: PublicChatApiKey) {
-    navigator.clipboard.writeText(buildSnippet(key.key_prefix, key));
+    const fullKey = snippetKeyInput[key.id]?.trim() || `${key.key_prefix}...`;
+    navigator.clipboard.writeText(buildSnippet(key.key_prefix, key, fullKey));
   }
 
   function startEditing(key: PublicChatApiKey) {
@@ -317,11 +319,19 @@ export default function PublicChatKeysTab({
               {expandedSnippet === key.id ? (
                 <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
                   <p className="text-xs font-medium text-[var(--text-secondary)]">Embed snippet</p>
-                  <pre className="mt-1.5 whitespace-pre-wrap break-all text-[11px] leading-5 text-[var(--text-display)]">{buildSnippet(key.key_prefix, key)}</pre>
+                  <label className="panel-field mt-2">
+                    <span className="text-[10px] text-[var(--text-secondary)]">Paste your full API key to generate a ready-to-use snippet:</span>
+                    <input
+                      value={snippetKeyInput[key.id] || ""}
+                      onChange={(e) => setSnippetKeyInput({ ...snippetKeyInput, [key.id]: e.target.value })}
+                      placeholder={`${key.key_prefix}...`}
+                      className="font-mono text-xs"
+                    />
+                  </label>
+                  <pre className="mt-2 whitespace-pre-wrap break-all text-[11px] leading-5 text-[var(--text-display)]">{buildSnippet(key.key_prefix, key, snippetKeyInput[key.id]?.trim() || undefined)}</pre>
                   <button type="button" className="panel-button-secondary mt-2 text-xs" onClick={() => copyKeySnippet(key)}>
                     Copy snippet
                   </button>
-                  <p className="mt-2 text-[10px] text-[var(--text-secondary)]">Replace "{key.key_prefix}..." with the full API key (shown only at creation).</p>
                 </div>
               ) : null}
 
