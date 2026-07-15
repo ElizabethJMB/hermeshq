@@ -339,8 +339,16 @@ class TestAutoRestartDecision(unittest.IsolatedAsyncioTestCase):
         mgr._reload_agent = AsyncMock(return_value=agent)
         mgr._launch_gateway_process = AsyncMock(side_effect=RuntimeError("boom"))
 
-        with patch("asyncio.sleep", new=AsyncMock()):
-            await mgr._auto_restart_gateway("agent-1", {"sixagentic"}, uptime=5.0, log_mgr=None)
+        # After exhausting MAX_ATTEMPTS, the gateway marks the channel as
+        # errored and schedules an infinite recovery retry (cooldown, then
+        # recurse). That recursion is by design for production resilience,
+        # but this test only cares about the give-up threshold, so the
+        # cooldown sleep is made to raise and stop the test right there
+        # instead of looping through further retry cycles.
+        sleep_effects = [None] * GATEWAY_AUTO_RESTART_MAX_ATTEMPTS + [asyncio.CancelledError()]
+        with patch("asyncio.sleep", new=AsyncMock(side_effect=sleep_effects)):
+            with self.assertRaises(asyncio.CancelledError):
+                await mgr._auto_restart_gateway("agent-1", {"sixagentic"}, uptime=5.0, log_mgr=None)
 
         # Should have tried exactly MAX_ATTEMPTS times
         self.assertEqual(mgr._launch_gateway_process.call_count, GATEWAY_AUTO_RESTART_MAX_ATTEMPTS)
