@@ -168,23 +168,36 @@ class PublicChatService:
         self,
         api_key_id: str,
         requests_per_month: int,
+        tokens_per_month: int,
         db: AsyncSession,
     ) -> None:
         first_of_month = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        session_ids_subq = select(PublicChatSession.id).where(
+            PublicChatSession.api_key_id == api_key_id,
+            PublicChatSession.created_at >= first_of_month,
+        )
+
         result = await db.execute(
             select(func.count()).where(
                 PublicChatMessage.role == "user",
-                PublicChatMessage.session_id.in_(
-                    select(PublicChatSession.id).where(
-                        PublicChatSession.api_key_id == api_key_id,
-                        PublicChatSession.created_at >= first_of_month,
-                    )
-                ),
+                PublicChatMessage.session_id.in_(session_ids_subq),
             )
         )
         count = result.scalar() or 0
         if count >= requests_per_month:
             raise ValueError("Monthly request quota exceeded")
+
+        token_result = await db.execute(
+            select(func.coalesce(func.sum(Task.tokens_used), 0)).where(
+                Task.metadata_json["source"].as_string() == "public_chat",
+                Task.metadata_json["public_session_id"].as_string().in_(session_ids_subq),
+                Task.queued_at >= first_of_month,
+            )
+        )
+        tokens = token_result.scalar() or 0
+        if tokens >= tokens_per_month:
+            raise ValueError("Monthly token quota exceeded")
 
     async def send_message(
         self,
@@ -205,7 +218,10 @@ class PublicChatService:
 
         api_key = await db.get(PublicChatApiKey, session.api_key_id)
         if api_key:
-            await self._check_monthly_quota(api_key.id, api_key.requests_per_month, db)
+            await self._check_monthly_quota(
+                api_key.id, api_key.requests_per_month,
+                api_key.tokens_per_month, db,
+            )
         session.last_activity = utcnow()
 
         user_msg = PublicChatMessage(
