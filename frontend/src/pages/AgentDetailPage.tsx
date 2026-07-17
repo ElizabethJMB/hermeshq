@@ -133,14 +133,16 @@ export function AgentDetailPage() {
     }
   }, [agentId]);
 
-  const realtimeEvents = useRealtimeStore((state) => state.events);
+  // Subscribe without re-rendering the page (the terminal remounts on render)
   useEffect(() => {
     if (!agentId) return;
-    const latest = realtimeEvents[0];
-    if (latest?.type === "avatar.updated" && latest.agent_id === agentId) {
-      queryClient.refetchQueries({ queryKey: ["agents", agentId] });
-    }
-  }, [realtimeEvents, agentId]);
+    return useRealtimeStore.subscribe((state) => {
+      const latest = state.events[0];
+      if (latest?.type === "avatar.updated" && latest.agent_id === agentId) {
+        void queryClient.refetchQueries({ queryKey: ["agents", agentId] });
+      }
+    });
+  }, [agentId, queryClient]);
 
   function toggleSection(section: SectionKey) {
     setSectionState((current) => {
