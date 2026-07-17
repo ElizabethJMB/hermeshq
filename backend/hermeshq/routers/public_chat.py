@@ -33,6 +33,7 @@ _PUBLIC_ERROR_MAP = {
     "Origin not allowed": ("Access denied", 403),
     "Rate limit exceeded": ("Too many requests, please wait", 429),
     "Monthly request quota exceeded": ("Monthly request limit reached", 429),
+    "Monthly token quota exceeded": ("Monthly token limit reached", 429),
     "Too many active sessions": ("Too many active sessions", 429),
     "Session not found or inactive": ("Session unavailable", 400),
     "Session expired": ("Session expired", 400),

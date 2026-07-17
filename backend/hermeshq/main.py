@@ -380,6 +380,9 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"],
 )
 
+from hermeshq.core.public_chat_cors import PublicChatCORSMiddleware
+app.add_middleware(PublicChatCORSMiddleware)
+
 app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(nodes.router, prefix=settings.api_prefix)
 app.include_router(providers.router, prefix=settings.api_prefix)
