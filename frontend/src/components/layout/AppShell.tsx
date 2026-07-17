@@ -1,7 +1,7 @@
 import { useEffect, type CSSProperties } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 
-import { buildOidcLogoutUrl, useMe, useUpdateMyPreferences } from "../../api/auth";
+import { buildOidcLogoutUrl, performLogout, useMe, useUpdateMyPreferences } from "../../api/auth";
 import { UserAvatar } from "../UserAvatar";
 import { resolveAssetUrl, usePublicBranding } from "../../api/settings";
 import { useWebSocket } from "../../hooks/useWebSocket";
@@ -24,7 +24,6 @@ import menuIcon from "../../assets/icon/menu.png";
 
 export function AppShell() {
   const token = useSessionStore((state) => state.token);
-  const logout = useSessionStore((state) => state.logout);
   const setUser = useSessionStore((state) => state.setUser);
   const sidebarCollapsed = useUIStore((state) => state.sidebarCollapsed);
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
@@ -50,12 +49,13 @@ export function AppShell() {
 
   function handleLogout() {
     const authSource = user?.auth_source;
-    logout();
-    if (authSource === "oidc") {
-      window.location.assign(buildOidcLogoutUrl());
-      return;
-    }
-    window.location.assign("/");
+    void performLogout().finally(() => {
+      if (authSource === "oidc") {
+        window.location.assign(buildOidcLogoutUrl());
+        return;
+      }
+      window.location.assign("/");
+    });
   }
 
   const navItems = user?.role === "admin"

@@ -24,9 +24,11 @@ from hermeshq.routers.agents_shared import (
 from hermeshq.schemas.agent import AgentRead, AvatarGenerationRead
 from hermeshq.services.avatar import (
     build_avatar_dir,
-    delete_avatar_files as _delete_avatar_files_shared,
     resolve_media_type,
     validate_and_save_avatar,
+)
+from hermeshq.services.avatar import (
+    delete_avatar_files as _delete_avatar_files_shared,
 )
 from hermeshq.services.avatar_generator import generate_avatar
 from hermeshq.services.task_board import next_board_order, runtime_status_to_board_column
@@ -42,8 +44,8 @@ async def get_agent_avatar(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    agent = await db.get(Agent, agent_id)
-    if not agent or not agent.avatar_filename:
+    agent = await ensure_agent_access(db, current_user, agent_id)
+    if not agent.avatar_filename:
         raise HTTPException(status_code=404, detail="Avatar not found")
     avatar_path = _build_avatar_path(agent)
     if not avatar_path or not avatar_path.exists():
@@ -62,9 +64,7 @@ async def generate_ai_avatar(
     agent = await ensure_agent_access(db, current_user, agent_id)
 
     # Find HQ Operator agent
-    operator_result = await db.execute(
-        sql_select(Agent).where(Agent.slug == "hq-operator").limit(1)
-    )
+    operator_result = await db.execute(sql_select(Agent).where(Agent.slug == "hq-operator").limit(1))
     operator = operator_result.scalar_one_or_none()
     if not operator:
         raise HTTPException(
@@ -131,6 +131,7 @@ async def generate_agent_avatar(
     content, filename = generate_avatar(agent.friendly_name or agent.name or "Agent")
 
     from hermeshq.services.avatar import build_avatar_dir
+
     avatar_dir = build_avatar_dir(avatar_base, agent_id)
     avatar_dir.mkdir(parents=True, exist_ok=True)
 
