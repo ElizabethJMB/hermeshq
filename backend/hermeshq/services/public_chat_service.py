@@ -219,8 +219,10 @@ class PublicChatService:
         api_key = await db.get(PublicChatApiKey, session.api_key_id)
         if api_key:
             await self._check_monthly_quota(
-                api_key.id, api_key.requests_per_month,
-                api_key.tokens_per_month, db,
+                api_key.id,
+                api_key.requests_per_month,
+                api_key.tokens_per_month,
+                db,
             )
         session.last_activity = utcnow()
 
