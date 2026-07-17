@@ -15,9 +15,9 @@ from hermeshq.models.agent import Agent
 from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.provider import ProviderDefinition
-from hermeshq.models.secret import Secret
 from hermeshq.services.agent_hierarchy import delegate_route, route_label
 from hermeshq.services.auxiliary_models import resolve_auxiliary_api_key
+from hermeshq.services.credentials import require_secret_value
 from hermeshq.services.hermes_version_manager import HermesRuntimeSelection, HermesVersionManager
 from hermeshq.services.managed_capabilities import (
     fetch_local_skill_bundle,
@@ -981,11 +981,7 @@ class HermesInstallationManager:
         if not api_key_ref:
             return None
         async with self.session_factory() as session:
-            result = await session.execute(select(Secret).where(Secret.name == api_key_ref))
-            secret = result.scalar_one_or_none()
-        if not secret:
-            raise HermesInstallationError(f"Secret '{api_key_ref}' was not found")
-        return self.secret_vault.decrypt(secret.value_enc)
+            return await require_secret_value(session, self.secret_vault, api_key_ref, HermesInstallationError)
 
     async def _load_messaging_channels(self, agent_id: str) -> list[MessagingChannel]:
         async with self.session_factory() as session:
