@@ -22,8 +22,8 @@ function encodeChunk(data: string) {
   return window.btoa(binary);
 }
 
-function resolvePtyUrl(agentId: string, token: string) {
-  return `${resolveWsRoot()}/ws/pty/${agentId}?token=${encodeURIComponent(token)}`;
+function resolvePtyUrl(agentId: string) {
+  return `${resolveWsRoot()}/ws/pty/${agentId}`;
 }
 
 export function AgentTerminal({
@@ -128,7 +128,7 @@ export function AgentTerminal({
 
     shouldReconnectRef.current = true;
     setConnectionMessage(null);
-    const socket = new WebSocket(resolvePtyUrl(agentId, token));
+    const socket = new WebSocket(resolvePtyUrl(agentId));
     socketRef.current = socket;
     socket.onopen = () => {
       reconnectAttemptsRef.current = 0;
@@ -137,6 +137,8 @@ export function AgentTerminal({
       fitAddon.fit();
       shouldAutoScrollRef.current = true;
       scrollTerminalToBottom(true);
+      // Authenticate via first message so the token never appears in URLs/logs
+      socket.send(JSON.stringify({ type: "auth", token }));
       socket.send(
         JSON.stringify({
           type: "resize",
@@ -167,11 +169,15 @@ export function AgentTerminal({
       }
     };
     socket.onmessage = (event) => {
-      const payload = JSON.parse(event.data) as { type: string; data?: string };
-      if (payload.type === "output" && payload.data) {
-        shouldAutoScrollRef.current = isTerminalNearBottom();
-        terminal.write(decodeChunk(payload.data));
-        scrollTerminalToBottom();
+      try {
+        const payload = JSON.parse(event.data) as { type: string; data?: string };
+        if (payload.type === "output" && payload.data) {
+          shouldAutoScrollRef.current = isTerminalNearBottom();
+          terminal.write(decodeChunk(payload.data));
+          scrollTerminalToBottom();
+        }
+      } catch {
+        // Ignore malformed frames
       }
     };
 

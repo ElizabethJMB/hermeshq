@@ -2,7 +2,7 @@ import hashlib
 import hmac
 from datetime import UTC, datetime, timedelta
 
-from fastapi import Cookie, Depends, HTTPException, Query, WebSocket, status
+from fastapi import Cookie, Depends, HTTPException, WebSocket, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -131,21 +131,8 @@ async def get_current_user(
     return user
 
 
-async def get_current_user_from_query_token(
-    token: str = Query(...),
-    db: AsyncSession = Depends(get_db_session),
-) -> User:
-    subject, subject_kind = decode_access_token_subject(token)
-    if not subject:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
-    user = await get_user_by_subject(db, subject, subject_kind)
-    if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
-    return user
-
-
-async def get_websocket_user(websocket: WebSocket, db: AsyncSession) -> User | None:
-    token = websocket.query_params.get("token")
+async def get_websocket_user(websocket: WebSocket, db: AsyncSession, token: str | None = None) -> User | None:
+    token = token or websocket.query_params.get("token")
     subject, subject_kind = decode_access_token_subject(token or "")
     user = await get_user_by_subject(db, subject, subject_kind)
     if not user or not user.is_active:

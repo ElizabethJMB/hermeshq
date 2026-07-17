@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { lazy, Suspense, useEffect } from "react";
 
-import { useMe } from "./api/auth";
+import { useMe, exchangeOidcCookie } from "./api/auth";
 import { usePublicBranding, resolveAssetUrl } from "./api/settings";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppShell } from "./components/layout/AppShell";
@@ -68,6 +68,17 @@ export default function App() {
     if (urlToken && !token) {
       setSession(urlToken, null);
       window.history.replaceState({}, "", location.pathname);
+      return;
+    }
+    // OIDC completion: the JWT only exists as an httpOnly cookie — exchange
+    // it for a token via the refresh endpoint (never travels in the URL).
+    if (params.get("oidc") === "complete" && !token) {
+      window.history.replaceState({}, "", location.pathname);
+      void exchangeOidcCookie()
+        .then((newToken) => {
+          if (newToken) setSession(newToken, null);
+        })
+        .catch(() => undefined);
     }
   }, [location.search, token, setSession]);
 

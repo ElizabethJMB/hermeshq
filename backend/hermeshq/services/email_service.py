@@ -58,6 +58,7 @@ class EmailService:
 
         from hermeshq.database import AsyncSessionLocal
         from hermeshq.models.app_settings import AppSettings
+        from hermeshq.services.secret_vault import build_vault_from_settings, decrypt_value, is_encrypted_value
 
         try:
             async with AsyncSessionLocal() as session:
@@ -65,7 +66,11 @@ class EmailService:
                 db_settings = result.scalar_one_or_none()
             if db_settings:
                 if db_settings.resend_api_key:
-                    self._api_key = db_settings.resend_api_key
+                    stored_key = db_settings.resend_api_key
+                    if is_encrypted_value(stored_key):
+                        vault = build_vault_from_settings(get_settings())
+                        stored_key = decrypt_value(vault, stored_key) or ""
+                    self._api_key = stored_key
                 if db_settings.from_email:
                     self._from_email = db_settings.from_email
                 if db_settings.from_name:

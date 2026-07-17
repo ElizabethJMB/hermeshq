@@ -59,6 +59,7 @@ def _check_login_rate(ip: str) -> None:
             detail="Too many login attempts. Please try again later.",
         )
 
+
 def _record_login_attempt(ip: str) -> None:
     """Record a failed login attempt for rate limiting."""
     _login_attempts.setdefault(ip, []).append(time.time())
@@ -155,7 +156,7 @@ def _validate_redirect_host(forwarded_host: str) -> bool:
     return candidate in allowed_hosts
 
 
-def _build_frontend_redirect(request: Request, *, token: str | None = None, auth_error: str | None = None) -> str:
+def _build_frontend_redirect(request: Request, *, oidc_complete: bool = False, auth_error: str | None = None) -> str:
     forwarded_host = request.headers.get("x-forwarded-host")
     if forwarded_host and not _validate_redirect_host(forwarded_host):
         logger.warning("Rejected X-Forwarded-Host %r — not in allowed origins", forwarded_host)
@@ -163,9 +164,11 @@ def _build_frontend_redirect(request: Request, *, token: str | None = None, auth
     host = forwarded_host or request.headers.get("host") or request.url.netloc
     scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
     base_url = f"{scheme}://{host}/"
-    if token:
-        query = urlencode({"token": token})
-        return f"{base_url}login?{query}"
+    if oidc_complete:
+        # The JWT travels only in the httpOnly cookie — never in the URL
+        # (browser history, proxy logs, Referer). The SPA exchanges the
+        # cookie for a token via POST /auth/refresh.
+        return f"{base_url}login?oidc=complete"
     if auth_error:
         # Failed auth: redirect to /login so LoginPage.tsx can display the error
         query = urlencode({"auth_error": auth_error})

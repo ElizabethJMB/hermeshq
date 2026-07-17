@@ -7,7 +7,9 @@ and routes them to the appropriate gateway instances.
 
 import json
 import logging
+import time
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from jose import jwt as jose_jwt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,30 +22,50 @@ router = APIRouter(tags=["webhooks"])
 
 # Google Chat signs webhook requests with a JWT from this service account.
 _GOOGLE_CHAT_ISSUER = "chat@system.gserviceaccount.com"
+_GOOGLE_CHAT_CERTS_URL = "https://www.googleapis.com/service_accounts/v1/metadata/x509/chat@system.gserviceaccount.com"
+_GOOGLE_CERTS_CACHE_TTL = 3600
+_google_certs_cache: dict = {"certs": None, "fetched_at": 0.0}
 
 
-def _verify_google_chat_bearer(request: Request) -> None:
-    """Reject requests that lack a Google-issued Bearer JWT.
+async def _fetch_google_chat_certs() -> dict[str, str]:
+    """Fetch Google's public certs for the Chat service account (cached 1h)."""
+    now = time.time()
+    if _google_certs_cache["certs"] is not None and (now - _google_certs_cache["fetched_at"]) < _GOOGLE_CERTS_CACHE_TTL:
+        return _google_certs_cache["certs"]
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(_GOOGLE_CHAT_CERTS_URL)
+        response.raise_for_status()
+        certs = response.json()
+    _google_certs_cache["certs"] = certs
+    _google_certs_cache["fetched_at"] = now
+    return certs
 
-    Full RS256 signature verification requires fetching Google's public certs
-    at runtime. Here we perform a lightweight guard: require the Authorization
-    header to be present and check that the unverified issuer claim matches
-    Google Chat's well-known service account. This blocks unauthenticated
-    scanners while keeping the endpoint functional without network round-trips.
+
+async def _verify_google_chat_bearer(request: Request) -> None:
+    """Reject requests without a valid Google-issued Bearer JWT.
+
+    Verifies the RS256 signature against the public x509 certificates of the
+    Google Chat service account, plus issuer and expiry claims.
     """
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing Google Chat bearer token")
-    token = auth_header[len("Bearer "):]
+    token = auth_header[len("Bearer ") :]
     try:
-        claims = jose_jwt.get_unverified_claims(token)
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid Google Chat bearer token")
-    if claims.get("iss") != _GOOGLE_CHAT_ISSUER:
-        logger.warning(
-            "Google Chat webhook: unexpected token issuer %r", claims.get("iss")
-        )
-        raise HTTPException(status_code=401, detail="Untrusted Google Chat token issuer")
+        certs = await _fetch_google_chat_certs()
+    except httpx.HTTPError:
+        logger.warning("Google Chat webhook: could not fetch verification certs")
+        raise HTTPException(status_code=503, detail="Google Chat cert fetch failed")
+    for cert_pem in certs.values():
+        try:
+            claims = jose_jwt.decode(token, cert_pem, algorithms=["RS256"], options={"verify_aud": False})
+        except Exception:  # noqa: BLE001  # try next cert
+            continue
+        if claims.get("iss") == _GOOGLE_CHAT_ISSUER:
+            return
+        logger.warning("Google Chat webhook: unexpected token issuer %r", claims.get("iss"))
+        break
+    raise HTTPException(status_code=401, detail="Invalid Google Chat bearer token")
 
 
 # ---------------------------------------------------------------------------
@@ -64,12 +86,11 @@ async def google_chat_webhook(
     - The bot is added/removed from a space
     - A card interaction occurs
     """
-    _verify_google_chat_bearer(request)
+    await _verify_google_chat_bearer(request)
     try:
         payload = await request.json()
     except (json.JSONDecodeError, TypeError, ValueError):
         return {"error": "invalid payload"}
-
     gateways = getattr(request.app.state, "google_chat_gateways", {})
     if not gateways:
         logger.warning("Google Chat webhook received but no gateways registered")
@@ -131,22 +152,24 @@ async def kapso_whatsapp_webhook(
         verify_webhook_signature,
     )
 
-    # Verify signature using raw body (before parsing)
+    # Verify signature using raw body (before parsing).
+    # Fail-closed: if no gateway has a webhook secret configured, the event
+    # cannot be authenticated and must be rejected.
     gateways_with_secret = [gw for gw in kapso_gateways.values() if gw._webhook_secret]
     if gateways_with_secret:
         if not signature:
             logger.warning("Kapso webhook: missing X-Webhook-Signature header — rejecting")
             return Response(status_code=401, content="Missing webhook signature")
-        verified = any(
-            verify_webhook_signature(body, signature, gw._webhook_secret)
-            for gw in gateways_with_secret
-        )
+        verified = any(verify_webhook_signature(body, signature, gw._webhook_secret) for gw in gateways_with_secret)
         if not verified:
             logger.warning("Kapso webhook: signature verification failed")
             return Response(status_code=401, content="Invalid signature")
-    elif signature:
-        logger.warning("Kapso webhook: signature present but no webhook_secret configured — rejecting")
-        return Response(status_code=401, content="Webhook secret not configured")
+    else:
+        logger.error(
+            "Kapso webhook: no webhook_secret configured on any gateway — rejecting unauthenticated event. "
+            "Configure a webhook secret in the Kapso channel settings."
+        )
+        return Response(status_code=503, content="Webhook secret not configured")
 
     # Process each event (single or batch)
     for event_data in raw_events:

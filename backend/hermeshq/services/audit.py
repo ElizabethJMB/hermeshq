@@ -62,3 +62,27 @@ def extract_ip(request: Any) -> str | None:
     if request.client:
         return request.client.host
     return None
+
+
+SENSITIVE_KEY_MARKERS = ("api_key", "apikey", "secret", "token", "password", "credential", "webhook_secret")
+REDACTED = "••••••"
+
+
+def redact_sensitive(value: Any) -> Any:
+    """Return a copy of ``value`` with credential-looking fields redacted.
+
+    Recurses into dicts and lists so audit logs never persist secrets
+    (API keys, tokens, passwords) contained in settings or config payloads.
+    """
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            key_lower = str(key).lower()
+            if any(marker in key_lower for marker in SENSITIVE_KEY_MARKERS):
+                redacted[key] = REDACTED if item else item
+            else:
+                redacted[key] = redact_sensitive(item)
+        return redacted
+    if isinstance(value, list):
+        return [redact_sensitive(item) for item in value]
+    return value

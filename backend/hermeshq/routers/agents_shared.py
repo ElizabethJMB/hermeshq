@@ -16,6 +16,7 @@ from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.conversation_thread import ConversationThread
 from hermeshq.models.task import Task
 from hermeshq.schemas.agent import AgentCreate, AgentRead
+from hermeshq.services.auxiliary_models import sanitize_auxiliary_models
 from hermeshq.services.avatar import build_avatar_path as _build_avatar_path_shared
 from hermeshq.services.managed_capabilities import get_managed_integration, list_available_integration_packages
 from hermeshq.services.runtime_profiles import get_runtime_profile
@@ -130,7 +131,13 @@ def _serialize_agent(request: Request, agent: Agent) -> AgentRead:
     if agent.avatar_filename:
         version = int(agent.updated_at.timestamp()) if agent.updated_at else 0
         avatar_url = f"{get_settings().api_prefix}/agents/{agent.id}/avatar?v={version}"
-    return payload.model_copy(update={"avatar_url": avatar_url, "has_avatar": bool(agent.avatar_filename)})
+    return payload.model_copy(
+        update={
+            "avatar_url": avatar_url,
+            "has_avatar": bool(agent.avatar_filename),
+            "auxiliary_models": sanitize_auxiliary_models(agent.auxiliary_models),
+        }
+    )
 
 
 async def _load_bulk_agents(
@@ -299,7 +306,7 @@ def _sync_agent_integration_toolsets(agent: Agent, enabled_integration_slugs: li
     }
     retained_enabled = [toolset for toolset in (agent.enabled_toolsets or []) if toolset not in known_toolsets]
     retained_disabled = [toolset for toolset in (agent.disabled_toolsets or []) if toolset not in known_toolsets]
-    for slug in (agent.integration_configs or {}):
+    for slug in agent.integration_configs or {}:
         integration = get_managed_integration(str(slug), enabled_integration_slugs)
         if integration and integration.get("plugin_slug"):
             retained_enabled.append(str(integration["plugin_slug"]))

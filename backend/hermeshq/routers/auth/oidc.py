@@ -17,6 +17,8 @@ from hermeshq.database import get_db_session
 from hermeshq.models.user import User
 
 from .helpers import (
+    _JWKS_CACHE,
+    _JWKS_CACHE_TTL,
     AUTH_MODE_LOCAL,
     DEFAULT_OIDC_PROVIDER_LABELS,
     OIDC_STATE_EXPIRY_MINUTES,
@@ -26,8 +28,6 @@ from .helpers import (
     _get_auth_mode,
     _get_http_client,
     _get_local_user_by_email,
-    _JWKS_CACHE,
-    _JWKS_CACHE_TTL,
     _normalize_email,
     _set_auth_cookie,
     logger,
@@ -81,6 +81,7 @@ def _get_public_oidc_provider_slugs() -> list[str]:
 async def _get_db_providers(db: AsyncSession) -> list:
     """Get enabled providers from the database."""
     from hermeshq.models.oidc_provider import OidcProvider
+
     result = await db.execute(select(OidcProvider).where(OidcProvider.enabled.is_(True)).order_by(OidcProvider.name))
     return list(result.scalars().all())
 
@@ -146,10 +147,7 @@ def _translate_oidc_browser_endpoint(url: str | None) -> str | None:
         public_parts = urlparse(public_base)
         discovery_parts = urlparse(discovery_base)
         target_parts = urlparse(url)
-        if (
-            target_parts.scheme == discovery_parts.scheme
-            and target_parts.netloc == discovery_parts.netloc
-        ):
+        if target_parts.scheme == discovery_parts.scheme and target_parts.netloc == discovery_parts.netloc:
             return urlunparse(
                 (
                     public_parts.scheme or target_parts.scheme,
@@ -217,7 +215,9 @@ async def _resolve_or_create_oidc_user(db: AsyncSession, claims: dict) -> User:
         user = await _get_local_user_by_email(db, email)
 
     if not user and not _oidc_auto_provision_enabled():
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This identity is not provisioned in HermesHQ")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="This identity is not provisioned in HermesHQ"
+        )
 
     if not user:
         username = await _generate_unique_username(db, _derive_username_seed(email, display_name, subject))
@@ -276,8 +276,7 @@ async def _extract_id_token_claims(token_response: dict) -> dict:
         discovery = await _fetch_oidc_discovery()
         jwks_uri = discovery.get("jwks_uri")
         if not jwks_uri:
-            logger.warning("OIDC discovery missing jwks_uri; skipping id_token validation")
-            return {}
+            raise ValueError("OIDC discovery missing jwks_uri; cannot validate id_token")
         keys = await _fetch_jwks(jwks_uri)
         settings = get_settings()
         issuer = (settings.oidc_issuer_url or "").rstrip("/")
@@ -300,15 +299,17 @@ async def _extract_id_token_claims(token_response: dict) -> dict:
                 return claims
             except JWTError:
                 continue
-        logger.warning("Could not validate id_token signature with any JWKS key")
-        return {}
-    except Exception:  # noqa: BLE001  # JWKS validation — broad catch for multi-key fallback
-        logger.warning("id_token validation failed; returning empty claims", exc_info=True)
-        return {}
+        raise ValueError("Could not validate id_token signature with any JWKS key")
+    except ValueError:
+        raise
+    except Exception as exc:  # noqa: BLE001  # JWKS fetch/parse failures are also auth failures
+        raise ValueError(f"id_token validation failed: {exc}") from exc
 
 
 @router.get("/oidc/login", include_in_schema=False)
-async def oidc_login(request: Request, provider: str | None = None, db: AsyncSession = Depends(get_db_session)) -> RedirectResponse:
+async def oidc_login(
+    request: Request, provider: str | None = None, db: AsyncSession = Depends(get_db_session)
+) -> RedirectResponse:
     requested_provider = (provider or "").strip().lower()
 
     # --- Try DB-based multi-provider first ---
@@ -316,6 +317,7 @@ async def oidc_login(request: Request, provider: str | None = None, db: AsyncSes
         db_provider = None
         try:
             from hermeshq.services import oidc_provider as oidc_svc
+
             db_provider = await oidc_svc.get_provider_by_slug(db, requested_provider)
         except Exception:  # noqa: BLE001  # DB lookup failure — fall through to env flow
             logger.debug("DB provider lookup failed; falling through to env-based flow", exc_info=True)
@@ -348,7 +350,7 @@ async def oidc_login(request: Request, provider: str | None = None, db: AsyncSes
             status_code=status.HTTP_302_FOUND,
         )
 
-    configured_generic_slug = ((get_settings().oidc_provider_slug or "").strip().lower() or "generic")
+    configured_generic_slug = (get_settings().oidc_provider_slug or "").strip().lower() or "generic"
     allowed_providers = set(_get_public_oidc_provider_slugs()) | {configured_generic_slug}
     if requested_provider and requested_provider not in allowed_providers:
         return RedirectResponse(
@@ -365,7 +367,9 @@ async def oidc_login(request: Request, provider: str | None = None, db: AsyncSes
     discovery = await _fetch_oidc_discovery()
     authorization_endpoint = _translate_oidc_browser_endpoint(discovery.get("authorization_endpoint"))
     if not authorization_endpoint:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="OIDC discovery missing authorization endpoint")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="OIDC discovery missing authorization endpoint"
+        )
     params = urlencode(
         {
             "client_id": get_settings().oidc_client_id,
@@ -391,6 +395,7 @@ async def oidc_logout(
     if provider:
         try:
             from hermeshq.services import oidc_provider as oidc_svc
+
             db_provider = await oidc_svc.get_provider_by_slug(db, provider)
             if db_provider:
                 social_url = oidc_svc.get_logout_url(db_provider, _build_oidc_post_logout_redirect_uri(request))
@@ -410,7 +415,9 @@ async def oidc_logout(
         discovery = await _fetch_oidc_discovery()
         end_session_endpoint = _translate_oidc_browser_endpoint(discovery.get("end_session_endpoint"))
         if not end_session_endpoint:
-            redirect = RedirectResponse(_build_frontend_redirect(request, **resp_kwargs), status_code=status.HTTP_302_FOUND)
+            redirect = RedirectResponse(
+                _build_frontend_redirect(request, **resp_kwargs), status_code=status.HTTP_302_FOUND
+            )
             _clear_auth_cookie(redirect)
             return redirect
         params = urlencode(
@@ -449,6 +456,7 @@ async def oidc_callback(
 
     # --- Try DB-provider state first (includes provider slug) ---
     from hermeshq.services import oidc_provider as oidc_svc
+
     state_payload = oidc_svc.verify_oidc_state(state, get_settings().jwt_secret)
     local_user = None
 
@@ -460,10 +468,12 @@ async def oidc_callback(
                 raise ValueError(f"Provider '{state_payload['provider']}' not found or disabled")
             claims = await oidc_svc.exchange_code_and_get_claims(provider, code, _build_oidc_redirect_uri(request))
             local_user = await oidc_svc.resolve_or_create_user(db, claims, provider)
-        except Exception as exc:  # noqa: BLE001  # OIDC multi-provider flow — surface any failure to user
+        except Exception:  # noqa: BLE001  # OIDC multi-provider flow — surface any failure to user
             logger.exception("OIDC authentication failed (DB provider flow)")
             return RedirectResponse(
-                _build_frontend_redirect(request, auth_error="Enterprise authentication failed. Please try again or contact support."),
+                _build_frontend_redirect(
+                    request, auth_error="Enterprise authentication failed. Please try again or contact support."
+                ),
                 status_code=status.HTTP_302_FOUND,
             )
     elif _validate_oidc_state(state):
@@ -496,14 +506,18 @@ async def oidc_callback(
                     headers={"Authorization": f"Bearer {access_token}"},
                 )
                 userinfo_response.raise_for_status()
-                claims = {**claims, **userinfo_response.json()}
+                # Verified id_token claims take precedence over userinfo so a
+                # tampered userinfo response cannot override `sub` et al.
+                claims = {**userinfo_response.json(), **claims}
             if not claims.get("sub"):
                 raise ValueError("OIDC user claims did not include sub")
             local_user = await _resolve_or_create_oidc_user(db, claims)
-        except Exception as exc:  # noqa: BLE001  # OIDC legacy flow — surface any failure to user
+        except Exception:  # noqa: BLE001  # OIDC legacy flow — surface any failure to user
             logger.exception("OIDC authentication failed (legacy env flow)")
             return RedirectResponse(
-                _build_frontend_redirect(request, auth_error="Enterprise authentication failed. Please try again or contact support."),
+                _build_frontend_redirect(
+                    request, auth_error="Enterprise authentication failed. Please try again or contact support."
+                ),
                 status_code=status.HTTP_302_FOUND,
             )
     else:
@@ -518,6 +532,8 @@ async def oidc_callback(
             status_code=status.HTTP_302_FOUND,
         )
     token, _ = create_access_token(local_user.id, subject_kind="id", role=local_user.role or "user")
-    redirect = RedirectResponse(_build_frontend_redirect(request, token=token), status_code=status.HTTP_302_FOUND)
+    redirect = RedirectResponse(
+        _build_frontend_redirect(request, oidc_complete=True), status_code=status.HTTP_302_FOUND
+    )
     _set_auth_cookie(redirect, token)
     return redirect

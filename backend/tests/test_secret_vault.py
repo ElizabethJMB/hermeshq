@@ -118,5 +118,55 @@ class TestSecretVaultErrorHandling(unittest.TestCase):
             vault_b.decrypt(encrypted)
 
 
+class TestSecretVaultLegacySeeds(unittest.TestCase):
+    """Legacy seed fallback for key rotation."""
+
+    def test_decrypts_ciphertext_from_legacy_seed(self) -> None:
+        old_vault = SecretVault(seed="old-seed")
+        encrypted = old_vault.encrypt("stored-secret")
+        new_vault = SecretVault(seed="new-seed", legacy_seeds=["old-seed"])
+        self.assertEqual(new_vault.decrypt(encrypted), "stored-secret")
+
+    def test_new_encryption_uses_primary_seed(self) -> None:
+        new_vault = SecretVault(seed="new-seed", legacy_seeds=["old-seed"])
+        encrypted = new_vault.encrypt("value")
+        self.assertEqual(SecretVault(seed="new-seed").decrypt(encrypted), "value")
+        with self.assertRaises(InvalidToken):
+            SecretVault(seed="old-seed").decrypt(encrypted)
+
+    def test_raises_when_no_seed_matches(self) -> None:
+        old_vault = SecretVault(seed="unrelated-seed")
+        encrypted = old_vault.encrypt("x")
+        new_vault = SecretVault(seed="new-seed", legacy_seeds=["old-seed"])
+        with self.assertRaises(InvalidToken):
+            new_vault.decrypt(encrypted)
+
+
+class TestValueHelpers(unittest.TestCase):
+    """encrypt_value/decrypt_value prefixed-marker helpers."""
+
+    def test_round_trip(self) -> None:
+        from hermeshq.services.secret_vault import decrypt_value, encrypt_value, is_encrypted_value
+
+        vault = SecretVault(seed="test-seed")
+        stored = encrypt_value(vault, "my-api-key")
+        self.assertTrue(is_encrypted_value(stored))
+        self.assertNotIn("my-api-key", stored)
+        self.assertEqual(decrypt_value(vault, stored), "my-api-key")
+
+    def test_legacy_plaintext_passthrough(self) -> None:
+        from hermeshq.services.secret_vault import decrypt_value, is_encrypted_value
+
+        vault = SecretVault(seed="test-seed")
+        self.assertFalse(is_encrypted_value("plain-value"))
+        self.assertEqual(decrypt_value(vault, "plain-value"), "plain-value")
+
+    def test_corrupt_returns_none(self) -> None:
+        from hermeshq.services.secret_vault import decrypt_value
+
+        vault = SecretVault(seed="test-seed")
+        self.assertIsNone(decrypt_value(vault, "enc:v1:garbage"))
+
+
 if __name__ == "__main__":
     unittest.main()

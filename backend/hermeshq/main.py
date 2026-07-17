@@ -11,13 +11,15 @@ from types import SimpleNamespace
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
+from starlette.websockets import WebSocketState
 
 from hermeshq.config import get_settings
-from hermeshq.core.events import EventBroker, EventSubscription
+from hermeshq.core.events import EventBroker
 from hermeshq.core.security import get_accessible_agent_ids, get_websocket_user, hash_password, is_admin
 from hermeshq.database import AsyncSessionLocal, init_database
 from hermeshq.models import ActivityLog, Agent, AppSettings, Node, ProviderDefinition, TerminalSession, User
 from hermeshq.routers import (
+    agent_builder,
     agents,
     attachments,
     audit,
@@ -51,7 +53,6 @@ from hermeshq.routers import (
     voice,
     webhooks,
 )
-from hermeshq.routers import agent_builder
 from hermeshq.routers import settings as settings_router
 from hermeshq.routers.public_chat import management_router as public_chat_management_router
 from hermeshq.routers.public_chat import public_router as public_chat_router
@@ -67,13 +68,16 @@ from hermeshq.services.hermes_installation import HermesInstallationManager
 from hermeshq.services.hermes_runtime import HermesRuntime
 from hermeshq.services.hermes_version_manager import HermesVersionManager
 from hermeshq.services.instance_backup import InstanceBackupService
-from hermeshq.services.public_chat_service import PublicChatService
-from hermeshq.services.instance_backup import InstanceBackupService
 from hermeshq.services.provider_catalog import BUILTIN_PROVIDERS, normalize_runtime_provider, seed_provider_defaults
 from hermeshq.services.pty_manager import PTYManager
-from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug, terminal_allowed_for_profile, STANDARD_ENABLED_TOOLSETS
+from hermeshq.services.public_chat_service import PublicChatService
+from hermeshq.services.runtime_profiles import (
+    STANDARD_ENABLED_TOOLSETS,
+    normalize_runtime_profile_slug,
+    terminal_allowed_for_profile,
+)
 from hermeshq.services.scheduler import SchedulerService
-from hermeshq.services.secret_vault import SecretVault
+from hermeshq.services.secret_vault import SecretVault, build_vault_from_settings
 from hermeshq.services.workspace_manager import WorkspaceManager
 from hermeshq.versioning import get_app_version
 
@@ -86,8 +90,11 @@ DEFAULT_ENABLED_INTEGRATION_PACKAGES = (
 )
 
 
-async def bootstrap_defaults() -> None:
+async def bootstrap_defaults(secret_vault: SecretVault | None = None) -> None:
     import secrets as _secrets
+
+    from hermeshq.services.auxiliary_models import migrate_auxiliary_models
+    from hermeshq.services.secret_vault import encrypt_value, is_encrypted_value
 
     # Generate random admin password if not set
     admin_password = settings.admin_password
@@ -135,10 +142,10 @@ async def bootstrap_defaults() -> None:
             normalized_default_provider = normalize_runtime_provider(settings_row.default_provider)
             if normalized_default_provider != settings_row.default_provider:
                 settings_row.default_provider = normalized_default_provider
+            if secret_vault and settings_row.resend_api_key and not is_encrypted_value(settings_row.resend_api_key):
+                settings_row.resend_api_key = encrypt_value(secret_vault, settings_row.resend_api_key)
         enabled_packages = [
-            slug
-            for slug in (settings_row.enabled_integration_packages or [])
-            if isinstance(slug, str) and slug.strip()
+            slug for slug in (settings_row.enabled_integration_packages or []) if isinstance(slug, str) and slug.strip()
         ]
         for slug in DEFAULT_ENABLED_INTEGRATION_PACKAGES:
             if slug not in enabled_packages:
@@ -187,6 +194,10 @@ async def bootstrap_defaults() -> None:
             if normalized_provider != agent.provider:
                 agent.provider = normalized_provider
             agent.runtime_profile = normalize_runtime_profile_slug(agent.runtime_profile)
+            if secret_vault and agent.auxiliary_models:
+                migrated_aux, aux_changed = migrate_auxiliary_models(agent.auxiliary_models, secret_vault)
+                if aux_changed:
+                    agent.auxiliary_models = migrated_aux
 
             # ── Inherit new standard toolsets ──────────────────────────
             # Any toolset added to STANDARD_ENABLED_TOOLSETS is automatically
@@ -208,16 +219,15 @@ async def bootstrap_defaults() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_database()
-    await bootstrap_defaults()
-    app.state.event_broker = EventBroker()
-    app.state.workspace_manager = WorkspaceManager(settings.workspaces_root)
-    secret_vault_seed = settings.fernet_key or settings.jwt_secret
     if not settings.fernet_key:
         logger.warning(
             "⚠️ FERNET_KEY not set — SecretVault is using jwt_secret as fallback. "
-            "Generate a key with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            'Generate a key with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
         )
-    app.state.secret_vault = SecretVault(secret_vault_seed)
+    app.state.secret_vault = build_vault_from_settings(settings)
+    await bootstrap_defaults(app.state.secret_vault)
+    app.state.event_broker = EventBroker()
+    app.state.workspace_manager = WorkspaceManager(settings.workspaces_root)
     app.state.hermes_version_manager = HermesVersionManager(AsyncSessionLocal)
     await app.state.hermes_version_manager.ensure_default_catalog_entries()
     app.state.instance_backup_service = InstanceBackupService(AsyncSessionLocal)
@@ -250,6 +260,7 @@ async def lifespan(app: FastAPI):
     app.state.google_chat_gateways = app.state.enterprise_gateways.google_chat_gateways
     app.state.kapso_gateways = app.state.enterprise_gateways.kapso_gateways
     app.state.comms_router = CommsRouter(AsyncSessionLocal, app.state.event_broker)
+
     async def log_terminal_activity(agent_id: str, event_type: str, message: str, details: dict) -> None:
         async with AsyncSessionLocal() as session:
             agent = await session.get(Agent, agent_id)
@@ -322,7 +333,8 @@ async def lifespan(app: FastAPI):
     await app.state.public_chat_service.start_purge_loop()
 
     async def _periodic_cleanup() -> None:
-        from hermeshq.routers.mcp_server import _rate_limiter, _analytics
+        from hermeshq.routers.mcp_server import _analytics, _rate_limiter
+
         while True:
             await asyncio.sleep(60)
             _rate_limiter.cleanup()
@@ -409,6 +421,7 @@ app.include_router(public_chat_widget_router)
 
 try:
     from prometheus_fastapi_instrumentator import Instrumentator
+
     Instrumentator(
         should_group_status_codes=True,
         should_ignore_untemplated=True,
@@ -454,6 +467,7 @@ async def stream(websocket: WebSocket) -> None:
             return
 
     from hermeshq.core.security import decode_access_token_claims
+
     claims = decode_access_token_claims(token or "")
     if not claims or not claims.get("sub"):
         await websocket.close(code=4401)
@@ -461,28 +475,27 @@ async def stream(websocket: WebSocket) -> None:
 
     user_id: str = claims["sub"]
     user_role: str = claims.get("role", "user")
-    # user_is_admin derived but handled via is_admin() elsewhere
 
-    # Use agent_ids from token if available (no DB needed), otherwise fall back to DB query
-    token_agent_ids: list[str] | None = claims.get("agent_ids")
-    if token_agent_ids is not None:
-        accessible_agent_ids = token_agent_ids
-    else:
-        async with AsyncSessionLocal() as session:
-            from hermeshq.core.security import get_user_by_subject
-            user = await get_user_by_subject(session, user_id, claims.get("sub_kind"))
-            if not user or not user.is_active:
-                await websocket.close(code=4401)
-                return
-            accessible_agent_ids = await get_accessible_agent_ids(session, user)
+    # Always validate against the DB: role/agent_ids claims embedded in the
+    # token would otherwise keep granting access (up to 12h) after a user is
+    # deactivated or their agent assignments are revoked.
+    async with AsyncSessionLocal() as session:
+        from hermeshq.core.security import get_user_by_subject
+
+        db_user = await get_user_by_subject(session, user_id, claims.get("sub_kind"))
+        if not db_user or not db_user.is_active:
+            await websocket.close(code=4401)
+            return
+        user_role = db_user.role or "user"
+        accessible_agent_ids = await get_accessible_agent_ids(session, db_user)
 
     # Build a lightweight user-like object for the broker subscription
     user = SimpleNamespace(id=user_id, role=user_role, is_active=True)
 
     # If we already accepted (message-based auth), don't accept again.
-    if websocket.client_state.name == "CONNECTED":
-        broker._connections[websocket] = EventSubscription(
-            websocket=websocket,
+    if websocket.client_state == WebSocketState.CONNECTED:
+        broker.register(
+            websocket,
             is_admin=is_admin(user),
             agent_ids=set(accessible_agent_ids),
             user_id=user_id,
@@ -512,8 +525,23 @@ async def stream(websocket: WebSocket) -> None:
 @app.websocket("/ws/pty/{agent_id}")
 async def pty_stream(websocket: WebSocket, agent_id: str) -> None:
     mode = "hybrid"
+    # Authentication: prefer first-message auth so tokens never appear in
+    # URLs/access logs; query-param token still accepted for legacy clients.
+    token: str | None = websocket.query_params.get("token")
+    if not token:
+        await websocket.accept()
+        try:
+            raw = await asyncio.wait_for(websocket.receive_text(), timeout=10)
+            auth_payload = json.loads(raw)
+            if auth_payload.get("type") == "auth":
+                token = auth_payload.get("token")
+        except (TimeoutError, json.JSONDecodeError, KeyError):
+            token = None
+        if not token:
+            await websocket.close(code=4401)
+            return
     async with AsyncSessionLocal() as session:
-        user = await get_websocket_user(websocket, session)
+        user = await get_websocket_user(websocket, session, token)
         if not user:
             await websocket.close(code=4401)
             return
@@ -543,16 +571,18 @@ async def pty_stream(websocket: WebSocket, agent_id: str) -> None:
         while True:
             message = await websocket.receive_json()
             if message.get("type") == "input":
-                await app.state.pty_manager.write_input(
-                    agent_id,
-                    base64.b64decode(message.get("data", "")),
-                )
+                try:
+                    data = base64.b64decode(message.get("data", ""), validate=True)
+                except (ValueError, TypeError):
+                    continue
+                await app.state.pty_manager.write_input(agent_id, data)
             elif message.get("type") == "resize":
-                await app.state.pty_manager.resize(
-                    agent_id,
-                    int(message.get("cols", pty_session.cols)),
-                    int(message.get("rows", pty_session.rows)),
-                )
+                try:
+                    cols = max(1, min(500, int(message.get("cols", pty_session.cols))))
+                    rows = max(1, min(500, int(message.get("rows", pty_session.rows))))
+                except (ValueError, TypeError):
+                    continue
+                await app.state.pty_manager.resize(agent_id, cols, rows)
             elif message.get("type") == "detach":
                 break
     except WebSocketDisconnect:

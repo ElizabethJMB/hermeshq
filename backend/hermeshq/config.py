@@ -1,3 +1,4 @@
+import contextlib
 import logging
 from pathlib import Path
 
@@ -42,9 +43,7 @@ class Settings(BaseSettings):
     admin_password: str = ""
     admin_display_name: str = "Hermes Operator"
 
-    workspaces_root: Path = Field(
-        default_factory=lambda: Path(__file__).resolve().parents[2] / "workspaces"
-    )
+    workspaces_root: Path = Field(default_factory=lambda: Path(__file__).resolve().parents[2] / "workspaces")
     branding_root: Path | None = None
     hermes_skins_root: Path | None = None
     agent_assets_root: Path | None = None
@@ -58,6 +57,9 @@ class Settings(BaseSettings):
     # Each process uses ~50MB RAM. Default: 8 (safe for 1GB container).
     # For production sizing: available_RAM_MB / 60 (50MB per process + 20% headroom)
     concurrency_semaphore: int = 8
+    # Max wall-clock seconds a single task runner subprocess may run before
+    # being killed. Prevents hung LLM calls from occupying slots forever.
+    task_timeout_seconds: int = 3600
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -69,6 +71,7 @@ class Settings(BaseSettings):
     def model_post_init(self, __context) -> None:
         if self.jwt_secret == "":
             import secrets as _secrets
+
             self.jwt_secret = _secrets.token_urlsafe(32)
             # Persist the generated secret so it survives container restarts.
             # Without this, the SecretVault (which uses jwt_secret as Fernet seed
@@ -91,12 +94,22 @@ class Settings(BaseSettings):
                 if not found:
                     new_lines.append(f"JWT_SECRET={self.jwt_secret}")
                 env_path.write_text("\n".join(new_lines) + "\n")
+                import os as _os
+
+                with contextlib.suppress(OSError):
+                    _os.chmod(env_path, 0o600)
                 logger.warning(
                     "⚠️ JWT_SECRET was empty — auto-generated and saved to %s. "
                     "Set JWT_SECRET in your environment for production.",
                     env_path,
                 )
             except OSError:
+                if not self.debug:
+                    raise RuntimeError(
+                        "JWT_SECRET is not set and could not be persisted to "
+                        f"{env_path}. Set JWT_SECRET in your environment before "
+                        "running in production, or set DEBUG=true to bypass."
+                    )
                 logger.warning(
                     "⚠️ JWT_SECRET was empty — auto-generated but could NOT persist to %s. "
                     "Secrets will break on next restart!",
@@ -150,8 +163,13 @@ def get_settings() -> Settings:
     return _settings_instance
 
 
+RUNTIME_MUTABLE_SETTINGS = frozenset({"concurrency_semaphore"})
+
+
 def update_runtime_setting(key: str, value: object) -> None:
-    """Update a setting value at runtime without restart."""
+    """Update a setting value at runtime without restart (allowlisted keys only)."""
+    if key not in RUNTIME_MUTABLE_SETTINGS:
+        raise ValueError(f"Setting '{key}' cannot be changed at runtime")
     global _settings_instance
     s = get_settings()
     setattr(s, key, value)
