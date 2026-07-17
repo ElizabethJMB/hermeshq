@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -14,6 +13,7 @@ class AuxiliaryModelEntry(BaseModel):
     api_key_ref: str | None = None
     api_key: str | None = None
     base_url: str | None = None
+    has_api_key: bool = False
 
     def to_dict(self) -> dict:
         d: dict = {}
@@ -273,15 +273,3 @@ class AvatarGenerationRead(BaseModel):
     task_id: str
     operator_id: str
     operator_status: str
-
-
-def auxiliary_models_to_db(
-    aux: dict[str, AuxiliaryModelEntry] | None,
-) -> dict[str, dict[str, Any]] | None:
-    """Convert Pydantic AuxiliaryModelEntry objects to plain dicts for JSONB storage."""
-    if aux is None:
-        return None
-    result: dict[str, dict[str, Any]] = {}
-    for task_name, entry in aux.items():
-        result[task_name] = entry.to_dict()
-    return result or None

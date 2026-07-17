@@ -267,6 +267,7 @@ export interface AuxiliaryModelEntry {
   model: string | null;
   api_key_ref: string | null;
   base_url: string | null;
+  has_api_key?: boolean;
 }
 
 export interface ProviderDefinition {

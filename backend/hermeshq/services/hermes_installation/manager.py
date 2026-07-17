@@ -17,6 +17,7 @@ from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.provider import ProviderDefinition
 from hermeshq.models.secret import Secret
 from hermeshq.services.agent_hierarchy import delegate_route, route_label
+from hermeshq.services.auxiliary_models import resolve_auxiliary_api_key
 from hermeshq.services.hermes_version_manager import HermesRuntimeSelection, HermesVersionManager
 from hermeshq.services.managed_capabilities import (
     fetch_local_skill_bundle,
@@ -110,7 +111,16 @@ class HermesInstallationManager:
         # Resolve effective model: when use_provider_default=True, use the provider's
         # current default_model from DB instead of the snapshot taken at creation time.
         effective_model = await self._resolve_effective_model(agent)
-        self._write_config(agent, hermes_home, system_prompt, messaging_channels, active_skin, runtime_selection, resolved_aux_api_keys, effective_model)
+        self._write_config(
+            agent,
+            hermes_home,
+            system_prompt,
+            messaging_channels,
+            active_skin,
+            runtime_selection,
+            resolved_aux_api_keys,
+            effective_model,
+        )
         self._write_soul(agent, hermes_home, app_name)
         await self._sync_auth_store(agent, hermes_home)
         await self._sync_dotenv(agent, hermes_home, messaging_channels)
@@ -230,6 +240,7 @@ class HermesInstallationManager:
     async def _resolve_gateway_user_id(self, agent: Agent, platform: str | None) -> str | None:
         """Return the HermesHQ user ID for a single-user WhatsApp channel, or None."""
         from hermeshq.models.user import User
+
         if platform not in (None, "whatsapp"):
             return None
         channels = await self._load_messaging_channels(agent.id)
@@ -242,9 +253,7 @@ class HermesInstallationManager:
             if not allowed:
                 continue
             async with self.session_factory() as session:
-                result = await session.execute(
-                    select(User).where(User.whatsapp_user.in_(allowed)).limit(2)
-                )
+                result = await session.execute(select(User).where(User.whatsapp_user.in_(allowed)).limit(2))
                 users = result.scalars().all()
             if len(users) == 1:
                 return users[0].id
@@ -288,11 +297,7 @@ class HermesInstallationManager:
                 agent.skills = [skill for skill in current_skills if skill != managed_identifier]
             else:
                 expected_name = target_dir.name
-                agent.skills = [
-                    skill
-                    for skill in current_skills
-                    if skill.strip().split("/")[-1] != expected_name
-                ]
+                agent.skills = [skill for skill in current_skills if skill.strip().split("/")[-1] != expected_name]
 
         shutil.rmtree(target_dir)
         _invalidate_install_cached(agent.id)
@@ -356,21 +361,18 @@ class HermesInstallationManager:
             include_system_plugins=bool(agent.is_system_agent),
         )
         desired_names = {plugin["template_dir"] for plugin in desired_plugins}
-        known_names = {
-            plugin["template_dir"]
-            for plugin in list_managed_plugins([], include_system_plugins=True)
-        }
+        known_names = {plugin["template_dir"] for plugin in list_managed_plugins([], include_system_plugins=True)}
         known_names.update(
-            package["plugin_slug"]
-            for package in list_available_integration_packages([])
-            if package.get("plugin_slug")
+            package["plugin_slug"] for package in list_available_integration_packages([]) if package.get("plugin_slug")
         )
         for existing in plugins_root.iterdir():
             if existing.is_dir() and existing.name in known_names and existing.name not in desired_names:
                 shutil.rmtree(existing)
         templates_root = plugin_templates_root()
         for plugin in desired_plugins:
-            source_root = Path(plugin["source_root"]) if plugin.get("source_root") else templates_root / plugin["template_dir"]
+            source_root = (
+                Path(plugin["source_root"]) if plugin.get("source_root") else templates_root / plugin["template_dir"]
+            )
             target_root = plugins_root / plugin["template_dir"]
             if target_root.exists():
                 shutil.rmtree(target_root)
@@ -528,8 +530,9 @@ class HermesInstallationManager:
                     entry["provider"] = provider_val
                 if aux_cfg.get("model"):
                     entry["model"] = aux_cfg["model"]
-                if aux_cfg.get("api_key"):
-                    entry["api_key"] = aux_cfg["api_key"]
+                aux_api_key = resolve_auxiliary_api_key(self.secret_vault, aux_cfg)
+                if aux_api_key:
+                    entry["api_key"] = aux_api_key
                 elif resolved_aux_api_keys and task_name in resolved_aux_api_keys:
                     entry["api_key"] = resolved_aux_api_keys[task_name]
                 if entry:
@@ -540,11 +543,7 @@ class HermesInstallationManager:
         # covers ALL providers so that gateway tools (e.g. vision_analyze)
         # can resolve credentials from config.yaml regardless of the main
         # provider (nous-api, openai-compatible, gemini-api, etc.).
-        if (
-            effective_base_url
-            and resolved_aux_api_keys is not None
-            and resolved_aux_api_keys.get("__main__")
-        ):
+        if effective_base_url and resolved_aux_api_keys is not None and resolved_aux_api_keys.get("__main__"):
             main_key = resolved_aux_api_keys["__main__"]
             for task_name in ("vision", "compression", "web_extract"):
                 if task_name not in aux_section:
@@ -564,10 +563,7 @@ class HermesInstallationManager:
         if plugins_root.exists():
             installed_plugin_dirs = {p.name for p in plugins_root.iterdir() if p.is_dir()}
             # enabled_toolsets contains slugs like "hermeshq_ms365_mail"
-            plugins_to_enable = [
-                slug for slug in (agent.enabled_toolsets or [])
-                if slug in installed_plugin_dirs
-            ]
+            plugins_to_enable = [slug for slug in (agent.enabled_toolsets or []) if slug in installed_plugin_dirs]
             if plugins_to_enable:
                 config["plugins"] = {"enabled": plugins_to_enable}
         config_path = hermes_home / "config.yaml"
@@ -660,7 +656,9 @@ class HermesInstallationManager:
             encoding="utf-8",
         )
 
-    async def _sync_managed_skills(self, agent: Agent, hermes_home: Path, enabled_integration_slugs: list[str]) -> list[dict]:
+    async def _sync_managed_skills(
+        self, agent: Agent, hermes_home: Path, enabled_integration_slugs: list[str]
+    ) -> list[dict]:
         managed_root = hermes_home / "skills" / "hermeshq-managed"
         managed_root.mkdir(parents=True, exist_ok=True)
 
@@ -725,7 +723,11 @@ class HermesInstallationManager:
             source = SkillsShSource(GitHubAuth())
         elif identifier.startswith("official/"):
             source = OptionalSkillSource()
-        elif identifier.startswith("well-known/") or identifier.startswith("http://") or identifier.startswith("https://"):
+        elif (
+            identifier.startswith("well-known/")
+            or identifier.startswith("http://")
+            or identifier.startswith("https://")
+        ):
             source = WellKnownSkillSource()
         else:
             source = SkillsShSource(GitHubAuth())
@@ -777,7 +779,8 @@ class HermesInstallationManager:
                     return {
                         "name": metadata.get("name") or skill_dir.name,
                         "identifier": identifier,
-                        "description": metadata.get("description") or self._extract_description((skill_dir / "SKILL.md").read_text(encoding="utf-8")),
+                        "description": metadata.get("description")
+                        or self._extract_description((skill_dir / "SKILL.md").read_text(encoding="utf-8")),
                         "source": metadata.get("source") or "cached",
                         "managed": True,
                     }
@@ -812,10 +815,7 @@ class HermesInstallationManager:
             result = await session.execute(select(Agent).order_by(Agent.created_at.asc()))
             agents = list(result.scalars().all())
 
-        name_by_id = {
-            item.id: (item.friendly_name or item.name or item.slug or item.id)
-            for item in agents
-        }
+        name_by_id = {item.id: (item.friendly_name or item.name or item.slug or item.id) for item in agents}
         roster: list[dict] = []
         agent_map = {item.id: item for item in agents}
         for item in agents:
@@ -886,10 +886,7 @@ class HermesInstallationManager:
                 "Use the real Hermes tools `skills_list` and `skill_view` to inspect them before relying on them.",
                 "Assigned skills:",
             ]
-            lines.extend(
-                f"- {skill['name']}: {skill['description'] or 'No description'}"
-                for skill in installed_skills
-            )
+            lines.extend(f"- {skill['name']}: {skill['description'] or 'No description'}" for skill in installed_skills)
             parts.append("\n".join(lines))
         else:
             parts.append(
@@ -1063,7 +1060,9 @@ class HermesInstallationManager:
                 managed["TELEGRAM_REQUIRE_MENTION"] = "true" if channel.require_mention else "false"
                 continue
             if channel.platform == "whatsapp":
-                whatsapp_mode = str((channel.metadata_json or {}).get("whatsapp_mode") or "self-chat").strip() or "self-chat"
+                whatsapp_mode = (
+                    str((channel.metadata_json or {}).get("whatsapp_mode") or "self-chat").strip() or "self-chat"
+                )
                 managed["WHATSAPP_ENABLED"] = "true" if channel.enabled else "false"
                 managed["WHATSAPP_MODE"] = whatsapp_mode
                 if channel.allowed_user_ids:
@@ -1135,14 +1134,25 @@ class HermesInstallationManager:
         }
         # Add all known provider API key env vars
         for provider in (
-            "zai", "openrouter", "anthropic", "openai",
-            "openai-codex", "kimi-coding", "gemini", "bedrock",
+            "zai",
+            "openrouter",
+            "anthropic",
+            "openai",
+            "openai-codex",
+            "kimi-coding",
+            "gemini",
+            "bedrock",
         ):
             managed_keys.update(self._provider_env_names(provider))
         # Add all known provider base URL env vars
         for provider in (
-            "zai", "openrouter", "openai",
-            "openai-codex", "kimi-coding", "gemini", "bedrock",
+            "zai",
+            "openrouter",
+            "openai",
+            "openai-codex",
+            "kimi-coding",
+            "gemini",
+            "bedrock",
         ):
             base_env = self._provider_base_url_env_name(provider)
             if base_env:
