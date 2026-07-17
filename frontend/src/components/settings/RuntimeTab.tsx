@@ -55,8 +55,6 @@ export function RuntimeTab() {
     [enabledProviders, selectedDefaultProviderSlug],
   );
 
-  const systemOperator = useMemo(() => null, []);
-
   async function submitDefaults(event: FormEvent) {
     event.preventDefault();
     await updateSettings.mutateAsync({

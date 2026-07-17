@@ -11,13 +11,6 @@ import infoIcon from "../assets/icon/info.png";
 
 const kanbanColumns = ["inbox", "planned", "running", "blocked", "review", "done", "failed"] as const;
 
-function statusTone(status: string) {
-  if (status === "completed") return "text-[var(--success)]";
-  if (status === "running" || status === "queued") return "text-[var(--warning)]";
-  if (status === "failed") return "text-[var(--accent)]";
-  return "text-[var(--text-secondary)]";
-}
-
 function statusBadgeTone(status: string) {
   if (status === "completed") return "border-[color-mix(in_srgb,var(--success)_45%,transparent)] bg-[color-mix(in_srgb,var(--success)_14%,transparent)] text-[var(--success)]";
   if (status === "running" || status === "queued") return "border-[color-mix(in_srgb,var(--warning)_45%,transparent)] bg-[color-mix(in_srgb,var(--warning)_14%,transparent)] text-[var(--warning)]";

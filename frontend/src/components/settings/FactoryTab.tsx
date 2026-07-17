@@ -1,11 +1,10 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import type { UseMutationResult, QueryClient } from "@tanstack/react-query";
+import type { UseMutationResult } from "@tanstack/react-query";
 
 import { useIntegrationDraftFile } from "../../api/integrationFactory";
 import { useI18n } from "../../lib/i18n";
 import type {
   IntegrationDraft,
-  IntegrationDraftFileContent,
   IntegrationDraftValidation,
   IntegrationDraftPublishResult,
 } from "../../types/api";
@@ -19,8 +18,6 @@ interface FactoryTabProps {
   deleteIntegrationDraftFile: UseMutationResult<IntegrationDraft, Error, { draftId: string; path: string }>;
   validateIntegrationDraft: UseMutationResult<IntegrationDraftValidation, Error, string>;
   publishIntegrationDraft: UseMutationResult<IntegrationDraftPublishResult, Error, string>;
-  integrationDraftFiles: IntegrationDraftFileContent | undefined;
-  queryClient: QueryClient;
 }
 
 export default function FactoryTab({
@@ -32,8 +29,6 @@ export default function FactoryTab({
   deleteIntegrationDraftFile,
   validateIntegrationDraft,
   publishIntegrationDraft,
-  integrationDraftFiles,
-  queryClient,
 }: FactoryTabProps) {
   const { t } = useI18n();
 

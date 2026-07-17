@@ -9,13 +9,6 @@ import { UserAvatar } from "../components/UserAvatar";
 import { useRealtimeStore } from "../stores/realtimeStore";
 import { useSessionStore } from "../stores/sessionStore";
 
-function statusTone(status: string) {
-  if (status === "running") return "text-[var(--success)]";
-  if (status === "queued" || status === "starting") return "text-[var(--warning)]";
-  if (status === "error") return "text-[var(--accent)]";
-  return "text-[var(--text-secondary)]";
-}
-
 function statusBadgeTone(status: string) {
   if (status === "running") return "border-[color-mix(in_srgb,var(--success)_45%,transparent)] bg-[color-mix(in_srgb,var(--success)_16%,transparent)] text-[var(--success)]";
   if (status === "queued" || status === "starting") return "border-[color-mix(in_srgb,var(--warning)_45%,transparent)] bg-[color-mix(in_srgb,var(--warning)_14%,transparent)] text-[var(--warning)]";

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import type { User } from "../types/api";
 import { useSessionStore } from "../stores/sessionStore";
 
 describe("sessionStore", () => {
@@ -14,7 +15,7 @@ describe("sessionStore", () => {
   });
 
   it("setSession stores token in localStorage and state", () => {
-    const fakeUser = { id: "u1", username: "admin", role: "admin" } as any;
+    const fakeUser = { id: "u1", username: "admin", role: "admin" } as unknown as User;
     useSessionStore.getState().setSession("tok-123", fakeUser);
     expect(useSessionStore.getState().token).toBe("tok-123");
     expect(useSessionStore.getState().user).toEqual(fakeUser);
@@ -30,7 +31,7 @@ describe("sessionStore", () => {
   });
 
   it("setToken updates token without touching user", () => {
-    const fakeUser = { id: "u1", username: "admin" } as any;
+    const fakeUser = { id: "u1", username: "admin" } as unknown as User;
     useSessionStore.getState().setSession("tok-1", fakeUser);
     useSessionStore.getState().setToken("tok-2");
     expect(useSessionStore.getState().token).toBe("tok-2");
@@ -39,7 +40,7 @@ describe("sessionStore", () => {
 
   it("setUser updates user without touching token", () => {
     useSessionStore.getState().setSession("tok-1", null);
-    const fakeUser = { id: "u1", username: "admin" } as any;
+    const fakeUser = { id: "u1", username: "admin" } as unknown as User;
     useSessionStore.getState().setUser(fakeUser);
     expect(useSessionStore.getState().token).toBe("tok-1");
     expect(useSessionStore.getState().user).toEqual(fakeUser);

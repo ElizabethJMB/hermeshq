@@ -12,12 +12,19 @@ export default defineConfig([
     extends: [
       js.configs.recommended,
       tseslint.configs.recommended,
-      reactHooks.configs.flat.recommended,
+      reactHooks.configs['recommended-latest'],
       reactRefresh.configs.vite,
     ],
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
+    },
+  },
+  {
+    // Files that intentionally co-locate hooks/constants with components
+    files: ['src/lib/i18n.tsx', 'src/components/ChannelForm.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
     },
   },
 ])

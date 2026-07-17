@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   listOidcProviders,
   createOidcProvider,
@@ -50,7 +50,6 @@ function ProviderIcon({ slug }: { slug: string | null }) {
 export function AuthenticationTab() {
   const { t } = useI18n();
   const [providers, setProviders] = useState<OidcProviderRead[]>([]);
-  const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<OidcProviderRead | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<Partial<OidcProviderCreate>>({
@@ -66,17 +65,14 @@ export function AuthenticationTab() {
     icon_slug: null,
   });
 
-  async function loadProviders() {
-    setLoading(true);
+  const loadProviders = useCallback(async () => {
     try {
       const data = await listOidcProviders();
       setProviders(data);
     } catch {
       /* ignore */
-    } finally {
-      setLoading(false);
     }
-  }
+  }, []);
 
   function applyPreset(slug: string) {
     const preset = PRESET_PROVIDERS[slug];
@@ -164,7 +160,7 @@ export function AuthenticationTab() {
 
   useEffect(() => {
     loadProviders();
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loadProviders]);
 
   return (
     <div className="space-y-6">

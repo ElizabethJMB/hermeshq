@@ -59,7 +59,7 @@ export function ScheduledTasksPage() {
 
   function isValidCron(expr: string): boolean {
     const parts = expr.trim().split(/\s+/);
-    return parts.length === 5 && parts.every((p) => /^[\d*/,\-]+$/.test(p));
+    return parts.length === 5 && parts.every((p) => /^[\d*/,-]+$/.test(p));
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {

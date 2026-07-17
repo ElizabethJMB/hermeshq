@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
 import type { UseMutationResult } from "@tanstack/react-query";
-import { useI18n } from "../../lib/i18n";
 import type { Agent, PublicChatApiKey, PublicChatApiKeyCreated } from "../../types/api";
 
 interface PublicChatKeysTabProps {
@@ -20,7 +19,6 @@ export default function PublicChatKeysTab({
   deletePublicChatKey,
   permanentlyDeletePublicChatKey,
 }: PublicChatKeysTabProps) {
-  const { t } = useI18n();
 
   const [label, setLabel] = useState("");
   const [agentId, setAgentId] = useState("");
@@ -49,7 +47,6 @@ export default function PublicChatKeysTab({
   }>({ widget_title: "", widget_theme: "auto", widget_accent: "#6366f1", widget_position: "right" });
 
   const activeAgents = (agents ?? []).filter((a) => !a.is_archived);
-  const selectedAgent = activeAgents.find((a) => a.id === agentId);
 
   function buildSnippet(apiKeyPrefix: string, appearance: { widget_title: string | null; widget_theme: string; widget_accent: string; widget_position: string }, rawKey?: string): string {
     const key = rawKey || `${apiKeyPrefix}...`;

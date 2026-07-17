@@ -20,7 +20,6 @@ export function ChannelsTab({
   integrationTestResults,
   integrationActionResults,
   integrationPending,
-  secrets,
   secretsByProvider,
   runtimeCapabilityOverview,
   currentRuntimeCapabilityProfile,
@@ -41,7 +40,6 @@ export function ChannelsTab({
   integrationTestResults: Record<string, IntegrationResult>;
   integrationActionResults: Record<string, Record<string, IntegrationResult>>;
   integrationPending: Record<string, string | null>;
-  secrets: Secret[] | undefined;
   secretsByProvider: Map<string, Secret[]>;
   runtimeCapabilityOverview: RuntimeCapabilityOverview | undefined;
   currentRuntimeCapabilityProfile: RuntimeProfileCapabilityDefinition | null;

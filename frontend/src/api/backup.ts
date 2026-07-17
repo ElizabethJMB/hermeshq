@@ -25,7 +25,7 @@ function parseDispositionFilename(value: string | undefined) {
   if (!value) {
     return null;
   }
-  const match = /filename=\"?([^\";]+)\"?/i.exec(value);
+  const match = /filename="?([^";]+)"?/i.exec(value);
   return match?.[1] ?? null;
 }
 

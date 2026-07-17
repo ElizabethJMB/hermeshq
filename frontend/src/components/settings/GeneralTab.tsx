@@ -1,7 +1,8 @@
 import { useState, useEffect, type FormEvent, useMemo } from "react";
-import type { UseMutationResult, UseQueryResult, QueryClient } from "@tanstack/react-query";
+import type { UseMutationResult, QueryClient } from "@tanstack/react-query";
 import { useI18n } from "../../lib/i18n";
 import { resolveAssetUrl } from "../../api/settings";
+import { useRestoreInstanceBackupJob } from "../../api/backup";
 import type {
   AppSettings,
   InstanceBackupSummary,
@@ -21,7 +22,6 @@ interface GeneralTabProps {
   createInstanceBackup: UseMutationResult<{ filename: string; blob: Blob }, Error, import("../../types/api").InstanceBackupCreateRequest>;
   validateInstanceBackup: UseMutationResult<InstanceBackupValidation, Error, { file: File; passphrase?: string }>;
   restoreInstanceBackup: UseMutationResult<InstanceBackupRestoreResult, Error, { file: File; passphrase: string; mode: "replace" | "merge" }>;
-  restoreJob: InstanceBackupRestoreResult | undefined;
   queryClient: QueryClient;
 }
 
@@ -37,7 +37,6 @@ export default function GeneralTab({
   createInstanceBackup,
   validateInstanceBackup,
   restoreInstanceBackup,
-  restoreJob,
   queryClient,
 }: GeneralTabProps) {
   const { t } = useI18n();
@@ -60,6 +59,7 @@ export default function GeneralTab({
   const [activeRestoreJobId, setActiveRestoreJobId] = useState<string | null>(null);
   const [lastBackupFilename, setLastBackupFilename] = useState<string | null>(null);
   const [lastBackupDownloadUrl, setLastBackupDownloadUrl] = useState<string | null>(null);
+  const { data: restoreJob } = useRestoreInstanceBackupJob(activeRestoreJobId);
 
   /* ───── derived ───── */
   const logoUrl = useMemo(() => resolveAssetUrl(settings?.logo_url), [settings?.logo_url]);
