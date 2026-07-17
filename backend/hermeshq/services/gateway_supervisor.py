@@ -10,6 +10,7 @@ Public API (used by routers):
     - tail_log(agent_id, platform, lines)
     - set_enterprise_gateways(manager)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -107,9 +108,7 @@ class GatewaySupervisor:
         """Persist updated metadata_json for a channel using a fresh session."""
         async with self.session_factory() as session:
             await session.execute(
-                update(MessagingChannel)
-                .where(MessagingChannel.id == channel_id)
-                .values(metadata_json=metadata)
+                update(MessagingChannel).where(MessagingChannel.id == channel_id).values(metadata_json=metadata)
             )
             await session.commit()
 
@@ -153,7 +152,9 @@ class GatewaySupervisor:
                         )
                         if not is_transient or attempt >= BOOTSTRAP_RETRY_ATTEMPTS:
                             break
-                        delay = BOOTSTRAP_RETRY_DELAYS_SECONDS[min(attempt - 1, len(BOOTSTRAP_RETRY_DELAYS_SECONDS) - 1)]
+                        delay = BOOTSTRAP_RETRY_DELAYS_SECONDS[
+                            min(attempt - 1, len(BOOTSTRAP_RETRY_DELAYS_SECONDS) - 1)
+                        ]
                         await asyncio.sleep(delay)
                 if last_exc:
                     logger.warning("Bootstrap failed for %s/%s: %s", agent.id, platform, last_exc)
@@ -202,6 +203,7 @@ class GatewaySupervisor:
     # ── Shutdown ────────────────────────────────────────────────────────────
 
     async def shutdown(self) -> None:
+        await self._process_mgr.shutdown()
         for _agent_id, handle in list(self.processes.items()):
             await self._process_mgr._terminate_handle(handle)
         self.processes.clear()
@@ -264,8 +266,7 @@ class GatewaySupervisor:
             # Do not serve the QR text once the session is already paired — the
             # stored QR in bridge.log is stale and expired at that point.
             result["pairing_qr_text"] = (
-                None if pairing_status == "paired"
-                else self._log_mgr._extract_whatsapp_qr_text(bridge_log_path)
+                None if pairing_status == "paired" else self._log_mgr._extract_whatsapp_qr_text(bridge_log_path)
             )
 
         await self._maybe_update_connected_at(channel, running)

@@ -1,4 +1,5 @@
 """Gateway process lifecycle management — spawn, stop, monitor gateway subprocesses."""
+
 from __future__ import annotations
 
 import asyncio
@@ -26,6 +27,7 @@ GATEWAY_AUTO_RESTART_MAX_ATTEMPTS = 5
 GATEWAY_AUTO_RESTART_MIN_UPTIME = 30  # if process ran longer, reset backoff
 GATEWAY_RECOVERY_RETRY_DELAY = 300  # 5 minutes
 GATEWAY_RECOVERY_MAX_RETRIES = 3  # max recovery cycles before giving up permanently
+GATEWAY_LOG_MAX_BYTES = 10 * 1024 * 1024  # rotate gateway.log at launch beyond 10MB
 
 
 class GatewayProcessManager:
@@ -44,9 +46,29 @@ class GatewayProcessManager:
         self.installation_manager = installation_manager
         self.processes = processes
         self._enterprise_gateways = enterprise_gateways
+        self._restart_tasks: dict[str, asyncio.Task] = {}
+        self._shutting_down = False
 
     def set_enterprise_gateways(self, manager: object) -> None:
         self._enterprise_gateways = manager
+
+    # ── Restart chain registry ──────────────────────────────────────────────
+
+    def cancel_restart_task(self, agent_id: str) -> None:
+        """Cancel a pending auto-restart chain for an agent, if any."""
+        task = self._restart_tasks.pop(agent_id, None)
+        if task and not task.done():
+            task.cancel()
+
+    async def shutdown(self) -> None:
+        """Stop all pending auto-restart chains so no gateway relaunches during shutdown."""
+        self._shutting_down = True
+        pending = list(self._restart_tasks.values())
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        self._restart_tasks.clear()
 
     # ── DB helpers ──────────────────────────────────────────────────────────
 
@@ -125,6 +147,10 @@ class GatewayProcessManager:
             await self._start_enterprise_channel(agent_id, platform)
             return
 
+        # An explicit start always wins over a pending auto-restart chain —
+        # prevents two launchers racing and orphaning one of the processes.
+        self.cancel_restart_task(agent_id)
+
         async with self.session_factory() as session:
             agent_row = await session.get(Agent, agent_id)
             if not agent_row:
@@ -146,11 +172,7 @@ class GatewayProcessManager:
             # subprocess. If the process is alive and already handles this
             # platform, there is no need to kill and relaunch — just mark running.
             existing_handle = self.processes.get(agent_id)
-            if (
-                existing_handle
-                and existing_handle.process.poll() is None
-                and platform in existing_handle.platforms
-            ):
+            if existing_handle and existing_handle.process.poll() is None and platform in existing_handle.platforms:
                 channel.status = "running"
                 channel.last_error = None
                 channel.updated_at = utcnow()
@@ -164,7 +186,9 @@ class GatewayProcessManager:
                 channel.status = "error"
                 channel.last_error = "Telegram bot token secret is required"
                 await self._log_channel_event(
-                    session, agent_row, channel,
+                    session,
+                    agent_row,
+                    channel,
                     f"channel.{platform}.start_failed",
                     f"{agent_row.name} {platform} gateway failed to start",
                     severity="warning",
@@ -175,12 +199,15 @@ class GatewayProcessManager:
 
             if platform == "telegram":
                 from hermeshq.models.secret import Secret
+
                 secret_exists = await session.execute(select(Secret.id).where(Secret.name == channel.secret_ref))
                 if secret_exists.scalar_one_or_none() is None:
                     channel.status = "error"
                     channel.last_error = f"Telegram bot token secret '{channel.secret_ref}' was not found"
                     await self._log_channel_event(
-                        session, agent_row, channel,
+                        session,
+                        agent_row,
+                        channel,
                         f"channel.{platform}.start_failed",
                         f"{agent_row.name} {platform} gateway failed to start",
                         severity="warning",
@@ -195,7 +222,9 @@ class GatewayProcessManager:
                 channel.status = "error"
                 channel.last_error = str(exc)
                 await self._log_channel_event(
-                    session, agent_row, channel,
+                    session,
+                    agent_row,
+                    channel,
                     f"channel.{platform}.start_failed",
                     f"{agent_row.name} {platform} gateway failed to start",
                     severity="warning",
@@ -233,7 +262,9 @@ class GatewayProcessManager:
                     failed_channel.last_error = str(exc)
                     if agent_row:
                         await self._log_channel_event(
-                            session, agent_row, failed_channel,
+                            session,
+                            agent_row,
+                            failed_channel,
                             f"channel.{platform}.start_failed",
                             f"{agent_row.name} {platform} gateway failed to start",
                             severity="warning",
@@ -272,7 +303,12 @@ class GatewayProcessManager:
 
         for item in active_channels:
             await self.event_broker.publish(
-                {"type": "messaging.status_changed", "agent_id": agent_id, "status": "running", "message": item.platform}
+                {
+                    "type": "messaging.status_changed",
+                    "agent_id": agent_id,
+                    "status": "running",
+                    "message": item.platform,
+                }
             )
 
     # ── Stop channel ────────────────────────────────────────────────────────
@@ -462,6 +498,7 @@ class GatewayProcessManager:
 
         log_path = self.gateway_log_path(agent.workspace_path)
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._rotate_gateway_log(log_path)
         log_handle = log_path.open("a", encoding="utf-8")
         try:
             process = subprocess.Popen(
@@ -563,7 +600,10 @@ class GatewayProcessManager:
                 await asyncio.wait_for(asyncio.to_thread(handle.process.wait), timeout=5)
             except TimeoutError:
                 handle.process.kill()
-                await asyncio.to_thread(handle.process.wait)
+                try:
+                    await asyncio.wait_for(asyncio.to_thread(handle.process.wait), timeout=5)
+                except TimeoutError:
+                    logger.error("Gateway process %s did not exit after kill — abandoning", handle.process.pid)
         with contextlib.suppress(Exception):
             handle.log_handle.close()
 
@@ -592,8 +632,11 @@ class GatewayProcessManager:
         handle = self.processes.get(agent_id)
         if handle and handle.process is process:
             self.processes.pop(agent_id, None)
-            for task in handle.activity_tasks.values():
+            activity_tasks = list(handle.activity_tasks.values())
+            for task in activity_tasks:
                 task.cancel()
+            if activity_tasks:
+                await asyncio.gather(*activity_tasks, return_exceptions=True)
 
         async with self.session_factory() as session:
             agent = await session.get(Agent, agent_id)
@@ -604,14 +647,21 @@ class GatewayProcessManager:
                 if channel.platform not in platforms:
                     continue
                 channel.status = "stopped" if return_code == 0 else "error"
-                channel.last_error = None if return_code == 0 else f"{channel.platform} gateway exited with code {return_code}"
+                channel.last_error = (
+                    None if return_code == 0 else f"{channel.platform} gateway exited with code {return_code}"
+                )
                 session.add(
                     ActivityLog(
                         agent_id=agent.id,
                         node_id=agent.node_id,
                         event_type=f"channel.{channel.platform}.exited",
                         message=f"{agent.name} {channel.platform} gateway exited",
-                        details={"platform": channel.platform, "return_code": return_code, "log_path": log_path, "uptime": round(uptime, 1)},
+                        details={
+                            "platform": channel.platform,
+                            "return_code": return_code,
+                            "log_path": log_path,
+                            "uptime": round(uptime, 1),
+                        },
                     )
                 )
             await session.commit()
@@ -633,10 +683,7 @@ class GatewayProcessManager:
             agent = await session.get(Agent, agent_id)
             if agent and not agent.is_archived:
                 channels = await self._get_channels(session, agent_id)
-                should_restart = any(
-                    self._channel_runtime_enabled(ch) and ch.platform in platforms
-                    for ch in channels
-                )
+                should_restart = any(self._channel_runtime_enabled(ch) and ch.platform in platforms for ch in channels)
 
         if not should_restart:
             return
@@ -645,12 +692,26 @@ class GatewayProcessManager:
             logger.info("Gateway for agent %s already relaunched — skipping auto-restart", agent_id)
             return
 
+        if self._shutting_down:
+            return
+
         logger.warning(
             "Gateway for agent %s exited unexpectedly (rc=%d, uptime=%.0fs) — scheduling auto-restart",
-            agent_id, return_code, uptime,
+            agent_id,
+            return_code,
+            uptime,
         )
 
-        await self._auto_restart_gateway(agent_id, platforms, uptime, log_mgr)
+        # Register the restart chain so it can be cancelled on shutdown or on
+        # an explicit channel start (the handle was already popped from
+        # self.processes, so this chain would otherwise be untracked).
+        current_task = asyncio.current_task()
+        if current_task is not None:
+            self._restart_tasks[agent_id] = current_task
+        try:
+            await self._auto_restart_gateway(agent_id, platforms, uptime, log_mgr)
+        finally:
+            self._restart_tasks.pop(agent_id, None)
 
     async def _auto_restart_gateway(
         self,
@@ -667,11 +728,16 @@ class GatewayProcessManager:
             logger.info("Gateway was stable for %.0fs — starting fresh restart cycle", uptime)
 
         for attempt in range(GATEWAY_AUTO_RESTART_MAX_ATTEMPTS):
-            backoff = min(5 * (2 ** attempt), 60)
+            if self._shutting_down:
+                return
+            backoff = min(5 * (2**attempt), 60)
 
             logger.warning(
                 "Gateway auto-restart for agent %s: attempt %d/%d in %ds",
-                agent_id, attempt + 1, GATEWAY_AUTO_RESTART_MAX_ATTEMPTS, backoff,
+                agent_id,
+                attempt + 1,
+                GATEWAY_AUTO_RESTART_MAX_ATTEMPTS,
+                backoff,
             )
 
             await asyncio.sleep(backoff)
@@ -684,10 +750,7 @@ class GatewayProcessManager:
                     return
 
                 channels = await self._get_channels(session, agent_id)
-                active = [
-                    ch for ch in channels
-                    if self._channel_runtime_enabled(ch) and ch.platform in platforms
-                ]
+                active = [ch for ch in channels if self._channel_runtime_enabled(ch) and ch.platform in platforms]
 
                 if not active:
                     logger.info("Channels for agent %s were stopped during backoff — not restarting", agent_id)
@@ -720,18 +783,25 @@ class GatewayProcessManager:
                             ch.status = "running"
                             ch.last_error = None
                             ch.updated_at = utcnow()
-                            session.add(ActivityLog(
-                                agent_id=agent_row.id,
-                                node_id=agent_row.node_id,
-                                event_type=f"channel.{ch.platform}.auto_restarted",
-                                message=f"{agent_row.name} {ch.platform} gateway auto-restarted after unexpected exit",
-                                details={"platform": ch.platform, "pid": handle.process.pid},
-                            ))
+                            session.add(
+                                ActivityLog(
+                                    agent_id=agent_row.id,
+                                    node_id=agent_row.node_id,
+                                    event_type=f"channel.{ch.platform}.auto_restarted",
+                                    message=f"{agent_row.name} {ch.platform} gateway auto-restarted after unexpected exit",
+                                    details={"platform": ch.platform, "pid": handle.process.pid},
+                                )
+                            )
                     await session.commit()
 
                 for platform in handle.platforms:
                     await self.event_broker.publish(
-                        {"type": "messaging.status_changed", "agent_id": agent_id, "status": "running", "message": platform}
+                        {
+                            "type": "messaging.status_changed",
+                            "agent_id": agent_id,
+                            "status": "running",
+                            "message": platform,
+                        }
                     )
 
                 logger.info("Gateway for agent %s auto-restarted successfully on attempt %d", agent_id, attempt + 1)
@@ -740,12 +810,18 @@ class GatewayProcessManager:
             except Exception:
                 logger.exception(
                     "Gateway auto-restart attempt %d/%d failed for agent %s",
-                    attempt + 1, GATEWAY_AUTO_RESTART_MAX_ATTEMPTS, agent_id,
+                    attempt + 1,
+                    GATEWAY_AUTO_RESTART_MAX_ATTEMPTS,
+                    agent_id,
                 )
 
         # All attempts exhausted — mark error and schedule a recovery retry
-        logger.error("Gateway auto-restart exhausted for agent %s after %d attempts — scheduling recovery in %ds",
-                     agent_id, GATEWAY_AUTO_RESTART_MAX_ATTEMPTS, GATEWAY_RECOVERY_RETRY_DELAY)
+        logger.error(
+            "Gateway auto-restart exhausted for agent %s after %d attempts — scheduling recovery in %ds",
+            agent_id,
+            GATEWAY_AUTO_RESTART_MAX_ATTEMPTS,
+            GATEWAY_RECOVERY_RETRY_DELAY,
+        )
 
         async with self.session_factory() as session:
             agent_row = await session.get(Agent, agent_id)
@@ -756,13 +832,15 @@ class GatewayProcessManager:
                 if ch.platform in platforms:
                     ch.status = "error"
                     ch.last_error = "Gateway crashed repeatedly — automatic recovery scheduled"
-                    session.add(ActivityLog(
-                        agent_id=agent_row.id,
-                        node_id=agent_row.node_id,
-                        event_type=f"channel.{ch.platform}.auto_restart_failed",
-                        message=f"{agent_row.name} {ch.platform} gateway auto-restart failed after {GATEWAY_AUTO_RESTART_MAX_ATTEMPTS} attempts",
-                        severity="error",
-                    ))
+                    session.add(
+                        ActivityLog(
+                            agent_id=agent_row.id,
+                            node_id=agent_row.node_id,
+                            event_type=f"channel.{ch.platform}.auto_restart_failed",
+                            message=f"{agent_row.name} {ch.platform} gateway auto-restart failed after {GATEWAY_AUTO_RESTART_MAX_ATTEMPTS} attempts",
+                            severity="error",
+                        )
+                    )
             await session.commit()
 
             for platform in platforms:
@@ -771,15 +849,22 @@ class GatewayProcessManager:
                 )
 
         await asyncio.sleep(GATEWAY_RECOVERY_RETRY_DELAY)
-        if agent_id in self.processes:
+        if self._shutting_down or agent_id in self.processes:
             return
         _recovery_attempt += 1
         if _recovery_attempt > GATEWAY_RECOVERY_MAX_RETRIES:
-            logger.error("Gateway recovery exhausted for agent %s after %d recovery cycles — giving up permanently",
-                         agent_id, _recovery_attempt - 1)
+            logger.error(
+                "Gateway recovery exhausted for agent %s after %d recovery cycles — giving up permanently",
+                agent_id,
+                _recovery_attempt - 1,
+            )
             return
-        logger.info("Gateway recovery retry %d/%d for agent %s after cooldown",
-                    _recovery_attempt, GATEWAY_RECOVERY_MAX_RETRIES, agent_id)
+        logger.info(
+            "Gateway recovery retry %d/%d for agent %s after cooldown",
+            _recovery_attempt,
+            GATEWAY_RECOVERY_MAX_RETRIES,
+            agent_id,
+        )
         await self._auto_restart_gateway(agent_id, platforms, 0, log_mgr, _recovery_attempt=_recovery_attempt)
 
     # ── Path helpers ────────────────────────────────────────────────────────
@@ -788,9 +873,31 @@ class GatewayProcessManager:
         return self.installation_manager.build_hermes_home(workspace_path) / "logs" / "gateway.log"
 
     @staticmethod
-    def _read_log_tail(path: Path, lines: int = 120) -> str:
+    def _rotate_gateway_log(log_path: Path) -> None:
+        """Rotate gateway.log → gateway.log.1 at launch when it exceeds the size cap."""
         try:
-            content = path.read_text(encoding="utf-8", errors="replace").splitlines()
-            return "\n".join(content[-lines:])
+            if log_path.exists() and log_path.stat().st_size > GATEWAY_LOG_MAX_BYTES:
+                log_path.replace(log_path.with_suffix(".log.1"))
+        except OSError:
+            logger.warning("Could not rotate gateway log %s", log_path, exc_info=True)
+
+    @staticmethod
+    def _read_log_tail(path: Path, lines: int = 120) -> str:
+        """Read the last ``lines`` of a log file without loading it entirely."""
+        try:
+            with path.open("rb") as fh:
+                fh.seek(0, 2)
+                size = fh.tell()
+                # Read backwards in chunks until enough lines are found
+                block = 8192
+                data = b""
+                position = size
+                while position > 0 and data.count(b"\n") <= lines:
+                    read_size = min(block, position)
+                    position -= read_size
+                    fh.seek(position)
+                    data = fh.read(read_size) + data
+                tail = data.decode("utf-8", errors="replace").splitlines()[-lines:]
+                return "\n".join(tail)
         except OSError:
             return ""
