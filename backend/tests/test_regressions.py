@@ -8,7 +8,7 @@ from fastapi import Response
 from hermeshq.core.security import create_access_token, get_current_user
 from hermeshq.database import init_database
 from hermeshq.models.user import User
-from hermeshq.routers.auth import logout
+from hermeshq.routers.auth.local import logout
 from hermeshq.services.pty_manager import PTYManager
 from hermeshq.services.scheduler import SchedulerService
 

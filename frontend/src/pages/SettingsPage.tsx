@@ -37,6 +37,13 @@ import {
 } from "../api/mcpAccess";
 import { useProviders, useUpdateProvider } from "../api/providers";
 import { useRuntimeCapabilityOverview } from "../api/runtimeProfiles";
+import {
+  useCreatePublicChatKey,
+  useDeletePublicChatKey,
+  usePermanentlyDeletePublicChatKey,
+  usePublicChatKeys,
+  useUpdatePublicChatKey,
+} from "../api/publicChatKeys";
 import { useCreateSecret, useSecrets } from "../api/secrets";
 import {
   useDeleteBrandAsset,
@@ -64,14 +71,15 @@ const AuthenticationTab = lazy(() => import("../components/settings/Authenticati
 const EmailTab = lazy(() => import("../components/settings/EmailTab").then((m) => ({ default: m.EmailTab })));
 const ResourcesTab = lazy(() => import("../components/settings/ResourcesTab"));
 const M365Tab = lazy(() => import("../components/settings/M365Tab").then((m) => ({ default: m.default })));
+const PublicChatKeysTab = lazy(() => import("../components/settings/PublicChatKeysTab").then((m) => ({ default: m.default })));
 
-type SettingsTab = "general" | "runtime" | "providers" | "integrations" | "factory" | "externalAccess" | "hermesVersions" | "secrets" | "templates" | "authentication" | "email" | "resources" | "m365";
+type SettingsTab = "general" | "runtime" | "providers" | "integrations" | "factory" | "externalAccess" | "hermesVersions" | "secrets" | "templates" | "authentication" | "email" | "resources" | "m365" | "publicChatKeys";
 
 const SETTINGS_TAB_STORAGE_KEY = "hermeshq.settings.activeTab";
 
 const ALL_TABS: SettingsTab[] = [
   "general", "runtime", "providers", "integrations",
-  "factory", "externalAccess", "hermesVersions", "secrets", "templates", "authentication", "email", "resources", "m365",
+  "factory", "externalAccess", "hermesVersions", "secrets", "templates", "authentication", "email", "resources", "m365", "publicChatKeys",
 ];
 
 function LoadingFallback() {
@@ -96,6 +104,7 @@ export function SettingsPage() {
   const { data: mcpAccessTokens } = useMcpAccessTokens(isAdmin);
   const { data: templates } = useTemplates(isAdmin);
   const { data: settings } = useSettings(isAdmin);
+  const { data: publicChatKeys } = usePublicChatKeys(isAdmin);
 
   /* ─── Mutation hooks ─── */
   const updateProvider = useUpdateProvider();
@@ -166,6 +175,7 @@ export function SettingsPage() {
     { id: "email", label: t("settings.tabEmail"), copy: t("settings.tabEmailCopy") },
     { id: "resources", label: t("settings.tabResources"), copy: t("settings.tabResourcesCopy") },
     { id: "m365", label: t("settings.tabM365"), copy: t("settings.tabM365Copy") },
+    { id: "publicChatKeys", label: "Public Chat", copy: "Create embeddable chat widget API keys for anonymous website visitors." },
   ];
 
   const activeTabMeta = settingsTabs.find((tab) => tab.id === activeTab) ?? settingsTabs[0];
@@ -287,6 +297,16 @@ export function SettingsPage() {
           )}
           {activeTab === "m365" && isAdmin && (
             <M365Tab />
+          )}
+          {activeTab === "publicChatKeys" && isAdmin && (
+            <PublicChatKeysTab
+              agents={agents}
+              publicChatKeys={publicChatKeys}
+              createPublicChatKey={useCreatePublicChatKey()}
+              updatePublicChatKey={useUpdatePublicChatKey()}
+              deletePublicChatKey={useDeletePublicChatKey()}
+              permanentlyDeletePublicChatKey={usePermanentlyDeletePublicChatKey()}
+            />
           )}
         </Suspense>
       </div>

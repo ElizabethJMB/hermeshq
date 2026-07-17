@@ -15,6 +15,12 @@ from hermeshq.models.node import Node
 from hermeshq.models.oidc_provider import OidcProvider
 from hermeshq.models.password_reset import PasswordResetToken
 from hermeshq.models.provider import ProviderDefinition
+from hermeshq.models.public_chat import (
+    PublicChatApiKey,
+    PublicChatMessage,
+    PublicChatSession,
+    PublicChatTranscript,
+)
 from hermeshq.models.scheduled_task import ScheduledTask
 from hermeshq.models.secret import Secret
 from hermeshq.models.task import Task
@@ -42,6 +48,10 @@ __all__ = [
     "OidcProvider",
     "PasswordResetToken",
     "ProviderDefinition",
+    "PublicChatApiKey",
+    "PublicChatMessage",
+    "PublicChatSession",
+    "PublicChatTranscript",
     "ScheduledTask",
     "Secret",
     "Task",

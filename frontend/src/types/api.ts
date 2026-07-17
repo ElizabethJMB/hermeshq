@@ -591,3 +591,26 @@ export interface MessagingChannelRuntime {
   pairing_qr_text: string | null;
   paired_at: string | null;
 }
+
+export interface PublicChatApiKey {
+  id: string;
+  key_prefix: string;
+  label: string;
+  agent_id: string;
+  allowed_domains: string[];
+  requests_per_month: number;
+  tokens_per_month: number;
+  is_active: boolean;
+  widget_title: string | null;
+  widget_theme: string;
+  widget_accent: string;
+  widget_position: string;
+  created_at: string;
+}
+
+export interface PublicChatApiKeyCreated {
+  id: string;
+  raw_key: string;
+  key_prefix: string;
+  label: string;
+}

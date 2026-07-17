@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 
 import { useMe } from "./api/auth";
 import { usePublicBranding, resolveAssetUrl } from "./api/settings";
@@ -15,23 +15,32 @@ import {
   resolveEffectiveThemeMode,
 } from "./lib/theme";
 import { useSessionStore } from "./stores/sessionStore";
-import { AgentDetailPage } from "./pages/AgentDetailPage";
-import { AgentsPage } from "./pages/AgentsPage";
-import { BuilderPage } from "./pages/BuilderPage";
-import { CommsPage } from "./pages/CommsPage";
-import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { MfaVerifyPage } from "./pages/MfaVerifyPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
-import { ManualPage } from "./pages/ManualPage";
-import { MyAccountPage } from "./pages/MyAccountPage";
-import { NodesPage } from "./pages/NodesPage";
-import { AuditPage } from "./pages/AuditPage";
-import { SettingsPage } from "./pages/SettingsPage";
-import { ScheduledTasksPage } from "./pages/ScheduledTasksPage";
-import { TasksPage } from "./pages/TasksPage";
-import { UsersPage } from "./pages/UsersPage";
+
+const AgentDetailPage = lazy(() => import("./pages/AgentDetailPage").then(m => ({ default: m.AgentDetailPage })));
+const AgentsPage = lazy(() => import("./pages/AgentsPage").then(m => ({ default: m.AgentsPage })));
+const BuilderPage = lazy(() => import("./pages/BuilderPage").then(m => ({ default: m.BuilderPage })));
+const CommsPage = lazy(() => import("./pages/CommsPage").then(m => ({ default: m.CommsPage })));
+const DashboardPage = lazy(() => import("./pages/DashboardPage").then(m => ({ default: m.DashboardPage })));
+const ManualPage = lazy(() => import("./pages/ManualPage").then(m => ({ default: m.ManualPage })));
+const MyAccountPage = lazy(() => import("./pages/MyAccountPage").then(m => ({ default: m.MyAccountPage })));
+const NodesPage = lazy(() => import("./pages/NodesPage").then(m => ({ default: m.NodesPage })));
+const AuditPage = lazy(() => import("./pages/AuditPage").then(m => ({ default: m.AuditPage })));
+const SettingsPage = lazy(() => import("./pages/SettingsPage").then(m => ({ default: m.SettingsPage })));
+const ScheduledTasksPage = lazy(() => import("./pages/ScheduledTasksPage").then(m => ({ default: m.ScheduledTasksPage })));
+const TasksPage = lazy(() => import("./pages/TasksPage").then(m => ({ default: m.TasksPage })));
+const UsersPage = lazy(() => import("./pages/UsersPage").then(m => ({ default: m.UsersPage })));
+
+function PageFallback() {
+  return (
+    <div className="flex min-h-[50vh] items-center justify-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--accent)]" />
+    </div>
+  );
+}
 
 export default function App() {
   const location = useLocation();
@@ -123,19 +132,19 @@ export default function App() {
       <ErrorBoundary resetKey={location.pathname}>
         <Routes>
           <Route element={<AppShell />}>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/agents" element={<AgentsPage />} />
-            <Route path="/agents/:agentId" element={<AgentDetailPage />} />
-            <Route path="/builder" element={<BuilderPage />} />
-            <Route path="/tasks" element={<TasksPage />} />
-            <Route path="/schedules" element={<ScheduledTasksPage />} />
-            <Route path="/account" element={<MyAccountPage />} />
-            <Route path="/manual" element={<ManualPage />} />
-            <Route path="/users" element={<UsersPage />} />
-            <Route path="/nodes" element={<NodesPage />} />
-            <Route path="/comms" element={<CommsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/audit" element={<AuditPage />} />
+            <Route path="/" element={<Suspense fallback={<PageFallback />}><DashboardPage /></Suspense>} />
+            <Route path="/agents" element={<Suspense fallback={<PageFallback />}><AgentsPage /></Suspense>} />
+            <Route path="/agents/:agentId" element={<Suspense fallback={<PageFallback />}><AgentDetailPage /></Suspense>} />
+            <Route path="/builder" element={<Suspense fallback={<PageFallback />}><BuilderPage /></Suspense>} />
+            <Route path="/tasks" element={<Suspense fallback={<PageFallback />}><TasksPage /></Suspense>} />
+            <Route path="/schedules" element={<Suspense fallback={<PageFallback />}><ScheduledTasksPage /></Suspense>} />
+            <Route path="/account" element={<Suspense fallback={<PageFallback />}><MyAccountPage /></Suspense>} />
+            <Route path="/manual" element={<Suspense fallback={<PageFallback />}><ManualPage /></Suspense>} />
+            <Route path="/users" element={<Suspense fallback={<PageFallback />}><UsersPage /></Suspense>} />
+            <Route path="/nodes" element={<Suspense fallback={<PageFallback />}><NodesPage /></Suspense>} />
+            <Route path="/comms" element={<Suspense fallback={<PageFallback />}><CommsPage /></Suspense>} />
+            <Route path="/settings" element={<Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>} />
+            <Route path="/audit" element={<Suspense fallback={<PageFallback />}><AuditPage /></Suspense>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

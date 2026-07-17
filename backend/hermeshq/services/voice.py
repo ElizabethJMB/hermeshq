@@ -186,12 +186,31 @@ async def transcribe(audio_bytes: bytes, *, language: str | None = None) -> tupl
     return text, detected_lang
 
 
+_STT_SILENCE_RMS_THRESHOLD = 0.001
+
+
+def _is_silent(audio_array: Any) -> bool:
+    """Check if audio is silent using RMS energy."""
+    try:
+        import numpy as np
+        rms = float(np.sqrt(np.mean(audio_array.astype(np.float32) ** 2)))
+        return rms < _STT_SILENCE_RMS_THRESHOLD
+    except Exception:
+        return False
+
+
 def _whisper_transcribe_sync(model, audio_bytes: bytes, language: str | None):
     import numpy as np
 
     audio_array = _bytes_to_numpy(audio_bytes)
     if audio_array is None:
         raise ValueError("Could not decode audio bytes")
+
+    if _is_silent(audio_array):
+        logger.info("Audio detected as silent (RMS below threshold), skipping Whisper")
+        class _EmptyInfo:
+            language = language or "es"
+        return [], _EmptyInfo()
 
     kwargs: dict[str, Any] = {"beam_size": 5}
     if language and language != "auto":

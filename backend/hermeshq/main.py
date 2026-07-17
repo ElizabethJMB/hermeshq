@@ -53,6 +53,10 @@ from hermeshq.routers import (
 )
 from hermeshq.routers import agent_builder
 from hermeshq.routers import settings as settings_router
+from hermeshq.routers.public_chat import management_router as public_chat_management_router
+from hermeshq.routers.public_chat import public_router as public_chat_router
+from hermeshq.routers.public_chat_test_page import router as public_chat_test_router
+from hermeshq.routers.public_chat_widget import router as public_chat_widget_router
 from hermeshq.schemas.common import HealthResponse
 from hermeshq.services.agent_identity import derive_agent_identity
 from hermeshq.services.agent_supervisor import AgentSupervisor
@@ -62,6 +66,8 @@ from hermeshq.services.gateway_supervisor import GatewaySupervisor
 from hermeshq.services.hermes_installation import HermesInstallationManager
 from hermeshq.services.hermes_runtime import HermesRuntime
 from hermeshq.services.hermes_version_manager import HermesVersionManager
+from hermeshq.services.instance_backup import InstanceBackupService
+from hermeshq.services.public_chat_service import PublicChatService
 from hermeshq.services.instance_backup import InstanceBackupService
 from hermeshq.services.provider_catalog import BUILTIN_PROVIDERS, normalize_runtime_provider, seed_provider_defaults
 from hermeshq.services.pty_manager import PTYManager
@@ -308,6 +314,13 @@ async def lifespan(app: FastAPI):
     app.state.gateway_bootstrap_task = asyncio.create_task(app.state.gateway_supervisor.bootstrap_gateways())
     app.state.enterprise_bootstrap_task = asyncio.create_task(app.state.enterprise_gateways.bootstrap())
 
+    app.state.public_chat_service = PublicChatService(
+        session_factory=AsyncSessionLocal,
+        event_broker=app.state.event_broker,
+        supervisor=app.state.supervisor,
+    )
+    await app.state.public_chat_service.start_purge_loop()
+
     async def _periodic_cleanup() -> None:
         from hermeshq.routers.mcp_server import _rate_limiter, _analytics
         while True:
@@ -322,6 +335,7 @@ async def lifespan(app: FastAPI):
     app.state._cleanup_task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await app.state._cleanup_task
+    await app.state.public_chat_service.stop_purge_loop()
     gateway_bootstrap_task = getattr(app.state, "gateway_bootstrap_task", None)
     if gateway_bootstrap_task:
         gateway_bootstrap_task.cancel()
@@ -388,6 +402,21 @@ app.include_router(attachments.router, prefix=settings.api_prefix)
 app.include_router(m365.router, prefix=settings.api_prefix)
 app.include_router(voice.router, prefix=settings.api_prefix)
 app.include_router(agent_builder.router, prefix=settings.api_prefix)
+app.include_router(public_chat_router)
+app.include_router(public_chat_management_router, prefix=settings.api_prefix)
+app.include_router(public_chat_test_router, prefix=settings.api_prefix)
+app.include_router(public_chat_widget_router)
+
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+    Instrumentator(
+        should_group_status_codes=True,
+        should_ignore_untemplated=True,
+        should_respect_env_var=False,
+        excluded_handlers=["/health", "/metrics"],
+    ).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+except ImportError:
+    logger.info("prometheus-fastapi-instrumentator not installed — /metrics disabled")
 
 
 @app.get("/health", response_model=HealthResponse)
