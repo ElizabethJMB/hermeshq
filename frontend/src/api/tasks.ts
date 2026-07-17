@@ -3,11 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
 import type { Task, TaskBoardUpdate } from "../types/api";
 
-export function useTasks() {
+export function useTasks(agentId?: string) {
   return useQuery({
-    queryKey: ["tasks"],
+    queryKey: ["tasks", agentId ?? "all"],
     queryFn: async () => {
-      const { data } = await apiClient.get<Task[]>("/tasks");
+      const { data } = await apiClient.get<Task[]>("/tasks", {
+        params: agentId ? { agent_id: agentId } : undefined,
+      });
       return data;
     },
     refetchInterval: 5000,
