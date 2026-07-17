@@ -154,6 +154,17 @@ export async function refreshToken() {
   return data;
 }
 
+// Exchange the httpOnly OIDC cookie for an access token after an OIDC login
+// redirect (the JWT is never exposed in the URL).
+export async function exchangeOidcCookie(): Promise<string | null> {
+  try {
+    const { access_token } = await refreshToken();
+    return access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function forgotPassword(email: string) {
   const { data } = await apiClient.post<{ message: string }>("/auth/forgot-password", { email });
   return data;

@@ -30,6 +30,16 @@ class EventBroker:
         user_id: str | None = None,
     ) -> None:
         await websocket.accept()
+        self.register(websocket, is_admin=is_admin, agent_ids=agent_ids, user_id=user_id)
+
+    def register(
+        self,
+        websocket: WebSocket,
+        is_admin: bool,
+        agent_ids: set[str],
+        user_id: str | None = None,
+    ) -> None:
+        """Register an already-accepted WebSocket connection."""
         self._connections[websocket] = EventSubscription(
             websocket=websocket,
             is_admin=is_admin,
@@ -67,9 +77,13 @@ class EventBroker:
         for connection, subscription in list(self._connections.items()):
             if subscription.is_admin:
                 pass  # admins receive everything
-            elif event_agent_id and event_agent_id not in subscription.agent_ids:
-                continue
-            elif event_user_id and subscription.user_id and event_user_id != subscription.user_id:
+            elif (
+                event_agent_id
+                and event_agent_id not in subscription.agent_ids
+                or event_user_id
+                and subscription.user_id
+                and event_user_id != subscription.user_id
+            ):
                 continue
             send_tasks.append((connection, asyncio.ensure_future(connection.send_json(event))))
 
