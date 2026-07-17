@@ -423,8 +423,8 @@ app.include_router(public_chat_test_router, prefix=settings.api_prefix)
 app.include_router(public_chat_widget_router)
 
 try:
-    from prometheus_fastapi_instrumentator import Instrumentator
     import prometheus_fastapi_instrumentator.routing as _pfi_routing
+    from prometheus_fastapi_instrumentator import Instrumentator
 
     _orig_get_route_name = _pfi_routing._get_route_name
 
