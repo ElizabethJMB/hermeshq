@@ -10,7 +10,9 @@ from pathlib import Path
 PACKAGE_SPEC = "snyk-agent-scan==0.4.15"
 
 
-async def run_action(action_slug: str, *, agent, config: dict, resolve_secret, workspaces_root: Path, package_root: Path | None = None):
+async def run_action(
+    action_slug: str, *, agent, config: dict, resolve_secret, workspaces_root: Path, package_root: Path | None = None
+):
     if action_slug != "scan_skills":
         return False, f"Unknown action: {action_slug}", None
 
@@ -72,7 +74,11 @@ async def run_action(action_slug: str, *, agent, config: dict, resolve_secret, w
     summary["target"] = str(skills_root)
 
     if completed.returncode != 0 and parsed is None:
-        return False, "Snyk Agent Scan failed to complete.", {**summary, "exit_code": completed.returncode, "stderr": stderr[:4000], "stdout": stdout[:4000]}
+        return (
+            False,
+            "Snyk Agent Scan failed to complete.",
+            {**summary, "exit_code": completed.returncode, "stderr": stderr[:4000], "stdout": stdout[:4000]},
+        )
 
     if parsed is not None:
         summary["raw"] = parsed
@@ -84,7 +90,11 @@ async def run_action(action_slug: str, *, agent, config: dict, resolve_secret, w
 
     issue_count = int(summary.get("issue_count") or 0)
     if issue_count:
-        return True, f"Snyk skill scan completed with {issue_count} findings across {summary['path_count']} paths.", summary
+        return (
+            True,
+            f"Snyk skill scan completed with {issue_count} findings across {summary['path_count']} paths.",
+            summary,
+        )
     return True, f"Snyk skill scan completed with no findings across {summary['path_count']} paths.", summary
 
 
@@ -96,8 +106,20 @@ def _ensure_runner(workspaces_root: Path) -> tuple[Path, str]:
     if not executable.exists():
         builder = venv.EnvBuilder(with_pip=True, clear=False)
         builder.create(tool_root)
-        subprocess.run([str(python_path), "-m", "pip", "install", "--upgrade", "pip"], check=True, capture_output=True, text=True, timeout=180)
-        subprocess.run([str(python_path), "-m", "pip", "install", PACKAGE_SPEC], check=True, capture_output=True, text=True, timeout=300)
+        subprocess.run(
+            [str(python_path), "-m", "pip", "install", "--upgrade", "pip"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        subprocess.run(
+            [str(python_path), "-m", "pip", "install", PACKAGE_SPEC],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
     probe = subprocess.run([str(executable), "help"], check=True, capture_output=True, text=True, timeout=30)
     version = PACKAGE_SPEC
     if "Snyk Agent Scan v" in probe.stdout:

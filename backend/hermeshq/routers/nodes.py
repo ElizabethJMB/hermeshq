@@ -102,7 +102,7 @@ async def test_node(
         )
         writer.close()
         await writer.wait_closed()
-    except (asyncio.TimeoutError, OSError) as exc:
+    except (TimeoutError, OSError) as exc:
         raise HTTPException(status_code=502, detail=f"SSH connectivity test failed: {exc}") from exc
     return {
         "status": "ok",

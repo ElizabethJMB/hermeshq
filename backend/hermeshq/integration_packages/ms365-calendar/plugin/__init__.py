@@ -95,13 +95,16 @@ def _graph(method: str, path: str, access_token: str, payload: dict | None = Non
 
 
 def _auth_error(detail: str) -> str:
-    return json.dumps({
-        "success": False,
-        "error": f"No se pudo obtener token M365: {detail}. Verifica que el usuario haya conectado su cuenta Microsoft 365 en Mi cuenta.",
-    })
+    return json.dumps(
+        {
+            "success": False,
+            "error": f"No se pudo obtener token M365: {detail}. Verifica que el usuario haya conectado su cuenta Microsoft 365 en Mi cuenta.",
+        }
+    )
 
 
 # ── Tool handlers ─────────────────────────────────────────────────────────────
+
 
 def _list_events_tool(args: dict, **_kwargs) -> str:
     user_id = _task_user_id()
@@ -224,6 +227,7 @@ def _delete_event_tool(args: dict, **_kwargs) -> str:
 
 
 # ── Plugin registration ───────────────────────────────────────────────────────
+
 
 def register(ctx):
     ctx.register_tool(

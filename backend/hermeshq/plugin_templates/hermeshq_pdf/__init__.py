@@ -3,11 +3,9 @@ from __future__ import annotations
 import json
 import os
 import socket
-import uuid
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
-
 
 DEFAULT_CSS = """
 @page {
@@ -87,6 +85,7 @@ code {
 def _check_requirements():
     try:
         import weasyprint  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -95,13 +94,39 @@ def _check_requirements():
 def _sanitize_html(html: str) -> str:
     try:
         import nh3
+
         return nh3.clean(
             html,
             tags={
-                "h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "hr",
-                "table", "thead", "tbody", "tr", "th", "td",
-                "ul", "ol", "li", "blockquote", "code", "pre",
-                "img", "strong", "em", "b", "i", "u", "span", "div",
+                "h1",
+                "h2",
+                "h3",
+                "h4",
+                "h5",
+                "h6",
+                "p",
+                "br",
+                "hr",
+                "table",
+                "thead",
+                "tbody",
+                "tr",
+                "th",
+                "td",
+                "ul",
+                "ol",
+                "li",
+                "blockquote",
+                "code",
+                "pre",
+                "img",
+                "strong",
+                "em",
+                "b",
+                "i",
+                "u",
+                "span",
+                "div",
                 "a",
             },
             attributes={
@@ -130,9 +155,7 @@ def _is_private_ip(hostname: str) -> bool:
             return True
         if parts[0] == 127:
             return True
-        if parts[0] == 169 and parts[1] == 254:
-            return True
-        return False
+        return bool(parts[0] == 169 and parts[1] == 254)
     except (socket.gaierror, ValueError):
         return False
 
@@ -144,6 +167,7 @@ def _safe_url_fetcher(url: str, timeout: int = 10, ssl_context=None):
     if parsed.hostname and _is_private_ip(parsed.hostname):
         return {"string": "", "mime_type": "text/plain"}
     from weasyprint import default_url_fetcher
+
     return default_url_fetcher(url, timeout=timeout, ssl_context=ssl_context)
 
 
@@ -154,12 +178,9 @@ def _handle_generate_pdf(args, **_kwargs):
     filename = args.get("filename", "")
 
     try:
-        from weasyprint import HTML, CSS
+        from weasyprint import CSS, HTML
     except ImportError:
-        return json.dumps({
-            "success": False,
-            "error": "weasyprint is not installed. PDF generation is unavailable."
-        })
+        return json.dumps({"success": False, "error": "weasyprint is not installed. PDF generation is unavailable."})
 
     if not filename:
         safe_title = "".join(c if c.isalnum() or c in ("-_",) else "-" for c in title.lower())[:60]
@@ -189,16 +210,20 @@ def _handle_generate_pdf(args, **_kwargs):
     combined_css = css_content if css_content.strip() else DEFAULT_CSS
 
     try:
-        HTML(string=full_html, url_fetcher=_safe_url_fetcher).write_pdf(str(filepath), stylesheets=[CSS(string=combined_css)])
+        HTML(string=full_html, url_fetcher=_safe_url_fetcher).write_pdf(
+            str(filepath), stylesheets=[CSS(string=combined_css)]
+        )
     except Exception as exc:
         return json.dumps({"success": False, "error": f"PDF generation failed: {exc}"})
 
-    return json.dumps({
-        "success": True,
-        "filename": filename,
-        "path": str(filepath),
-        "size_bytes": filepath.stat().st_size,
-    })
+    return json.dumps(
+        {
+            "success": True,
+            "filename": filename,
+            "path": str(filepath),
+            "size_bytes": filepath.stat().st_size,
+        }
+    )
 
 
 def register(ctx):

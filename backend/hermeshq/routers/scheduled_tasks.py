@@ -36,8 +36,10 @@ async def list_scheduled_tasks(
 ) -> list[ScheduledTaskRead]:
     statement = select(ScheduledTask).order_by(ScheduledTask.created_at.asc())
     if not is_admin(current_user):
-      accessible_ids = await get_accessible_agent_ids(db, current_user)
-      statement = statement.where(ScheduledTask.agent_id.in_(accessible_ids)) if accessible_ids else statement.where(false())
+        accessible_ids = await get_accessible_agent_ids(db, current_user)
+        statement = (
+            statement.where(ScheduledTask.agent_id.in_(accessible_ids)) if accessible_ids else statement.where(false())
+        )
     result = await db.execute(statement)
     return [ScheduledTaskRead.model_validate(item) for item in result.scalars().all()]
 

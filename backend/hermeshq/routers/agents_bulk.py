@@ -213,12 +213,15 @@ async def bulk_config_update(
                 continue
             # Enforce field-level authorization — same check as single-agent update
             from hermeshq.routers.agents_shared import USER_EDITABLE_FIELDS
+
             restricted_fields = sorted(set(update_data) - USER_EDITABLE_FIELDS)
             if restricted_fields:
-                skipped_agents.append(AgentBulkOperationSkipped(
-                    agent_id=agent.id,
-                    reason=f"restricted fields: {', '.join(restricted_fields)}",
-                ))
+                skipped_agents.append(
+                    AgentBulkOperationSkipped(
+                        agent_id=agent.id,
+                        reason=f"restricted fields: {', '.join(restricted_fields)}",
+                    )
+                )
                 continue
 
         runtime_profile_changed = "runtime_profile" in update_data
@@ -226,7 +229,12 @@ async def bulk_config_update(
         if "runtime_profile" in update_data:
             update_data["runtime_profile"] = normalize_runtime_profile_slug(update_data["runtime_profile"])
 
-        if "model" in update_data or "provider" in update_data or "api_key_ref" in update_data or "base_url" in update_data:
+        if (
+            "model" in update_data
+            or "provider" in update_data
+            or "api_key_ref" in update_data
+            or "base_url" in update_data
+        ):
             update_data.setdefault("use_provider_default", False)
 
         for field, value in update_data.items():
@@ -234,6 +242,7 @@ async def bulk_config_update(
 
         if runtime_profile_changed:
             from hermeshq.routers.agents_shared import _apply_runtime_profile_defaults
+
             _apply_runtime_profile_defaults(
                 agent,
                 agent.runtime_profile,

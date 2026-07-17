@@ -23,8 +23,7 @@ BUILTIN_RUNTIME_PROFILES: list[dict] = [
         "slug": "standard",
         "name": "Standard",
         "description": (
-            "General-purpose shared backend profile for administrative, coordination, and "
-            "integration-focused agents."
+            "General-purpose shared backend profile for administrative, coordination, and integration-focused agents."
         ),
         "typical_roles": [
             "Executive assistant",

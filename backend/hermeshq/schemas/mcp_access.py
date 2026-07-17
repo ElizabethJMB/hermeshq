@@ -12,9 +12,7 @@ class McpAccessTokenCreate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     client_name: str | None = Field(default=None, max_length=128)
     allowed_agent_ids: list[str] = Field(default_factory=list)
-    scopes: list[str] = Field(
-        default_factory=lambda: ["agents:list", "agents:invoke", "tasks:read"]
-    )
+    scopes: list[str] = Field(default_factory=lambda: ["agents:list", "agents:invoke", "tasks:read"])
     expires_at: datetime | None = None
 
 

@@ -164,7 +164,9 @@ def register(ctx):
                 "PUT",
                 lambda args: f"/control/agents/{args.get('agent_id')}",
                 required=["agent_id"],
-                payload_builder=lambda args: {key: value for key, value in dict(args or {}).items() if key != "agent_id"},
+                payload_builder=lambda args: {
+                    key: value for key, value in dict(args or {}).items() if key != "agent_id"
+                },
             ),
             "emoji": "🛠️",
         },
@@ -227,7 +229,9 @@ def register(ctx):
                 },
                 "required": ["username", "display_name", "password"],
             },
-            "handler": _payload_handler("POST", lambda _args: "/control/users", required=["username", "display_name", "password"]),
+            "handler": _payload_handler(
+                "POST", lambda _args: "/control/users", required=["username", "display_name", "password"]
+            ),
             "emoji": "➕",
         },
         {
@@ -249,7 +253,9 @@ def register(ctx):
                 "PUT",
                 lambda args: f"/control/users/{args.get('user_id')}",
                 required=["user_id"],
-                payload_builder=lambda args: {key: value for key, value in dict(args or {}).items() if key != "user_id"},
+                payload_builder=lambda args: {
+                    key: value for key, value in dict(args or {}).items() if key != "user_id"
+                },
             ),
             "emoji": "✏️",
         },
@@ -293,7 +299,9 @@ def register(ctx):
                 },
                 "required": ["slug", "name", "runtime_provider"],
             },
-            "handler": _payload_handler("POST", lambda _args: "/control/providers", required=["slug", "name", "runtime_provider"]),
+            "handler": _payload_handler(
+                "POST", lambda _args: "/control/providers", required=["slug", "name", "runtime_provider"]
+            ),
             "emoji": "🧱",
         },
         {
@@ -319,7 +327,9 @@ def register(ctx):
                 "PUT",
                 lambda args: f"/control/providers/{args.get('provider_slug')}",
                 required=["provider_slug"],
-                payload_builder=lambda args: {key: value for key, value in dict(args or {}).items() if key != "provider_slug"},
+                payload_builder=lambda args: {
+                    key: value for key, value in dict(args or {}).items() if key != "provider_slug"
+                },
             ),
             "emoji": "🔧",
         },
@@ -331,7 +341,9 @@ def register(ctx):
                 "properties": {"provider_slug": {"type": "string"}},
                 "required": ["provider_slug"],
             },
-            "handler": _delete_handler(lambda args: f"/control/providers/{args.get('provider_slug')}", required=["provider_slug"]),
+            "handler": _delete_handler(
+                lambda args: f"/control/providers/{args.get('provider_slug')}", required=["provider_slug"]
+            ),
             "emoji": "🗑️",
         },
         {
@@ -372,7 +384,9 @@ def register(ctx):
                 "PUT",
                 lambda args: f"/control/secrets/{args.get('secret_id')}",
                 required=["secret_id"],
-                payload_builder=lambda args: {key: value for key, value in dict(args or {}).items() if key != "secret_id"},
+                payload_builder=lambda args: {
+                    key: value for key, value in dict(args or {}).items() if key != "secret_id"
+                },
             ),
             "emoji": "✏️",
         },
@@ -384,7 +398,9 @@ def register(ctx):
                 "properties": {"secret_id": {"type": "string"}},
                 "required": ["secret_id"],
             },
-            "handler": _delete_handler(lambda args: f"/control/secrets/{args.get('secret_id')}", required=["secret_id"]),
+            "handler": _delete_handler(
+                lambda args: f"/control/secrets/{args.get('secret_id')}", required=["secret_id"]
+            ),
             "emoji": "🗑️",
         },
         {
@@ -402,7 +418,11 @@ def register(ctx):
                 "properties": {"integration_slug": {"type": "string"}},
                 "required": ["integration_slug"],
             },
-            "handler": _payload_handler("POST", lambda args: f"/control/integrations/{args.get('integration_slug')}/install", required=["integration_slug"]),
+            "handler": _payload_handler(
+                "POST",
+                lambda args: f"/control/integrations/{args.get('integration_slug')}/install",
+                required=["integration_slug"],
+            ),
             "emoji": "📦",
         },
         {
@@ -413,7 +433,11 @@ def register(ctx):
                 "properties": {"integration_slug": {"type": "string"}},
                 "required": ["integration_slug"],
             },
-            "handler": _payload_handler("POST", lambda args: f"/control/integrations/{args.get('integration_slug')}/uninstall", required=["integration_slug"]),
+            "handler": _payload_handler(
+                "POST",
+                lambda args: f"/control/integrations/{args.get('integration_slug')}/uninstall",
+                required=["integration_slug"],
+            ),
             "emoji": "📤",
         },
         {
@@ -478,7 +502,11 @@ def register(ctx):
                 },
                 "required": ["agent_id", "name", "cron_expression", "prompt"],
             },
-            "handler": _payload_handler("POST", lambda _args: "/control/scheduled-tasks", required=["agent_id", "name", "cron_expression", "prompt"]),
+            "handler": _payload_handler(
+                "POST",
+                lambda _args: "/control/scheduled-tasks",
+                required=["agent_id", "name", "cron_expression", "prompt"],
+            ),
             "emoji": "⏱️",
         },
         {
@@ -499,7 +527,9 @@ def register(ctx):
                 "PUT",
                 lambda args: f"/control/scheduled-tasks/{args.get('scheduled_task_id')}",
                 required=["scheduled_task_id"],
-                payload_builder=lambda args: {key: value for key, value in dict(args or {}).items() if key != "scheduled_task_id"},
+                payload_builder=lambda args: {
+                    key: value for key, value in dict(args or {}).items() if key != "scheduled_task_id"
+                },
             ),
             "emoji": "📝",
         },
@@ -511,7 +541,9 @@ def register(ctx):
                 "properties": {"scheduled_task_id": {"type": "string"}},
                 "required": ["scheduled_task_id"],
             },
-            "handler": _delete_handler(lambda args: f"/control/scheduled-tasks/{args.get('scheduled_task_id')}", required=["scheduled_task_id"]),
+            "handler": _delete_handler(
+                lambda args: f"/control/scheduled-tasks/{args.get('scheduled_task_id')}", required=["scheduled_task_id"]
+            ),
             "emoji": "🗑️",
         },
         {
@@ -546,7 +578,9 @@ def register(ctx):
                 "properties": {"draft_id": {"type": "string"}},
                 "required": ["draft_id"],
             },
-            "handler": _payload_handler("GET", lambda args: f"/control/integration-drafts/{args.get('draft_id')}", required=["draft_id"]),
+            "handler": _payload_handler(
+                "GET", lambda args: f"/control/integration-drafts/{args.get('draft_id')}", required=["draft_id"]
+            ),
             "emoji": "📘",
         },
         {
@@ -567,7 +601,9 @@ def register(ctx):
                 "PUT",
                 lambda args: f"/control/integration-drafts/{args.get('draft_id')}",
                 required=["draft_id"],
-                payload_builder=lambda args: {key: value for key, value in dict(args or {}).items() if key != "draft_id"},
+                payload_builder=lambda args: {
+                    key: value for key, value in dict(args or {}).items() if key != "draft_id"
+                },
             ),
             "emoji": "📝",
         },
@@ -584,7 +620,9 @@ def register(ctx):
             },
             "handler": _payload_handler(
                 "GET",
-                lambda args: f"/control/integration-drafts/{args.get('draft_id')}/file?path={urllib.parse.quote(str(args.get('path') or ''))}",
+                lambda args: (
+                    f"/control/integration-drafts/{args.get('draft_id')}/file?path={urllib.parse.quote(str(args.get('path') or ''))}"
+                ),
                 required=["draft_id", "path"],
             ),
             "emoji": "📄",
@@ -603,7 +641,9 @@ def register(ctx):
             },
             "handler": _payload_handler(
                 "PUT",
-                lambda args: f"/control/integration-drafts/{args.get('draft_id')}/file?path={urllib.parse.quote(str(args.get('path') or ''))}",
+                lambda args: (
+                    f"/control/integration-drafts/{args.get('draft_id')}/file?path={urllib.parse.quote(str(args.get('path') or ''))}"
+                ),
                 required=["draft_id", "path", "content"],
                 payload_builder=lambda args: {"content": args.get("content", "")},
             ),
@@ -621,7 +661,9 @@ def register(ctx):
                 "required": ["draft_id", "path"],
             },
             "handler": _delete_handler(
-                lambda args: f"/control/integration-drafts/{args.get('draft_id')}/file?path={urllib.parse.quote(str(args.get('path') or ''))}",
+                lambda args: (
+                    f"/control/integration-drafts/{args.get('draft_id')}/file?path={urllib.parse.quote(str(args.get('path') or ''))}"
+                ),
                 required=["draft_id", "path"],
             ),
             "emoji": "🗑️",
@@ -664,7 +706,9 @@ def register(ctx):
                 "properties": {"draft_id": {"type": "string"}},
                 "required": ["draft_id"],
             },
-            "handler": _delete_handler(lambda args: f"/control/integration-drafts/{args.get('draft_id')}", required=["draft_id"]),
+            "handler": _delete_handler(
+                lambda args: f"/control/integration-drafts/{args.get('draft_id')}", required=["draft_id"]
+            ),
             "emoji": "🧹",
         },
     ]

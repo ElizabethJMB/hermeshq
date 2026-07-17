@@ -48,12 +48,8 @@ async def list_audit_logs(
         data_q = data_q.where(AuditLog.actor_id == actor_id)
     if search:
         pattern = f"%{search}%"
-        count_q = count_q.where(
-            (AuditLog.target_name.ilike(pattern)) | (AuditLog.actor_username.ilike(pattern))
-        )
-        data_q = data_q.where(
-            (AuditLog.target_name.ilike(pattern)) | (AuditLog.actor_username.ilike(pattern))
-        )
+        count_q = count_q.where((AuditLog.target_name.ilike(pattern)) | (AuditLog.actor_username.ilike(pattern)))
+        data_q = data_q.where((AuditLog.target_name.ilike(pattern)) | (AuditLog.actor_username.ilike(pattern)))
     if cursor:
         # Get the cursor entry to know its timestamp
         cursor_entry = await db.get(AuditLog, cursor)

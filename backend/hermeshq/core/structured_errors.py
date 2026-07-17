@@ -6,6 +6,7 @@ Ensures all error responses (4xx/5xx) have a consistent JSON shape:
 This normalizes unhandled exceptions, validation errors, and HTTPException
 into a single predictable format for frontend consumers.
 """
+
 from __future__ import annotations
 
 import logging

@@ -59,9 +59,13 @@ def validate_delegate_hierarchy(agent_map: dict[str, Agent], source: Agent, targ
     if route == "self":
         raise HTTPException(status_code=400, detail="An agent cannot delegate a task to itself")
     if route == "source_blocked":
-        raise HTTPException(status_code=400, detail=f"{source.friendly_name or source.name} cannot send delegated tasks")
+        raise HTTPException(
+            status_code=400, detail=f"{source.friendly_name or source.name} cannot send delegated tasks"
+        )
     if route == "target_blocked":
-        raise HTTPException(status_code=400, detail=f"{target.friendly_name or target.name} cannot receive delegated tasks")
+        raise HTTPException(
+            status_code=400, detail=f"{target.friendly_name or target.name} cannot receive delegated tasks"
+        )
     raise HTTPException(
         status_code=400,
         detail=(

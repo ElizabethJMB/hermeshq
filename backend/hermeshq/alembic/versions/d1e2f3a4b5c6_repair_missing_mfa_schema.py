@@ -9,6 +9,7 @@ Revises: c9d8e7f6a5b4
 Create Date: 2026-06-11 00:00:00.000000
 
 """
+
 from alembic import op
 
 revision = "d1e2f3a4b5c6"
@@ -29,9 +30,7 @@ def upgrade() -> None:
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
     """)
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_mfa_codes_user_id ON mfa_codes (user_id)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_mfa_codes_user_id ON mfa_codes (user_id)")
     op.execute("""
         ALTER TABLE app_settings
         ADD COLUMN IF NOT EXISTS mfa_email_enabled BOOLEAN NOT NULL DEFAULT false
@@ -39,8 +38,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        "ALTER TABLE app_settings DROP COLUMN IF EXISTS mfa_email_enabled"
-    )
+    op.execute("ALTER TABLE app_settings DROP COLUMN IF EXISTS mfa_email_enabled")
     op.execute("DROP INDEX IF EXISTS ix_mfa_codes_user_id")
     op.execute("DROP TABLE IF EXISTS mfa_codes")

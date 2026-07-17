@@ -69,9 +69,7 @@ def _match_score(agent: Agent, target: str) -> int:
 
 def _resolve_target_agent(agent_map: dict[str, Agent], target: str, source_agent_id: str) -> Agent:
     exact_matches = [
-        agent
-        for agent in agent_map.values()
-        if agent.id != source_agent_id and _match_score(agent, target) >= 0
+        agent for agent in agent_map.values() if agent.id != source_agent_id and _match_score(agent, target) >= 0
     ]
     if not exact_matches:
         raise HTTPException(status_code=404, detail=f"No agent matched '{target}'")
@@ -105,7 +103,9 @@ async def roster(
                 "can_send_tasks": bool(agent.can_send_tasks),
                 "can_receive_tasks": bool(agent.can_receive_tasks),
                 "supervisor_agent_id": agent.supervisor_agent_id,
-                "supervisor": _display_name(agent_map[agent.supervisor_agent_id]) if agent.supervisor_agent_id and agent.supervisor_agent_id in agent_map else None,
+                "supervisor": _display_name(agent_map[agent.supervisor_agent_id])
+                if agent.supervisor_agent_id and agent.supervisor_agent_id in agent_map
+                else None,
                 "team_tags": list(agent.team_tags or []),
                 "delegate_allowed": bool(allowed),
                 "delegate_route": route,

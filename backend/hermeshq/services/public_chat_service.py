@@ -12,6 +12,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from hermeshq.models.agent import Agent
+from hermeshq.models.base import utcnow
 from hermeshq.models.public_chat import (
     PublicChatApiKey,
     PublicChatMessage,
@@ -19,7 +20,6 @@ from hermeshq.models.public_chat import (
     PublicChatTranscript,
 )
 from hermeshq.models.task import Task
-from hermeshq.models.base import utcnow
 from hermeshq.services.task_board import next_board_order, runtime_status_to_board_column
 
 logger = logging.getLogger(__name__)
@@ -42,10 +42,7 @@ def _origin_allowed(origin: str | None, allowed_domains: list[str]) -> bool:
         return False
     parsed = urlparse(origin)
     host = parsed.hostname or ""
-    for domain in allowed_domains:
-        if host == domain or host.endswith("." + domain):
-            return True
-    return False
+    return any(host == domain or host.endswith("." + domain) for domain in allowed_domains)
 
 
 class SimpleRateLimiter:
@@ -88,9 +85,7 @@ class PublicChatService:
         self.session_create_limiter = SimpleRateLimiter(max_requests=5, window_seconds=60)
         self._purge_task: asyncio.Task | None = None
 
-    async def validate_api_key(
-        self, raw_key: str, db: AsyncSession, *, origin: str | None = None
-    ) -> PublicChatApiKey:
+    async def validate_api_key(self, raw_key: str, db: AsyncSession, *, origin: str | None = None) -> PublicChatApiKey:
         key_hash = _hash_key(raw_key)
         result = await db.execute(
             select(PublicChatApiKey).where(
@@ -147,9 +142,7 @@ class PublicChatService:
             "agent_name": agent.friendly_name or agent.name,
         }
 
-    async def validate_session(
-        self, session_id: str, session_token: str, db: AsyncSession
-    ) -> PublicChatSession:
+    async def validate_session(self, session_id: str, session_token: str, db: AsyncSession) -> PublicChatSession:
         token_hash = _hash_key(session_token)
         result = await db.execute(
             select(PublicChatSession).where(
@@ -172,7 +165,10 @@ class PublicChatService:
         return session
 
     async def _check_monthly_quota(
-        self, api_key_id: str, requests_per_month: int, db: AsyncSession,
+        self,
+        api_key_id: str,
+        requests_per_month: int,
+        db: AsyncSession,
     ) -> None:
         first_of_month = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         result = await db.execute(
@@ -246,9 +242,7 @@ class PublicChatService:
 
         return task.id, session.agent_id
 
-    async def save_assistant_message(
-        self, session_id: str, content: str
-    ) -> None:
+    async def save_assistant_message(self, session_id: str, content: str) -> None:
         truncated = content[:MAX_ASSISTANT_MESSAGE_LENGTH] if content else ""
         async with self.session_factory() as db:
             msg = PublicChatMessage(
@@ -259,9 +253,7 @@ class PublicChatService:
             db.add(msg)
             await db.commit()
 
-    async def close_session(
-        self, session_id: str, session_token: str, db: AsyncSession
-    ) -> None:
+    async def close_session(self, session_id: str, session_token: str, db: AsyncSession) -> None:
         token_hash = _hash_key(session_token)
         result = await db.execute(
             select(PublicChatSession).where(
@@ -278,13 +270,9 @@ class PublicChatService:
             session.status = "closed"
             await db.commit()
 
-    async def get_session_status(
-        self, session_id: str, session_token: str, db: AsyncSession
-    ) -> dict:
+    async def get_session_status(self, session_id: str, session_token: str, db: AsyncSession) -> dict:
         session = await self.validate_session(session_id, session_token, db)
-        result = await db.execute(
-            select(func.count()).where(PublicChatMessage.session_id == session_id)
-        )
+        result = await db.execute(select(func.count()).where(PublicChatMessage.session_id == session_id))
         count = result.scalar() or 0
         return {
             "session_id": session.id,
@@ -322,10 +310,12 @@ class PublicChatService:
             now = datetime.now(UTC)
             # Find expired sessions in small batches to avoid loading all into memory
             result = await db.execute(
-                select(PublicChatSession).where(
+                select(PublicChatSession)
+                .where(
                     PublicChatSession.status == "active",
                     PublicChatSession.last_activity < now - timedelta(minutes=10),
-                ).limit(100)
+                )
+                .limit(100)
             )
             sessions = result.scalars().all()
             for session in sessions:
@@ -346,9 +336,7 @@ class PublicChatService:
             await db.commit()
         return count
 
-    async def _archive_transcript(
-        self, session: PublicChatSession, db: AsyncSession
-    ) -> None:
+    async def _archive_transcript(self, session: PublicChatSession, db: AsyncSession) -> None:
         result = await db.execute(
             select(PublicChatMessage)
             .where(PublicChatMessage.session_id == session.id)
@@ -362,20 +350,24 @@ class PublicChatService:
             session_id=session.id,
             api_key_id=session.api_key_id,
             agent_id=session.agent_id,
-            messages_json=[
-                {"role": m.role, "content": m.content, "created_at": str(m.created_at)}
-                for m in messages
-            ],
+            messages_json=[{"role": m.role, "content": m.content, "created_at": str(m.created_at)} for m in messages],
         )
         db.add(transcript)
 
     # ── API Key management ──
 
     async def create_api_key(
-        self, label: str, agent_id: str, allowed_domains: list[str],
-        requests_per_month: int, tokens_per_month: int, db: AsyncSession,
-        widget_title: str | None = None, widget_theme: str = "auto",
-        widget_accent: str = "#6366f1", widget_position: str = "right",
+        self,
+        label: str,
+        agent_id: str,
+        allowed_domains: list[str],
+        requests_per_month: int,
+        tokens_per_month: int,
+        db: AsyncSession,
+        widget_title: str | None = None,
+        widget_theme: str = "auto",
+        widget_accent: str = "#6366f1",
+        widget_position: str = "right",
     ) -> dict:
         agent = await db.get(Agent, agent_id)
         if not agent:
@@ -410,7 +402,10 @@ class PublicChatService:
         }
 
     async def update_api_key(
-        self, key_id: str, payload, db: AsyncSession,
+        self,
+        key_id: str,
+        payload,
+        db: AsyncSession,
     ) -> PublicChatApiKey:
         api_key = await db.get(PublicChatApiKey, key_id)
         if not api_key:
@@ -426,16 +421,12 @@ class PublicChatService:
         api_key = await db.get(PublicChatApiKey, key_id)
         if not api_key:
             raise ValueError("API key not found")
-        await db.execute(
-            delete(PublicChatTranscript).where(PublicChatTranscript.api_key_id == key_id)
-        )
+        await db.execute(delete(PublicChatTranscript).where(PublicChatTranscript.api_key_id == key_id))
         await db.delete(api_key)
         await db.commit()
 
     async def list_api_keys(self, db: AsyncSession) -> list[PublicChatApiKey]:
-        result = await db.execute(
-            select(PublicChatApiKey).order_by(PublicChatApiKey.created_at.desc())
-        )
+        result = await db.execute(select(PublicChatApiKey).order_by(PublicChatApiKey.created_at.desc()))
         return list(result.scalars().all())
 
     async def delete_api_key(self, key_id: str, db: AsyncSession) -> None:
@@ -445,9 +436,7 @@ class PublicChatService:
         api_key.is_active = False
         await db.commit()
 
-    async def list_transcripts(
-        self, key_id: str, db: AsyncSession
-    ) -> list[PublicChatTranscript]:
+    async def list_transcripts(self, key_id: str, db: AsyncSession) -> list[PublicChatTranscript]:
         result = await db.execute(
             select(PublicChatTranscript)
             .where(PublicChatTranscript.api_key_id == key_id)

@@ -54,6 +54,7 @@ class AppSettingsRead(ORMModel):
 
 class PublicSettingsRead(BaseModel):
     """Safe subset of settings for unauthenticated access (login page, etc.)."""
+
     app_version: str
     app_name: str | None
     app_short_name: str | None
@@ -67,6 +68,7 @@ class PublicSettingsRead(BaseModel):
 
 class ResourceStatusResponse(BaseModel):
     """Full resource status for the Settings UI."""
+
     semaphore: dict
     container: dict
     system: dict
@@ -75,22 +77,26 @@ class ResourceStatusResponse(BaseModel):
 
 class SemaphoreUpdateRequest(BaseModel):
     """Request body for updating the concurrency semaphore."""
+
     semaphore: int
 
 
 class SemaphoreUpdateResponse(BaseModel):
     """Response after updating the semaphore."""
+
     semaphore: int
     restart_required: bool = True
 
 
 class GenerateOverrideRequest(BaseModel):
     """Request body for generating docker-compose.override.yml."""
+
     agents: int
 
 
 class GenerateOverrideResponse(BaseModel):
     """Response with generated override file content."""
+
     content: str
     agents: int
     semaphore: int

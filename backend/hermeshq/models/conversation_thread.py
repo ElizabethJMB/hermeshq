@@ -8,9 +8,7 @@ from hermeshq.models.base import Base, TimestampMixin
 
 class ConversationThread(TimestampMixin, Base):
     __tablename__ = "conversation_threads"
-    __table_args__ = (
-        UniqueConstraint("agent_id", "user_id", name="uq_conversation_threads_agent_user"),
-    )
+    __table_args__ = (UniqueConstraint("agent_id", "user_id", name="uq_conversation_threads_agent_user"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), index=True)

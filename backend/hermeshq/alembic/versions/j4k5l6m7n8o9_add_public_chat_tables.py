@@ -4,10 +4,11 @@ Revision ID: j4k5l6m7n8o9
 Revises: i3j4k5l6m7n8
 Create Date: 2026-07-08
 """
+
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "j4k5l6m7n8o9"
@@ -35,7 +36,9 @@ def upgrade() -> None:
     op.create_table(
         "public_chat_sessions",
         sa.Column("id", sa.String(36), primary_key=True),
-        sa.Column("api_key_id", sa.String(36), sa.ForeignKey("public_chat_api_keys.id", ondelete="CASCADE"), index=True),
+        sa.Column(
+            "api_key_id", sa.String(36), sa.ForeignKey("public_chat_api_keys.id", ondelete="CASCADE"), index=True
+        ),
         sa.Column("agent_id", sa.String(36), sa.ForeignKey("agents.id", ondelete="CASCADE"), index=True),
         sa.Column("session_token", sa.String(64), unique=True, nullable=False, index=True),
         sa.Column("status", sa.String(20), server_default="active"),
@@ -48,7 +51,9 @@ def upgrade() -> None:
     op.create_table(
         "public_chat_messages",
         sa.Column("id", sa.String(36), primary_key=True),
-        sa.Column("session_id", sa.String(36), sa.ForeignKey("public_chat_sessions.id", ondelete="CASCADE"), index=True),
+        sa.Column(
+            "session_id", sa.String(36), sa.ForeignKey("public_chat_sessions.id", ondelete="CASCADE"), index=True
+        ),
         sa.Column("role", sa.String(20), nullable=False),
         sa.Column("content", sa.Text, nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),

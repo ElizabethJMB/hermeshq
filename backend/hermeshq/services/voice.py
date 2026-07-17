@@ -5,7 +5,6 @@ integration packages already bundled with HermesHQ.
 """
 
 import asyncio
-import importlib
 import logging
 import os
 import platform
@@ -13,7 +12,6 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.models.app_settings import AppSettings
@@ -127,9 +125,7 @@ async def _run_healthcheck(package_root: Path, config: dict) -> bool:
     try:
         import importlib.util
 
-        spec = importlib.util.spec_from_file_location(
-            f"_voice_hc_{package_root.name}", hc_path
-        )
+        spec = importlib.util.spec_from_file_location(f"_voice_hc_{package_root.name}", hc_path)
         if not spec or not spec.loader:
             return False
         mod = importlib.util.module_from_spec(spec)
@@ -151,7 +147,7 @@ async def _run_healthcheck(package_root: Path, config: dict) -> bool:
 def _load_whisper(model_name: str):
     global _WHISPER_MODEL, _WHISPER_MODEL_NAME
 
-    if _WHISPER_MODEL is not None and _WHISPER_MODEL_NAME == model_name:
+    if _WHISPER_MODEL is not None and model_name == _WHISPER_MODEL_NAME:
         return _WHISPER_MODEL
 
     from faster_whisper import WhisperModel
@@ -168,8 +164,6 @@ async def transcribe(audio_bytes: bytes, *, language: str | None = None) -> tupl
     Returns (text, detected_language).
     Runs in a thread via asyncio.to_thread with a semaphore to limit concurrency.
     """
-    import io
-    import wave
 
     model_name = _default_whisper_model()
     semaphore = _get_stt_semaphore()
@@ -177,9 +171,7 @@ async def transcribe(audio_bytes: bytes, *, language: str | None = None) -> tupl
     async with semaphore:
         model = await asyncio.to_thread(_load_whisper, model_name)
 
-        segments, info = await asyncio.to_thread(
-            _whisper_transcribe_sync, model, audio_bytes, language
-        )
+        segments, info = await asyncio.to_thread(_whisper_transcribe_sync, model, audio_bytes, language)
 
     text = " ".join(seg.text.strip() for seg in segments).strip()
     detected_lang = getattr(info, "language", language or "es")
@@ -193,6 +185,7 @@ def _is_silent(audio_array: Any) -> bool:
     """Check if audio is silent using RMS energy."""
     try:
         import numpy as np
+
         rms = float(np.sqrt(np.mean(audio_array.astype(np.float32) ** 2)))
         return rms < _STT_SILENCE_RMS_THRESHOLD
     except Exception:
@@ -200,7 +193,6 @@ def _is_silent(audio_array: Any) -> bool:
 
 
 def _whisper_transcribe_sync(model, audio_bytes: bytes, language: str | None):
-    import numpy as np
 
     audio_array = _bytes_to_numpy(audio_bytes)
     if audio_array is None:
@@ -208,8 +200,10 @@ def _whisper_transcribe_sync(model, audio_bytes: bytes, language: str | None):
 
     if _is_silent(audio_array):
         logger.info("Audio detected as silent (RMS below threshold), skipping Whisper")
+
         class _EmptyInfo:
             language = language or "es"
+
         return [], _EmptyInfo()
 
     kwargs: dict[str, Any] = {"beam_size": 5}
@@ -289,8 +283,9 @@ async def synthesize(
 
 
 async def _synthesize_edge(text: str, voice: str) -> bytes:
-    import edge_tts
     import io
+
+    import edge_tts
 
     sem = _get_tts_semaphore()
     async with sem:
@@ -312,7 +307,8 @@ async def _synthesize_piper(text: str, voice: str) -> bytes:
     async with sem:
         proc = await asyncio.create_subprocess_exec(
             piper_bin,
-            "--model", voice,
+            "--model",
+            voice,
             "--output-raw",
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,

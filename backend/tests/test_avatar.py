@@ -3,7 +3,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 from fastapi import HTTPException, UploadFile
 
@@ -20,10 +20,10 @@ from hermeshq.services.avatar import (
     validate_and_save_avatar,
 )
 
-
 # ---------------------------------------------------------------------------
 # resolve_media_type
 # ---------------------------------------------------------------------------
+
 
 class TestResolveMediaType(unittest.TestCase):
     """Tests for resolve_media_type()."""
@@ -41,9 +41,7 @@ class TestResolveMediaType(unittest.TestCase):
         self.assertEqual(resolve_media_type(Path("avatar.svg")), "image/svg+xml")
 
     def test_unknown_returns_octet_stream(self) -> None:
-        self.assertEqual(
-            resolve_media_type(Path("avatar.unknown")), "application/octet-stream"
-        )
+        self.assertEqual(resolve_media_type(Path("avatar.unknown")), "application/octet-stream")
 
     def test_uppercase_extension_is_case_insensitive(self) -> None:
         self.assertEqual(resolve_media_type(Path("avatar.PNG")), "image/png")
@@ -58,6 +56,7 @@ class TestResolveMediaType(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # get_assets_root
 # ---------------------------------------------------------------------------
+
 
 class TestGetAssetsRoot(unittest.TestCase):
     """Tests for get_assets_root()."""
@@ -88,6 +87,7 @@ class TestGetAssetsRoot(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # build_avatar_dir / build_avatar_path
 # ---------------------------------------------------------------------------
+
 
 class TestBuildAvatarDir(unittest.TestCase):
     """Tests for build_avatar_dir()."""
@@ -131,6 +131,7 @@ class TestBuildAvatarPath(unittest.TestCase):
 # delete_avatar_files
 # ---------------------------------------------------------------------------
 
+
 class TestDeleteAvatarFiles(unittest.TestCase):
     """Tests for delete_avatar_files()."""
 
@@ -168,6 +169,7 @@ class TestDeleteAvatarFiles(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # validate_and_save_avatar (async)
 # ---------------------------------------------------------------------------
+
 
 def _make_upload_file(
     content_type: str = "image/png",
@@ -297,6 +299,7 @@ class TestValidateAndSaveAvatar(unittest.IsolatedAsyncioTestCase):
 # save_avatar_bytes
 # ---------------------------------------------------------------------------
 
+
 class TestSaveAvatarBytes(unittest.TestCase):
     """Tests for save_avatar_bytes()."""
 
@@ -355,7 +358,7 @@ class TestSaveAvatarBytes(unittest.TestCase):
             base = Path(tmp) / "deep" / "new" / "path"
             content = b"data"
 
-            result = save_avatar_bytes(base, "agent-5", content)
+            save_avatar_bytes(base, "agent-5", content)
 
             self.assertTrue((base / "agent-5" / "avatar.png").exists())
 
@@ -363,6 +366,7 @@ class TestSaveAvatarBytes(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Constants sanity
 # ---------------------------------------------------------------------------
+
 
 class TestConstants(unittest.TestCase):
     """Sanity checks on module-level constants."""

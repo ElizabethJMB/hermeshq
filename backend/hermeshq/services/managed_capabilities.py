@@ -62,9 +62,7 @@ def list_managed_plugins(
     include_system_plugins: bool = False,
 ) -> list[dict]:
     plugins = [
-        dict(item)
-        for item in CORE_MANAGED_PLUGIN_CATALOG
-        if include_system_plugins or not item.get("system_only")
+        dict(item) for item in CORE_MANAGED_PLUGIN_CATALOG if include_system_plugins or not item.get("system_only")
     ]
     for integration in list_managed_integrations(enabled_integration_slugs):
         plugin_dir = integration.get("plugin_source_root")
@@ -85,9 +83,7 @@ def list_managed_plugins(
 
 def list_standard_compatible_toolsets(enabled_integration_slugs: list[str] | None = None) -> list[str]:
     return [
-        item["toolset"]
-        for item in list_managed_plugins(enabled_integration_slugs)
-        if item.get("standard_compatible")
+        item["toolset"] for item in list_managed_plugins(enabled_integration_slugs) if item.get("standard_compatible")
     ]
 
 
@@ -121,7 +117,9 @@ def list_available_integration_packages(enabled_integration_slugs: list[str] | N
                     "source_type": source_type,
                     "installed": slug in enabled,
                     "standard_compatible": bool(manifest.get("standard_compatible", False)),
-                    "supported_profiles": list(manifest.get("supported_profiles") or ["standard", "technical", "security"]),
+                    "supported_profiles": list(
+                        manifest.get("supported_profiles") or ["standard", "technical", "security"]
+                    ),
                     "required_fields": list(manifest.get("required_fields") or []),
                     "fields": list(manifest.get("fields") or []),
                     "defaults": dict(manifest.get("defaults") or {}),

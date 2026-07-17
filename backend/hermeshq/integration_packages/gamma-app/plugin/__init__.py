@@ -37,7 +37,9 @@ def _headers() -> dict[str, str]:
 
 def _request(method: str, path: str, payload: dict | None = None, query: dict | None = None) -> str:
     if not _configured():
-        return json.dumps({"success": False, "error": "Gamma integration is not configured. Set a Gamma API key secret first."})
+        return json.dumps(
+            {"success": False, "error": "Gamma integration is not configured. Set a Gamma API key secret first."}
+        )
 
     url = f"{_base_url()}{path}"
     try:
@@ -216,16 +218,30 @@ def register(ctx):
     common_generation_fields = {
         "input_text": {"type": "string", "description": "Base content or prompt to turn into Gamma output."},
         "title": {"type": "string", "description": "Optional title, mainly useful for presentations."},
-        "text_mode": {"type": "string", "enum": ["generate", "condense", "preserve"], "description": "How Gamma should treat the provided text."},
+        "text_mode": {
+            "type": "string",
+            "enum": ["generate", "condense", "preserve"],
+            "description": "How Gamma should treat the provided text.",
+        },
         "theme_id": {"type": "string", "description": "Optional Gamma theme id."},
         "export_as": {"type": "string", "enum": ["pdf", "pptx"], "description": "Optional export format."},
         "additional_instructions": {"type": "string", "description": "Additional design or content instructions."},
         "language": {"type": "string", "description": "Language code, for example es-419 or en."},
         "tone": {"type": "string", "description": "Optional content tone such as professional or casual."},
-        "image_source": {"type": "string", "description": "Optional Gamma image source, for example aiGenerated or stock."},
+        "image_source": {
+            "type": "string",
+            "description": "Optional Gamma image source, for example aiGenerated or stock.",
+        },
         "image_model": {"type": "string", "description": "Optional Gamma image model, for example imagen-3-pro."},
-        "sixmanager_branding": {"type": "boolean", "description": "When true, append Sixmanager branding instructions."},
-        "logo_type": {"type": "string", "enum": ["horizontal", "vertical", "iso"], "description": "Preferred Sixmanager logo when branding is enabled."},
+        "sixmanager_branding": {
+            "type": "boolean",
+            "description": "When true, append Sixmanager branding instructions.",
+        },
+        "logo_type": {
+            "type": "string",
+            "enum": ["horizontal", "vertical", "iso"],
+            "description": "Preferred Sixmanager logo when branding is enabled.",
+        },
     }
     ctx.register_tool(
         name="gamma_create_presentation",
@@ -237,7 +253,12 @@ def register(ctx):
                 "type": "object",
                 "properties": {
                     **common_generation_fields,
-                    "num_cards": {"type": "integer", "description": "Target number of slides.", "minimum": 1, "maximum": 75},
+                    "num_cards": {
+                        "type": "integer",
+                        "description": "Target number of slides.",
+                        "minimum": 1,
+                        "maximum": 75,
+                    },
                 },
                 "required": ["input_text"],
             },

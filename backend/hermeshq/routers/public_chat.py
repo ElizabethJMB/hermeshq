@@ -75,9 +75,7 @@ async def create_session(
     except ValueError as e:
         raise _public_error(e)
     try:
-        result = await service.create_session(
-            api_key, db, client_ip=client_ip
-        )
+        result = await service.create_session(api_key, db, client_ip=client_ip)
     except ValueError as e:
         raise _public_error(e)
     return result
@@ -125,7 +123,7 @@ async def send_message(
                 try:
                     event_type, data = await asyncio.wait_for(queue.get(), timeout=15)
                     keepalive_count = 0
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     keepalive_count += 1
                     if keepalive_count >= 8:
                         yield f"data: {json.dumps({'type': 'timeout'})}\n\n"

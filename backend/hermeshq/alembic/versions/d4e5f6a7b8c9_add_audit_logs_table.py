@@ -5,11 +5,11 @@ Revises: c9d8e7f6a5b4
 Create Date: 2026-06-11 10:00:00.000000
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
 revision: str = "d4e5f6a7b8c9"
@@ -39,7 +39,11 @@ def upgrade() -> None:
             sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
             sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         )
-    existing_indexes = [idx["name"] for idx in inspector.get_indexes("audit_logs")] if "audit_logs" in inspector.get_table_names() else []
+    existing_indexes = (
+        [idx["name"] for idx in inspector.get_indexes("audit_logs")]
+        if "audit_logs" in inspector.get_table_names()
+        else []
+    )
     if "ix_audit_logs_actor_id" not in existing_indexes:
         op.create_index("ix_audit_logs_actor_id", "audit_logs", ["actor_id"])
     if "ix_audit_logs_action" not in existing_indexes:

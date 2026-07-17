@@ -33,7 +33,8 @@ def _get_m365_token(user_id: str) -> tuple[str | None, str | None, str]:
         return None, None, "HermesHQ internal control no configurado"
     url = f"{base_url}/control/m365/agent-token?user_id={user_id}"
     req = urllib.request.Request(
-        url, method="GET",
+        url,
+        method="GET",
         headers={"X-HermesHQ-Agent-ID": agent_id, "X-HermesHQ-Agent-Token": agent_token},
     )
     try:
@@ -56,7 +57,9 @@ def _graph(method: str, path: str, access_token: str, payload: dict | None = Non
     url = (path if path.startswith("https://") else f"{GRAPH_BASE}{path}").replace(" ", "%20")
     data = json.dumps(payload).encode("utf-8") if payload else None
     req = urllib.request.Request(
-        url, data=data, method=method.upper(),
+        url,
+        data=data,
+        method=method.upper(),
         headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
     )
     try:
@@ -87,13 +90,16 @@ def _graph(method: str, path: str, access_token: str, payload: dict | None = Non
 
 
 def _auth_error(detail: str) -> str:
-    return json.dumps({
-        "success": False,
-        "error": f"No se pudo obtener token M365: {detail}. Verifica que el usuario haya conectado su cuenta Microsoft 365 en Mi cuenta.",
-    })
+    return json.dumps(
+        {
+            "success": False,
+            "error": f"No se pudo obtener token M365: {detail}. Verifica que el usuario haya conectado su cuenta Microsoft 365 en Mi cuenta.",
+        }
+    )
 
 
 # ── Tool handlers ─────────────────────────────────────────────────────────────
+
 
 def _list_files_tool(args: dict, **_kwargs) -> str:
     """List files using Files.Read.All - works with OneDrive and SharePoint."""
@@ -131,10 +137,14 @@ def _list_files_tool(args: dict, **_kwargs) -> str:
         path = next_link if (next_link and len(raw_items) < 200) else None
 
     simplified = [
-        {"id": i.get("id"), "name": i.get("name"),
-         "type": "folder" if "folder" in i else "file",
-         "size": i.get("size"), "url": i.get("webUrl"),
-         "modified": i.get("lastModifiedDateTime")}
+        {
+            "id": i.get("id"),
+            "name": i.get("name"),
+            "type": "folder" if "folder" in i else "file",
+            "size": i.get("size"),
+            "url": i.get("webUrl"),
+            "modified": i.get("lastModifiedDateTime"),
+        }
         for i in raw_items
     ]
     return json.dumps({"success": True, "count": len(simplified), "items": simplified}, ensure_ascii=False)
@@ -188,8 +198,7 @@ def _list_drives_tool(args: dict, **_kwargs) -> str:
         path = next_link if (next_link and len(raw_drives) < 200) else None
 
     simplified = [
-        {"id": d.get("id"), "name": d.get("name"),
-         "type": d.get("driveType"), "url": d.get("webUrl")}
+        {"id": d.get("id"), "name": d.get("name"), "type": d.get("driveType"), "url": d.get("webUrl")}
         for d in raw_drives
     ]
     return json.dumps({"success": True, "count": len(simplified), "drives": simplified}, ensure_ascii=False)
@@ -209,13 +218,15 @@ def _search_tool(args: dict, **_kwargs) -> str:
     count = min(int(args.get("count") or 10), 25)
 
     payload = {
-        "requests": [{
-            "entityTypes": ["driveItem"],
-            "query": {"queryString": query},
-            "from": 0,
-            "size": count,
-            "fields": ["id", "name", "webUrl", "lastModifiedDateTime", "size", "parentReference"],
-        }]
+        "requests": [
+            {
+                "entityTypes": ["driveItem"],
+                "query": {"queryString": query},
+                "from": 0,
+                "size": count,
+                "fields": ["id", "name", "webUrl", "lastModifiedDateTime", "size", "parentReference"],
+            }
+        ]
     }
     result = _graph("POST", "/search/query", token, payload)
     if "error" in result:
@@ -225,16 +236,19 @@ def _search_tool(args: dict, **_kwargs) -> str:
         for hc in resp.get("hitsContainers", []):
             for hit in hc.get("hits", []):
                 resource = hit.get("resource", {})
-                hits.append({
-                    "name": resource.get("name"),
-                    "url": resource.get("webUrl"),
-                    "modified": resource.get("lastModifiedDateTime"),
-                    "size": resource.get("size"),
-                })
+                hits.append(
+                    {
+                        "name": resource.get("name"),
+                        "url": resource.get("webUrl"),
+                        "modified": resource.get("lastModifiedDateTime"),
+                        "size": resource.get("size"),
+                    }
+                )
     return json.dumps({"success": True, "count": len(hits), "hits": hits}, ensure_ascii=False)
 
 
 # ── Plugin registration ───────────────────────────────────────────────────────
+
 
 def register(ctx):
     ctx.register_tool(
@@ -258,8 +272,14 @@ def register(ctx):
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "site_url": {"type": "string", "description": "URL del sitio SharePoint (opcional, ej: https://empresa.sharepoint.com/sites/Marketing). Si no se indica, usa el OneDrive del usuario."},
-                    "folder_path": {"type": "string", "description": "Ruta de carpeta (opcional, ej: 'Documents/Projects')"},
+                    "site_url": {
+                        "type": "string",
+                        "description": "URL del sitio SharePoint (opcional, ej: https://empresa.sharepoint.com/sites/Marketing). Si no se indica, usa el OneDrive del usuario.",
+                    },
+                    "folder_path": {
+                        "type": "string",
+                        "description": "Ruta de carpeta (opcional, ej: 'Documents/Projects')",
+                    },
                 },
             },
         },

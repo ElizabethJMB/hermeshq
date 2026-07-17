@@ -10,4 +10,7 @@ __all__ = [
     "HermesInstallationManager",
     "HermesInstallationError",
     "build_safe_env",
+    "_get_install_cached",
+    "_invalidate_install_cached",
+    "_set_install_cached",
 ]

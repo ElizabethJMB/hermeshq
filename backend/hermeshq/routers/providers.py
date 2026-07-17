@@ -19,7 +19,9 @@ async def list_providers(
     _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> list[ProviderRead]:
-    result = await db.execute(select(ProviderDefinition).order_by(ProviderDefinition.sort_order.asc(), ProviderDefinition.name.asc()))
+    result = await db.execute(
+        select(ProviderDefinition).order_by(ProviderDefinition.sort_order.asc(), ProviderDefinition.name.asc())
+    )
     return [ProviderRead.model_validate(item) for item in result.scalars().all()]
 
 

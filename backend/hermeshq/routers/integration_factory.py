@@ -226,7 +226,7 @@ async def publish_integration_draft(
     draft.status = "published"
     draft.published_package_slug = package["slug"]
     draft.published_package_version = str(package.get("version") or "")
-    draft.published_at = datetime.now(timezone.utc)
+    draft.published_at = datetime.now(UTC)
     try:
         await db.commit()
     except Exception:

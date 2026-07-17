@@ -34,6 +34,7 @@ def _get_http_client() -> httpx.AsyncClient:
         _http_client = httpx.AsyncClient(timeout=30, transport=transport)
     return _http_client
 
+
 from hermeshq.models.agent import Agent
 from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.secret import Secret
@@ -87,9 +88,7 @@ async def _get_service_account_token(service_account_json: str) -> str:
     payload_b64 = _b64(json.dumps(payload, separators=(",", ":")).encode())
     sign_input = f"{header_b64}.{payload_b64}".encode()
 
-    private_key_obj = serialization.load_pem_private_key(
-        private_key.encode(), password=None, backend=default_backend()
-    )
+    private_key_obj = serialization.load_pem_private_key(private_key.encode(), password=None, backend=default_backend())
     signature = private_key_obj.sign(sign_input, padding.PKCS1v15(), hashes.SHA256())
     jwt_token = f"{header_b64}.{payload_b64}.{_b64(signature)}"
 
@@ -225,9 +224,7 @@ class GoogleChatGateway:
             if not channel or not channel.secret_ref:
                 return None
 
-            secret_result = await session.execute(
-                select(Secret).where(Secret.name == channel.secret_ref)
-            )
+            secret_result = await session.execute(select(Secret).where(Secret.name == channel.secret_ref))
             secret = secret_result.scalar_one_or_none()
             if not secret:
                 return None
@@ -252,9 +249,7 @@ class GoogleChatGateway:
             except asyncio.CancelledError:
                 raise
             except Exception:  # noqa: BLE001
-                logger.exception(
-                    "Failed to refresh Google Chat token for agent %s", self.agent_id
-                )
+                logger.exception("Failed to refresh Google Chat token for agent %s", self.agent_id)
 
     async def _pending_tasks_cleanup_loop(self) -> None:
         """Evict stale entries from _pending_tasks that never received a completion event."""
@@ -263,7 +258,8 @@ class GoogleChatGateway:
                 await asyncio.sleep(300)
                 now = time.monotonic()
                 stale = [
-                    tid for tid, info in self._pending_tasks.items()
+                    tid
+                    for tid, info in self._pending_tasks.items()
                     if now - info.get("_created_at", now) > self._pending_tasks_ttl
                 ]
                 for tid in stale:
@@ -313,7 +309,9 @@ class GoogleChatGateway:
                 self._known_spaces.add(sname)
             logger.info(
                 "Google Chat bot added to space %s (%s) for agent %s",
-                sname, space.get("displayName"), self.agent_id,
+                sname,
+                space.get("displayName"),
+                self.agent_id,
             )
             return {"text": "Hello! I'm the HermesHQ agent bot. Send me a message to get started."}
 
@@ -367,7 +365,8 @@ class GoogleChatGateway:
         if allowed and sender_email and sender_email not in allowed:
             logger.info(
                 "Google Chat: sender %s (%s) not in allowed list — ignoring",
-                sender_name, sender_email,
+                sender_name,
+                sender_email,
             )
             if unauthorized_behavior == "pair":
                 return {"text": f"👋 Hi {sender_name}, you are not authorized to use this bot."}
@@ -379,10 +378,7 @@ class GoogleChatGateway:
             # the Google Cloud console.  If we receive it here and require_mention
             # is on, we still check for annotation-based mentions.
             annotations = message.get("annotations", [])
-            has_user_mention = any(
-                a.get("type") == "USER_MENTION"
-                for a in annotations
-            )
+            has_user_mention = any(a.get("type") == "USER_MENTION" for a in annotations)
             if not has_user_mention:
                 return None
 
@@ -408,7 +404,9 @@ class GoogleChatGateway:
         if task_id:
             logger.info(
                 "Google Chat → agent %s: created task %s from %s",
-                self.agent_id, task_id, sender_name,
+                self.agent_id,
+                task_id,
+                sender_name,
             )
             return {"text": "⏳ Processing your message..."}
 
@@ -482,9 +480,7 @@ class GoogleChatGateway:
                 return
 
         try:
-            token = self._token or await _get_service_account_token(
-                self._service_account_json
-            )
+            token = self._token or await _get_service_account_token(self._service_account_json)
             await _send_message(
                 token=token,
                 space_name=delivery["space_name"],
@@ -494,7 +490,6 @@ class GoogleChatGateway:
             logger.info("Google Chat reply sent for task %s", task_id)
         except httpx.HTTPError:
             logger.exception("Failed to send Google Chat reply for task %s", task_id)
-
 
 
 # ---------------------------------------------------------------------------

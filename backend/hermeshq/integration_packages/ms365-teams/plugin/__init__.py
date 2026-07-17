@@ -31,7 +31,8 @@ def _get_m365_token(user_id: str) -> tuple[str | None, str]:
         return None, "HermesHQ internal control no configurado"
     url = f"{base_url}/control/m365/agent-token?user_id={user_id}"
     req = urllib.request.Request(
-        url, method="GET",
+        url,
+        method="GET",
         headers={"X-HermesHQ-Agent-ID": agent_id, "X-HermesHQ-Agent-Token": agent_token},
     )
     try:
@@ -53,7 +54,9 @@ def _graph(method: str, path: str, access_token: str, payload: dict | None = Non
     url = (path if path.startswith("https://") else f"{GRAPH_BASE}{path}").replace(" ", "%20")
     data = json.dumps(payload).encode("utf-8") if payload else None
     req = urllib.request.Request(
-        url, data=data, method=method.upper(),
+        url,
+        data=data,
+        method=method.upper(),
         headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
     )
     try:
@@ -84,13 +87,16 @@ def _graph(method: str, path: str, access_token: str, payload: dict | None = Non
 
 
 def _auth_error(detail: str) -> str:
-    return json.dumps({
-        "success": False,
-        "error": f"No se pudo obtener token M365: {detail}. Verifica que el usuario haya conectado su cuenta Microsoft 365 en Mi cuenta.",
-    })
+    return json.dumps(
+        {
+            "success": False,
+            "error": f"No se pudo obtener token M365: {detail}. Verifica que el usuario haya conectado su cuenta Microsoft 365 en Mi cuenta.",
+        }
+    )
 
 
 # ── Tool handlers ─────────────────────────────────────────────────────────────
+
 
 def _list_teams_tool(args: dict, **_kwargs) -> str:
     user_id = _task_user_id()
@@ -122,12 +128,14 @@ def _list_chats_tool(args: dict, **_kwargs) -> str:
     simplified = []
     for c in chats:
         members = [m.get("displayName") for m in (c.get("members") or []) if m.get("displayName")]
-        simplified.append({
-            "id": c.get("id"),
-            "topic": c.get("topic") or ", ".join(members[:3]),
-            "type": c.get("chatType"),
-            "members": members,
-        })
+        simplified.append(
+            {
+                "id": c.get("id"),
+                "topic": c.get("topic") or ", ".join(members[:3]),
+                "type": c.get("chatType"),
+                "members": members,
+            }
+        )
     return json.dumps({"success": True, "count": len(simplified), "chats": simplified}, ensure_ascii=False)
 
 
@@ -147,8 +155,12 @@ def _get_chat_messages_tool(args: dict, **_kwargs) -> str:
         return json.dumps({"success": False, "error": result["error"]})
     messages = result.get("value", [])
     simplified = [
-        {"id": m.get("id"), "from": (m.get("from") or {}).get("user", {}).get("displayName"),
-         "body": (m.get("body") or {}).get("content", ""), "created": m.get("createdDateTime")}
+        {
+            "id": m.get("id"),
+            "from": (m.get("from") or {}).get("user", {}).get("displayName"),
+            "body": (m.get("body") or {}).get("content", ""),
+            "created": m.get("createdDateTime"),
+        }
         for m in messages
     ]
     return json.dumps({"success": True, "count": len(simplified), "messages": simplified}, ensure_ascii=False)
@@ -173,6 +185,7 @@ def _send_chat_message_tool(args: dict, **_kwargs) -> str:
 
 
 # ── Plugin registration ───────────────────────────────────────────────────────
+
 
 def register(ctx):
     ctx.register_tool(

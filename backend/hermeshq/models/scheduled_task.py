@@ -18,4 +18,3 @@ class ScheduledTask(TimestampMixin, Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_run: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     next_run: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-

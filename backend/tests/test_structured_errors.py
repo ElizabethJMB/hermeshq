@@ -1,10 +1,10 @@
 """Tests for core.structured_errors – StructuredErrorMiddleware."""
+
 from __future__ import annotations
 
 import pytest
-from unittest.mock import patch
-from starlette.testclient import TestClient
 from fastapi import FastAPI, HTTPException
+from starlette.testclient import TestClient
 
 
 @pytest.fixture()
@@ -29,6 +29,7 @@ def app():
 class TestStructuredErrorMiddleware:
     def test_success_response_unchanged(self, app):
         from hermeshq.core.structured_errors import StructuredErrorMiddleware
+
         app.add_middleware(StructuredErrorMiddleware)
         client = TestClient(app, raise_server_exceptions=False)
         resp = client.get("/ok")
@@ -37,6 +38,7 @@ class TestStructuredErrorMiddleware:
 
     def test_http_exception_has_json_detail(self, app):
         from hermeshq.core.structured_errors import StructuredErrorMiddleware
+
         app.add_middleware(StructuredErrorMiddleware)
         client = TestClient(app, raise_server_exceptions=False)
         resp = client.get("/raise-http")
@@ -47,6 +49,7 @@ class TestStructuredErrorMiddleware:
 
     def test_unhandled_exception_returns_500(self, app):
         from hermeshq.core.structured_errors import StructuredErrorMiddleware
+
         app.add_middleware(StructuredErrorMiddleware)
         client = TestClient(app, raise_server_exceptions=False)
         resp = client.get("/raise-unhandled")
@@ -58,6 +61,7 @@ class TestStructuredErrorMiddleware:
 
     def test_error_body_structure(self):
         from hermeshq.core.structured_errors import _error_body
+
         body = _error_body("Not found", 404, "/api/agents")
         assert body == {
             "detail": "Not found",
@@ -67,6 +71,7 @@ class TestStructuredErrorMiddleware:
 
     def test_error_body_with_extra(self):
         from hermeshq.core.structured_errors import _error_body
+
         body = _error_body("Bad", 400, "/x", extra={"field": "name"})
         assert body["field"] == "name"
         assert body["detail"] == "Bad"

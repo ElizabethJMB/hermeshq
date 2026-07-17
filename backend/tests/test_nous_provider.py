@@ -1,17 +1,19 @@
 """Tests for the Nous Research provider integration."""
-import pytest
+
 from unittest.mock import MagicMock
 
+import pytest
+
 from hermeshq.models.agent import Agent
+from hermeshq.services.hermes_version_manager import HermesRuntimeSelection
 from hermeshq.services.provider_catalog import (
     BUILTIN_PROVIDERS,
     normalize_runtime_provider,
     seed_provider_defaults,
 )
-from hermeshq.services.hermes_version_manager import HermesRuntimeSelection
-
 
 # ── Helpers ──────────────────────────────────────────────────
+
 
 def _find_provider(slug: str) -> dict | None:
     return next((p for p in BUILTIN_PROVIDERS if p["slug"] == slug), None)
@@ -120,10 +122,20 @@ class TestNousProviderCatalogDict:
 
     def test_all_required_keys_present(self):
         required = [
-            "slug", "name", "runtime_provider", "auth_type", "base_url",
-            "default_model", "available_models", "description", "docs_url",
-            "secret_placeholder", "supports_secret_ref", "supports_custom_base_url",
-            "enabled", "sort_order",
+            "slug",
+            "name",
+            "runtime_provider",
+            "auth_type",
+            "base_url",
+            "default_model",
+            "available_models",
+            "description",
+            "docs_url",
+            "secret_placeholder",
+            "supports_secret_ref",
+            "supports_custom_base_url",
+            "enabled",
+            "sort_order",
         ]
         entry = _find_provider("nous-api")
         for key in required:
@@ -132,10 +144,20 @@ class TestNousProviderCatalogDict:
     def test_no_extra_keys(self):
         entry = _find_provider("nous-api")
         expected = {
-            "slug", "name", "runtime_provider", "auth_type", "base_url",
-            "default_model", "available_models", "description", "docs_url",
-            "secret_placeholder", "supports_secret_ref", "supports_custom_base_url",
-            "enabled", "sort_order",
+            "slug",
+            "name",
+            "runtime_provider",
+            "auth_type",
+            "base_url",
+            "default_model",
+            "available_models",
+            "description",
+            "docs_url",
+            "secret_placeholder",
+            "supports_secret_ref",
+            "supports_custom_base_url",
+            "enabled",
+            "sort_order",
         }
         extra = set(entry.keys()) - expected
         assert not extra, f"Unexpected keys: {extra}"
@@ -211,31 +233,39 @@ class TestNousProviderEnvFallbacks:
 
     def test_nous_in_env_names_fallback(self):
         """The _provider_env_names fallback dict must include nous."""
-        from hermeshq.services.hermes_installation import HermesInstallationManager
         # We can't easily call _provider_env_names without a full instance,
         # so we verify the fallback dict directly by inspecting the source.
         import inspect
+
+        from hermeshq.services.hermes_installation import HermesInstallationManager
+
         source = inspect.getsource(HermesInstallationManager._provider_env_names)
         assert '"nous"' in source or "'nous'" in source
 
     def test_nous_env_var_is_noous_api_key(self):
         """The env var for nous should be NOUS_API_KEY."""
-        from hermeshq.services.hermes_installation import HermesInstallationManager
         import inspect
+
+        from hermeshq.services.hermes_installation import HermesInstallationManager
+
         source = inspect.getsource(HermesInstallationManager._provider_env_names)
         assert "NOUS_API_KEY" in source
 
     def test_nous_in_base_url_fallback(self):
         """The _provider_base_url_env_name fallback dict must include nous."""
-        from hermeshq.services.hermes_installation import HermesInstallationManager
         import inspect
+
+        from hermeshq.services.hermes_installation import HermesInstallationManager
+
         source = inspect.getsource(HermesInstallationManager._provider_base_url_env_name)
         assert '"nous"' in source or "'nous'" in source
 
     def test_nous_base_url_env_var(self):
         """The base_url env var for nous should be NOUS_BASE_URL."""
-        from hermeshq.services.hermes_installation import HermesInstallationManager
         import inspect
+
+        from hermeshq.services.hermes_installation import HermesInstallationManager
+
         source = inspect.getsource(HermesInstallationManager._provider_base_url_env_name)
         assert "NOUS_BASE_URL" in source
 
@@ -243,8 +273,6 @@ class TestNousProviderEnvFallbacks:
     async def test_build_process_env_sets_provider_api_key(self, monkeypatch):
         """build_process_env should use provider env names when an API key is resolved."""
         from hermeshq.services.hermes_installation import HermesInstallationManager
-        from hermeshq.models.agent import Agent
-        from hermeshq.services.hermes_version_manager import HermesRuntimeSelection
 
         manager = HermesInstallationManager(session_factory=None, secret_vault=None, version_manager=None)
         agent = Agent(

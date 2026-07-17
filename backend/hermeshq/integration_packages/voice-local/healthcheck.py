@@ -24,13 +24,21 @@ async def test_connection(config: dict, resolve_secret):
         errors["piper"] = piper_import_error
 
     if errors:
-        return False, "Voice (Local) dependencies are missing.", {
-            "errors": errors,
+        return (
+            False,
+            "Voice (Local) dependencies are missing.",
+            {
+                "errors": errors,
+                "piper_binary": piper_binary,
+            },
+        )
+    return (
+        True,
+        "Voice (Local) dependencies are available.",
+        {
+            "stt_model": str(config.get("stt_model") or "small"),
+            "stt_language": str(config.get("stt_language") or "es"),
+            "tts_voice": str(config.get("tts_voice") or "es_MX-voice"),
             "piper_binary": piper_binary,
-        }
-    return True, "Voice (Local) dependencies are available.", {
-        "stt_model": str(config.get("stt_model") or "small"),
-        "stt_language": str(config.get("stt_language") or "es"),
-        "tts_voice": str(config.get("tts_voice") or "es_MX-voice"),
-        "piper_binary": piper_binary,
-    }
+        },
+    )

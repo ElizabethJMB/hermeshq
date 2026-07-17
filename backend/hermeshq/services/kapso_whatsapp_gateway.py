@@ -37,6 +37,8 @@ def _get_http_client() -> httpx.AsyncClient:
         transport = httpx.AsyncHTTPTransport(retries=2)
         _http_client = httpx.AsyncClient(timeout=30, transport=transport)
     return _http_client
+
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from hermeshq.models.agent import Agent
@@ -223,7 +225,7 @@ def _split_message(text: str) -> list[str]:
                 else:
                     # Hard split
                     for i in range(0, len(sentence), _WA_MAX_CHARS):
-                        add_segment(sentence[i: i + _WA_MAX_CHARS])
+                        add_segment(sentence[i : i + _WA_MAX_CHARS])
 
     flush(current)
     return chunks or [text[:_WA_MAX_CHARS]]
@@ -314,7 +316,8 @@ class KapsoWhatsAppGateway:
         self.event_broker.subscribe(self._on_event)
         logger.info(
             "Kapso WhatsApp gateway started for agent %s (phone_number_id=%s)",
-            self.agent_id, self._phone_number_id,
+            self.agent_id,
+            self._phone_number_id,
         )
 
     async def stop(self) -> None:
@@ -347,9 +350,7 @@ class KapsoWhatsAppGateway:
             if not channel or not channel.secret_ref:
                 return None
 
-            secret_result = await session.execute(
-                select(Secret).where(Secret.name == channel.secret_ref)
-            )
+            secret_result = await session.execute(select(Secret).where(Secret.name == channel.secret_ref))
             secret = secret_result.scalar_one_or_none()
             if not secret:
                 return None
@@ -364,8 +365,8 @@ class KapsoWhatsAppGateway:
 
             if not phone_number_id:
                 logger.error(
-                    "Kapso WhatsApp: missing kapso_phone_number_id in channel metadata "
-                    "for agent %s", self.agent_id,
+                    "Kapso WhatsApp: missing kapso_phone_number_id in channel metadata for agent %s",
+                    self.agent_id,
                 )
                 return None
 
@@ -385,8 +386,7 @@ class KapsoWhatsAppGateway:
             # Kapso v1 wraps results in "data" array
             phone_numbers = data.get("data", data.get("phone_numbers", []))
             found = any(
-                pn.get("phone_number_id") == self._phone_number_id
-                or pn.get("id") == self._phone_number_id
+                pn.get("phone_number_id") == self._phone_number_id or pn.get("id") == self._phone_number_id
                 for pn in phone_numbers
             )
             if not found:
@@ -491,8 +491,9 @@ class KapsoWhatsAppGateway:
         allowed = config.get("allowed_user_ids", [])
         unauthorized_behavior = config.get("unauthorized_dm_behavior", "pair")
 
-        logger.debug("Kapso access check: sender_wa_id=%s sender_phone=%s allowed=%s",
-                     sender_wa_id, sender_phone, allowed)
+        logger.debug(
+            "Kapso access check: sender_wa_id=%s sender_phone=%s allowed=%s", sender_wa_id, sender_phone, allowed
+        )
         if allowed:
             # Check if sender matches any allowed user
             matched = False
@@ -508,7 +509,8 @@ class KapsoWhatsAppGateway:
             if not matched:
                 logger.info(
                     "Kapso WhatsApp: sender %s not in allowed list — %s",
-                    sender_wa_id, unauthorized_behavior,
+                    sender_wa_id,
+                    unauthorized_behavior,
                 )
                 if unauthorized_behavior == "pair":
                     try:
@@ -524,10 +526,10 @@ class KapsoWhatsAppGateway:
 
         # Mark message as read (blue double-check confirms receipt to the user)
         if message_id:
-            t1 = asyncio.create_task(
-                kapso_mark_read(self._api_key, self._phone_number_id, message_id)
+            t1 = asyncio.create_task(kapso_mark_read(self._api_key, self._phone_number_id, message_id))
+            t1.add_done_callback(
+                lambda t: logger.exception("kapso_mark_read failed", exc_info=t.exception()) if t.exception() else None
             )
-            t1.add_done_callback(lambda t: logger.exception("kapso_mark_read failed", exc_info=t.exception()) if t.exception() else None)
 
         # Resolve HermesHQ user from the sender's Kapso ID (kapso_id stores the WA phone number)
         hermeshq_user_id: str | None = None
@@ -551,7 +553,9 @@ class KapsoWhatsAppGateway:
         if task_id:
             logger.info(
                 "Kapso WhatsApp → agent %s: created task %s from %s",
-                self.agent_id, task_id, sender_wa_id,
+                self.agent_id,
+                task_id,
+                sender_wa_id,
             )
 
     async def _create_task(
@@ -617,7 +621,9 @@ class KapsoWhatsAppGateway:
         message_id = message.get("id", "")
         logger.debug(
             "Kapso WhatsApp: message %s status=%s for agent %s",
-            message_id, status, self.agent_id,
+            message_id,
+            status,
+            self.agent_id,
         )
 
     async def _pending_tasks_cleanup_loop(self) -> None:
@@ -627,7 +633,8 @@ class KapsoWhatsAppGateway:
                 await asyncio.sleep(300)
                 now = time.monotonic()
                 stale = [
-                    tid for tid, info in self._pending_tasks.items()
+                    tid
+                    for tid, info in self._pending_tasks.items()
                     if now - info.get("_created_at", now) > self._pending_tasks_ttl
                 ]
                 for tid in stale:
@@ -667,9 +674,7 @@ class KapsoWhatsAppGateway:
                 )
                 logger.info("Kapso WhatsApp reply sent for task %s", task_id)
             except (httpx.HTTPError, RuntimeError):
-                logger.exception(
-                    "Failed to send Kapso WhatsApp reply for task %s", task_id
-                )
+                logger.exception("Failed to send Kapso WhatsApp reply for task %s", task_id)
         else:
             logger.warning("Task %s failed, not sending WhatsApp reply", task_id)
 
@@ -701,9 +706,11 @@ async def handle_kapso_webhook(
         logger.warning("Kapso webhook: no phone_number_id in payload — full payload keys: %s", list(payload.keys()))
         return
 
-    logger.debug("Kapso webhook: phone_number_id=%s, registered gateways: %s",
-                 phone_number_id,
-                 {aid: gw._phone_number_id for aid, gw in gateways.items()})
+    logger.debug(
+        "Kapso webhook: phone_number_id=%s, registered gateways: %s",
+        phone_number_id,
+        {aid: gw._phone_number_id for aid, gw in gateways.items()},
+    )
 
     # Find the gateway for this phone number
     for agent_id, gateway in gateways.items():
@@ -713,9 +720,7 @@ async def handle_kapso_webhook(
             try:
                 await gateway.handle_webhook_event(event_type, payload)
             except Exception:  # noqa: BLE001  # gateway webhook handler — catch all
-                logger.exception(
-                    "Kapso gateway error for agent %s", agent_id
-                )
+                logger.exception("Kapso gateway error for agent %s", agent_id)
             return
 
     logger.warning(

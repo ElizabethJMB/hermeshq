@@ -332,9 +332,9 @@ class HermesVersionManager:
         )
         if updated == text:
             logger.warning(
-                "Runtime hotfix needles not found in %s (v%s) — "
-                "upstream may have changed. Hotfixes were NOT applied.",
-                run_agent_path, version,
+                "Runtime hotfix needles not found in %s (v%s) — upstream may have changed. Hotfixes were NOT applied.",
+                run_agent_path,
+                version,
             )
             return
         run_agent_path.write_text(updated, encoding="utf-8")

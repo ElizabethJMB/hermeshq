@@ -17,14 +17,31 @@ from fastapi import WebSocket
 # Sensitive env var prefixes to strip from PTY sessions so terminal users
 # cannot access infrastructure credentials (DATABASE_URL, JWT_SECRET, etc.)
 _PTY_SENSITIVE_PREFIXES = (
-    "AWS_", "GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CREDENTIALS",
-    "KUBECONFIG", "DOCKER_", "GITHUB_TOKEN", "GITLAB_TOKEN",
-    "HEROKU_API_KEY", "STRIPE_", "TWILIO_", "SENDGRID_",
-    "DATABASE_URL", "REDIS_URL", "RABBITMQ_", "KAFKA_",
-    "LDAP_", "VAULT_TOKEN", "VAULT_ADDR",
-    "HERMESHQ_", "JWT_SECRET", "FERNET_KEY",
-    "ADMIN_PASSWORD", "OIDC_CLIENT_SECRET",
-    "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+    "AWS_",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GOOGLE_CREDENTIALS",
+    "KUBECONFIG",
+    "DOCKER_",
+    "GITHUB_TOKEN",
+    "GITLAB_TOKEN",
+    "HEROKU_API_KEY",
+    "STRIPE_",
+    "TWILIO_",
+    "SENDGRID_",
+    "DATABASE_URL",
+    "REDIS_URL",
+    "RABBITMQ_",
+    "KAFKA_",
+    "LDAP_",
+    "VAULT_TOKEN",
+    "VAULT_ADDR",
+    "HERMESHQ_",
+    "JWT_SECRET",
+    "FERNET_KEY",
+    "ADMIN_PASSWORD",
+    "OIDC_CLIENT_SECRET",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
 )
 
 ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
@@ -156,6 +173,7 @@ class PTYManager:
                 exit_code = session.process.wait(timeout=1)
         if exit_code is None:
             import signal
+
             with contextlib.suppress(ProcessLookupError, OSError):
                 session.process.send_signal(signal.SIGKILL)
             with contextlib.suppress(Exception):
@@ -268,7 +286,9 @@ class PTYManager:
                 await self._flush_input_buffer(session)
 
     async def _capture_output(self, session: PTYSession, data: bytes) -> None:
-        cleaned = ANSI_ESCAPE_RE.sub("", data.decode("utf-8", errors="ignore")).replace("\r\n", "\n").replace("\r", "\n")
+        cleaned = (
+            ANSI_ESCAPE_RE.sub("", data.decode("utf-8", errors="ignore")).replace("\r\n", "\n").replace("\r", "\n")
+        )
         if not cleaned:
             return
         session.output_buffer += cleaned
@@ -325,7 +345,9 @@ class PTYManager:
         return bool(all(self._is_braille_or_space(char) for char in compact))
 
     def _normalize_output_line(self, text: str) -> str:
-        without_braille = "".join("" if self._is_braille_or_space(char) and not char.isspace() else char for char in text)
+        without_braille = "".join(
+            "" if self._is_braille_or_space(char) and not char.isspace() else char for char in text
+        )
         stripped = BORDER_STRIP_RE.sub("", without_braille)
         return MULTISPACE_RE.sub(" ", stripped).strip()
 

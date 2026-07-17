@@ -8,9 +8,7 @@ from hermeshq.models.base import Base, TimestampMixin
 
 class MessagingChannel(TimestampMixin, Base):
     __tablename__ = "messaging_channels"
-    __table_args__ = (
-        UniqueConstraint("agent_id", "platform", name="uq_messaging_channels_agent_platform"),
-    )
+    __table_args__ = (UniqueConstraint("agent_id", "platform", name="uq_messaging_channels_agent_platform"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), index=True)

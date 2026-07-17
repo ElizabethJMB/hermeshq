@@ -36,6 +36,7 @@ _pending_flows: dict[str, dict] = {}
 
 # ─── Schemas ────────────────────────────────────────────────────────────────
 
+
 class M365AppConfigRead(BaseModel):
     client_id: str | None
     tenant_id: str | None
@@ -91,6 +92,7 @@ class AgentM365ScopesRead(BaseModel):
 
 # ─── Admin: configuración de la instancia ───────────────────────────────────
 
+
 @router.get("/config", response_model=M365AppConfigRead)
 async def get_m365_config(
     _: User = Depends(require_admin),
@@ -137,10 +139,7 @@ async def update_m365_config(
     await db.commit()
     await db.refresh(settings)
 
-    configured = bool(
-        (settings.m365_client_id or "").strip()
-        and (settings.m365_tenant_id or "").strip()
-    )
+    configured = bool((settings.m365_client_id or "").strip() and (settings.m365_tenant_id or "").strip())
     return M365AppConfigRead(
         client_id=settings.m365_client_id,
         tenant_id=settings.m365_tenant_id,
@@ -151,6 +150,7 @@ async def update_m365_config(
 
 
 # ─── Admin: ver tokens de usuarios ──────────────────────────────────────────
+
 
 @router.get("/admin/tokens", response_model=list[M365AdminTokenRead])
 async def list_user_tokens(
@@ -189,14 +189,13 @@ async def admin_revoke_user_token(
 
 # ─── Usuario: su propia cuenta M365 ─────────────────────────────────────────
 
+
 @router.get("/me", response_model=M365UserTokenRead)
 async def get_my_m365_status(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> M365UserTokenRead:
-    result = await db.execute(
-        select(UserM365Token).where(UserM365Token.user_id == current_user.id)
-    )
+    result = await db.execute(select(UserM365Token).where(UserM365Token.user_id == current_user.id))
     token_record = result.scalar_one_or_none()
     if not token_record:
         return M365UserTokenRead(connected=False)
@@ -288,9 +287,7 @@ async def get_agent_m365_scopes(
         )
     )
     assignment = result.scalar_one_or_none()
-    token_result = await db.execute(
-        select(UserM365Token).where(UserM365Token.user_id == current_user.id)
-    )
+    token_result = await db.execute(select(UserM365Token).where(UserM365Token.user_id == current_user.id))
     token = token_result.scalar_one_or_none()
     user_scopes = token.scopes.split() if token and token.scopes else []
     return {
@@ -403,7 +400,9 @@ async def update_agent_m365_scopes(
         try:
             await request.app.state.installation_manager.sync_agent_installation(agent)
         except Exception:
-            logger.warning("Failed to sync agent installation after M365 scopes update for agent %s", agent_id, exc_info=True)
+            logger.warning(
+                "Failed to sync agent installation after M365 scopes update for agent %s", agent_id, exc_info=True
+            )
 
     return {
         "allowed_scopes": assignment.m365_allowed_scopes,

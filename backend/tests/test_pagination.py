@@ -1,8 +1,10 @@
 """Tests for core.pagination – PaginatedResponse, PaginationParams, paginate()."""
+
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from hermeshq.core.pagination import (
     DEFAULT_PAGE_SIZE,
@@ -12,10 +14,10 @@ from hermeshq.core.pagination import (
     paginate,
 )
 
-
 # ---------------------------------------------------------------------------
 # PaginationParams
 # ---------------------------------------------------------------------------
+
 
 class TestPaginationParams:
     def test_defaults(self):
@@ -54,6 +56,7 @@ class TestPaginationParams:
 # ---------------------------------------------------------------------------
 # PaginatedResponse
 # ---------------------------------------------------------------------------
+
 
 class TestPaginatedResponse:
     def test_schema(self):
@@ -105,12 +108,13 @@ class TestPaginatedResponse:
 # works correctly, or we test via integration-style mocking.
 # ---------------------------------------------------------------------------
 
+
 class TestPaginateIntegration:
     """Integration tests using a real SQLite in-memory database."""
 
     @pytest.fixture()
     def sqlite_engine(self):
-        from sqlalchemy import create_engine, Column, Integer, String
+        from sqlalchemy import Column, Integer, String, create_engine
         from sqlalchemy.orm import DeclarativeBase, Session
 
         class Base(DeclarativeBase):
@@ -135,30 +139,24 @@ class TestPaginateIntegration:
     @pytest.mark.asyncio
     async def test_first_page(self, sqlite_engine):
         from sqlalchemy import select
-        from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
         # sqlite doesn't have async, use sync session wrapped
         from sqlalchemy.orm import Session
 
-        stmt = select(
-            __import__("sqlalchemy").text("*")
-        ).select_from(
-            __import__("sqlalchemy").text("items")
-        )
+        stmt = select(__import__("sqlalchemy").text("*")).select_from(__import__("sqlalchemy").text("items"))
         # Use a simpler approach: patch db.execute to use the sync engine
-        from sqlalchemy import select as sa_select
-        from hermeshq.models.task import Task  # just to get a real select
 
         # Instead, just verify the logic via mocking the two db.execute calls
         db = AsyncMock()
-        from sqlalchemy import func, select as sa_sel
+        from sqlalchemy import select as sa_sel
+
         from hermeshq.models.node import Node
 
         # Build a real statement
         stmt = sa_sel(Node).order_by(Node.created_at.asc())
 
         # Mock db.execute to return count=25 for first call, rows for second
-        with Session(sqlite_engine) as sync_session:
+        with Session(sqlite_engine):
             # We'll just test the math, not the actual SQL execution
             pass
 
@@ -178,9 +176,11 @@ class TestPaginateIntegration:
 
         # Patch stmt.subquery to return something valid for SQLAlchemy
         real_subq = stmt.subquery()
-        with patch.object(stmt, "subquery", return_value=real_subq), \
-             patch.object(stmt, "offset", return_value=stmt), \
-             patch.object(stmt, "limit", return_value=stmt):
+        with (
+            patch.object(stmt, "subquery", return_value=real_subq),
+            patch.object(stmt, "offset", return_value=stmt),
+            patch.object(stmt, "limit", return_value=stmt),
+        ):
             params = PaginationParams(page=1, page_size=10)
             result = await paginate(stmt, db, params)
 
@@ -195,6 +195,7 @@ class TestPaginateIntegration:
         """Page 3 of 25 items with page_size=10 → 5 items, total_pages=3."""
         db = AsyncMock()
         from sqlalchemy import select as sa_sel
+
         from hermeshq.models.node import Node
 
         stmt = sa_sel(Node).order_by(Node.created_at.asc())
@@ -204,15 +205,15 @@ class TestPaginateIntegration:
         count_result.scalar_one.return_value = 25
 
         data_result = MagicMock()
-        data_result.scalars.return_value.all.return_value = [
-            type("FakeItem", (), {"id": str(i)})() for i in range(5)
-        ]
+        data_result.scalars.return_value.all.return_value = [type("FakeItem", (), {"id": str(i)})() for i in range(5)]
 
         db.execute = AsyncMock(side_effect=[count_result, data_result])
 
-        with patch.object(stmt, "subquery", return_value=real_subq), \
-             patch.object(stmt, "offset", return_value=stmt), \
-             patch.object(stmt, "limit", return_value=stmt):
+        with (
+            patch.object(stmt, "subquery", return_value=real_subq),
+            patch.object(stmt, "offset", return_value=stmt),
+            patch.object(stmt, "limit", return_value=stmt),
+        ):
             params = PaginationParams(page=3, page_size=10)
             result = await paginate(stmt, db, params)
 
@@ -224,6 +225,7 @@ class TestPaginateIntegration:
         """No items → total_pages=1, items=[]."""
         db = AsyncMock()
         from sqlalchemy import select as sa_sel
+
         from hermeshq.models.node import Node
 
         stmt = sa_sel(Node).order_by(Node.created_at.asc())
@@ -237,9 +239,11 @@ class TestPaginateIntegration:
 
         db.execute = AsyncMock(side_effect=[count_result, data_result])
 
-        with patch.object(stmt, "subquery", return_value=real_subq), \
-             patch.object(stmt, "offset", return_value=stmt), \
-             patch.object(stmt, "limit", return_value=stmt):
+        with (
+            patch.object(stmt, "subquery", return_value=real_subq),
+            patch.object(stmt, "offset", return_value=stmt),
+            patch.object(stmt, "limit", return_value=stmt),
+        ):
             params = PaginationParams(page=1, page_size=10)
             result = await paginate(stmt, db, params)
 
@@ -252,6 +256,7 @@ class TestPaginateIntegration:
         """Custom serializer transforms rows."""
         db = AsyncMock()
         from sqlalchemy import select as sa_sel
+
         from hermeshq.models.node import Node
 
         stmt = sa_sel(Node)
@@ -269,9 +274,11 @@ class TestPaginateIntegration:
 
         db.execute = AsyncMock(side_effect=[count_result, data_result])
 
-        with patch.object(stmt, "subquery", return_value=real_subq), \
-             patch.object(stmt, "offset", return_value=stmt), \
-             patch.object(stmt, "limit", return_value=stmt):
+        with (
+            patch.object(stmt, "subquery", return_value=real_subq),
+            patch.object(stmt, "offset", return_value=stmt),
+            patch.object(stmt, "limit", return_value=stmt),
+        ):
             params = PaginationParams(page=1, page_size=10)
             result = await paginate(stmt, db, params, serializer=lambda r: r.v * 10)
 
@@ -281,6 +288,7 @@ class TestPaginateIntegration:
     async def test_no_serializer_returns_raw(self):
         db = AsyncMock()
         from sqlalchemy import select as sa_sel
+
         from hermeshq.models.node import Node
 
         stmt = sa_sel(Node)
@@ -295,9 +303,11 @@ class TestPaginateIntegration:
 
         db.execute = AsyncMock(side_effect=[count_result, data_result])
 
-        with patch.object(stmt, "subquery", return_value=real_subq), \
-             patch.object(stmt, "offset", return_value=stmt), \
-             patch.object(stmt, "limit", return_value=stmt):
+        with (
+            patch.object(stmt, "subquery", return_value=real_subq),
+            patch.object(stmt, "offset", return_value=stmt),
+            patch.object(stmt, "limit", return_value=stmt),
+        ):
             params = PaginationParams(page=1, page_size=50)
             result = await paginate(stmt, db, params, serializer=None)
 
@@ -308,6 +318,7 @@ class TestPaginateIntegration:
         """50 items / 10 per page = exactly 5 pages."""
         db = AsyncMock()
         from sqlalchemy import select as sa_sel
+
         from hermeshq.models.node import Node
 
         stmt = sa_sel(Node)
@@ -321,9 +332,11 @@ class TestPaginateIntegration:
 
         db.execute = AsyncMock(side_effect=[count_result, data_result])
 
-        with patch.object(stmt, "subquery", return_value=real_subq), \
-             patch.object(stmt, "offset", return_value=stmt), \
-             patch.object(stmt, "limit", return_value=stmt):
+        with (
+            patch.object(stmt, "subquery", return_value=real_subq),
+            patch.object(stmt, "offset", return_value=stmt),
+            patch.object(stmt, "limit", return_value=stmt),
+        ):
             params = PaginationParams(page=5, page_size=10)
             result = await paginate(stmt, db, params)
 
@@ -334,6 +347,7 @@ class TestPaginateIntegration:
         """Verify offset/limit are called with correct values."""
         db = AsyncMock()
         from sqlalchemy import select as sa_sel
+
         from hermeshq.models.node import Node
 
         stmt = sa_sel(Node)
@@ -347,9 +361,11 @@ class TestPaginateIntegration:
 
         db.execute = AsyncMock(side_effect=[count_result, data_result])
 
-        with patch.object(stmt, "subquery", return_value=real_subq), \
-             patch.object(stmt, "offset", return_value=stmt) as mock_offset, \
-             patch.object(stmt, "limit", return_value=stmt) as mock_limit:
+        with (
+            patch.object(stmt, "subquery", return_value=real_subq),
+            patch.object(stmt, "offset", return_value=stmt) as mock_offset,
+            patch.object(stmt, "limit", return_value=stmt) as mock_limit,
+        ):
             params = PaginationParams(page=3, page_size=25)
             await paginate(stmt, db, params)
 

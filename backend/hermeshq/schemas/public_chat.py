@@ -1,6 +1,7 @@
 import re
 from datetime import datetime
 from enum import Enum
+
 from pydantic import BaseModel, Field, field_validator
 
 from hermeshq.schemas.common import ORMModel
@@ -86,10 +87,19 @@ class CreateApiKeyRequest(BaseModel):
         return _sanitize_title(v)
 
 
-_UPDATE_ALLOWED_FIELDS = frozenset({
-    "label", "allowed_domains", "requests_per_month", "tokens_per_month",
-    "is_active", "widget_title", "widget_theme", "widget_accent", "widget_position",
-})
+_UPDATE_ALLOWED_FIELDS = frozenset(
+    {
+        "label",
+        "allowed_domains",
+        "requests_per_month",
+        "tokens_per_month",
+        "is_active",
+        "widget_title",
+        "widget_theme",
+        "widget_accent",
+        "widget_position",
+    }
+)
 
 
 class UpdateApiKeyRequest(BaseModel):

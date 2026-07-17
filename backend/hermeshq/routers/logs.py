@@ -32,7 +32,9 @@ async def list_logs(
         statement = statement.where(ActivityLog.agent_id == agent_id)
     elif not is_admin(current_user):
         accessible_ids = await get_accessible_agent_ids(db, current_user)
-        statement = statement.where(ActivityLog.agent_id.in_(accessible_ids)) if accessible_ids else statement.where(false())
+        statement = (
+            statement.where(ActivityLog.agent_id.in_(accessible_ids)) if accessible_ids else statement.where(false())
+        )
     if task_id:
         statement = statement.where(ActivityLog.task_id == task_id)
     normalized_query = (query or "").strip()

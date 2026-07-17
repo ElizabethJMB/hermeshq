@@ -2,7 +2,8 @@ import logging
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
-from sqlalchemy import inspect as sa_inspect, text
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from hermeshq.config import get_settings
@@ -18,8 +19,8 @@ engine = create_async_engine(
     pool_size=5,
     max_overflow=10,
     pool_timeout=30,
-    pool_recycle=600,   # Reduced from 1800s to recycle stale connections faster
-    pool_pre_ping=True, # Verify connections before use to avoid stale pool errors
+    pool_recycle=600,  # Reduced from 1800s to recycle stale connections faster
+    pool_pre_ping=True,  # Verify connections before use to avoid stale pool errors
 )
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
@@ -38,6 +39,7 @@ async def _detect_db_state() -> str:
       - "unstamped"   — application tables exist but no alembic_version
     """
     async with engine.connect() as conn:
+
         def _inspect(sync_conn):
             insp = sa_inspect(sync_conn)
             tables = set(insp.get_table_names())
@@ -48,6 +50,7 @@ async def _detect_db_state() -> str:
             if has_app_tables:
                 return "unstamped"
             return "empty"
+
         return await conn.run_sync(_inspect)
 
 
@@ -79,10 +82,10 @@ async def _ensure_missing_objects() -> None:
     table for missing columns and adds them with sensible defaults.
     """
     import hermeshq.models  # noqa: F401
-
     from hermeshq.models.base import Base
 
     async with engine.begin() as conn:
+
         def _sync_schema(sync_conn):
             Base.metadata.create_all(bind=sync_conn, checkfirst=True)
 
@@ -123,10 +126,7 @@ async def init_database() -> None:
     logger.info("Database state: %s", state)
 
     if state == "unstamped":
-        logger.warning(
-            "Database has tables but no alembic_version — "
-            "syncing schema and stamping at head"
-        )
+        logger.warning("Database has tables but no alembic_version — syncing schema and stamping at head")
         await _ensure_missing_objects()
         await _stamp_head()
         return

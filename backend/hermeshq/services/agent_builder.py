@@ -14,8 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.models.app_settings import AppSettings
 from hermeshq.schemas.agent_builder import (
-    AgentDraft,
     AgentBuilderTurn,
+    AgentDraft,
     RequiredConnector,
 )
 from hermeshq.services.managed_capabilities import list_available_integration_packages
@@ -86,9 +86,7 @@ class BuilderSession:
         self.history: list[dict[str, str]] = []
         self.draft: AgentDraft = AgentDraft()
         self.created_at: float = time.time()
-        self.llm_messages: list[dict] = [
-            {"role": "system", "content": BUILDER_SYSTEM_PROMPT}
-        ]
+        self.llm_messages: list[dict] = [{"role": "system", "content": BUILDER_SYSTEM_PROMPT}]
 
     def is_expired(self, ttl_seconds: int = 1800) -> bool:
         return (time.time() - self.created_at) > ttl_seconds
@@ -154,7 +152,10 @@ def _get_builder_tools() -> list[dict]:
                             "type": "object",
                             "description": "Map of integration slug to config dict",
                         },
-                        "ready_to_create": {"type": "boolean", "description": "True when the draft is complete and user confirmed"},
+                        "ready_to_create": {
+                            "type": "boolean",
+                            "description": "True when the draft is complete and user confirmed",
+                        },
                     },
                     "required": ["friendly_name", "system_prompt", "runtime_profile"],
                 },
@@ -186,11 +187,16 @@ async def _execute_tool(
         return json.dumps(summary)
 
     if tool_name == "list_runtime_profiles":
-        return json.dumps([
-            {"slug": "standard", "description": "General-purpose agent with safe tools, browser, file, memory, vision"},
-            {"slug": "technical", "description": "Adds code execution, git, and terminal access"},
-            {"slug": "security", "description": "Adds security scanning and network tools"},
-        ])
+        return json.dumps(
+            [
+                {
+                    "slug": "standard",
+                    "description": "General-purpose agent with safe tools, browser, file, memory, vision",
+                },
+                {"slug": "technical", "description": "Adds code execution, git, and terminal access"},
+                {"slug": "security", "description": "Adds security scanning and network tools"},
+            ]
+        )
 
     if tool_name == "propose_agent_draft":
         draft_data = {k: v for k, v in arguments.items() if k != "ready_to_create"}
@@ -233,13 +239,15 @@ def _compute_required_connectors(
                 f"Ajustes → Integraciones y configure: {fields_str}."
             )
 
-        result.append(RequiredConnector(
-            slug=slug,
-            name=pkg_name,
-            installed=installed,
-            required_fields=required_fields,
-            admin_instructions=admin_instructions,
-        ))
+        result.append(
+            RequiredConnector(
+                slug=slug,
+                name=pkg_name,
+                installed=installed,
+                required_fields=required_fields,
+                admin_instructions=admin_instructions,
+            )
+        )
 
     return result
 
@@ -251,10 +259,11 @@ async def resolve_builder_llm(
 
     Returns (api_key, model, base_url) or (None, None, None) if unavailable.
     """
+    from sqlalchemy import select
+
+    from hermeshq.config import get_settings
     from hermeshq.models.secret import Secret
     from hermeshq.services.secret_vault import SecretVault
-    from hermeshq.config import get_settings
-    from sqlalchemy import select
 
     settings = get_settings()
     app_settings = await db.get(AppSettings, "default")
@@ -268,9 +277,7 @@ async def resolve_builder_llm(
         base_url = app_settings.default_base_url
         if app_settings.default_api_key_ref:
             try:
-                result = await db.execute(
-                    select(Secret).where(Secret.name == app_settings.default_api_key_ref)
-                )
+                result = await db.execute(select(Secret).where(Secret.name == app_settings.default_api_key_ref))
                 secret = result.scalar_one_or_none()
                 if secret:
                     vault = SecretVault(settings.jwt_secret)
@@ -365,7 +372,7 @@ async def process_builder_message(
 
     MAX_LLM_MESSAGES = 60
     if len(session.llm_messages) > MAX_LLM_MESSAGES:
-        session.llm_messages = [session.llm_messages[0]] + session.llm_messages[-(MAX_LLM_MESSAGES - 1):]
+        session.llm_messages = [session.llm_messages[0]] + session.llm_messages[-(MAX_LLM_MESSAGES - 1) :]
 
     client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
 
@@ -396,10 +403,12 @@ async def process_builder_message(
                 if tc_name == "propose_agent_draft":
                     parsed = json.loads(result)
                     ready_flag = parsed.get("ready_to_create", False)
-                session.llm_messages.append({
-                    "role": "user",
-                    "content": f"[Tool result for {tc_name}]: {result}",
-                })
+                session.llm_messages.append(
+                    {
+                        "role": "user",
+                        "content": f"[Tool result for {tc_name}]: {result}",
+                    }
+                )
 
             # Follow-up for natural language response
             follow_up = await client.chat.completions.create(
@@ -442,8 +451,7 @@ async def process_builder_message(
         draft=session.draft,
         required_connectors=required,
         ready_to_create=ready_flag
-        or (session.draft.friendly_name is not None
-            and session.draft.system_prompt is not None),
+        or (session.draft.friendly_name is not None and session.draft.system_prompt is not None),
     )
 
 
@@ -458,10 +466,11 @@ async def finalize_agent_from_draft(
     Returns (agent_id, agent_name).
     Raises on validation errors.
     """
+    from sqlalchemy import select
+
+    from hermeshq.models.node import Node
     from hermeshq.schemas.agent import AgentCreate
     from hermeshq.services.agent_factory import create_agent_from_config
-    from sqlalchemy import select
-    from hermeshq.models.node import Node
 
     draft = session.draft
     agent_name = draft.name or draft.friendly_name or "ai-agent"
@@ -500,6 +509,7 @@ async def finalize_agent_from_draft(
 
     try:
         from hermeshq.services.audit import record_audit
+
         await record_audit(
             db,
             actor_id=created_by_user_id,

@@ -121,6 +121,7 @@ async def _send_mfa_code(
 # MFA Verification Endpoints
 # ---------------------------------------------------------------------------
 
+
 @router.post("/mfa/verify")
 async def verify_mfa(
     payload: MfaVerifyRequest,
@@ -147,10 +148,13 @@ async def verify_mfa(
     code_hash = hashlib.sha256(payload.code.encode()).hexdigest()
     now = datetime.now(UTC)
     result = await db.execute(
-        select(MfaCode).where(
+        select(MfaCode)
+        .where(
             MfaCode.user_id == user_id,
             MfaCode.used_at.is_(None),
-        ).order_by(MfaCode.created_at.desc()).with_for_update()
+        )
+        .order_by(MfaCode.created_at.desc())
+        .with_for_update()
     )
     mfa_codes = list(result.scalars().all())
 
@@ -250,10 +254,12 @@ async def resend_mfa(
     # Rate limit resend: check if a code was created in the last 30 seconds
     cooldown_threshold = datetime.now(UTC) - timedelta(seconds=MFA_RESEND_COOLDOWN_SECONDS)
     recent_result = await db.execute(
-        select(MfaCode).where(
+        select(MfaCode)
+        .where(
             MfaCode.user_id == user_id,
             MfaCode.created_at >= cooldown_threshold,
-        ).order_by(MfaCode.created_at.desc())
+        )
+        .order_by(MfaCode.created_at.desc())
     )
     recent_code = recent_result.scalar_one_or_none()
     if recent_code:

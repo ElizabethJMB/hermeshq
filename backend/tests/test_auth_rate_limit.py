@@ -1,8 +1,6 @@
 """Tests for the login rate limiter in hermeshq.routers.auth.helpers."""
 
-import time
 import unittest
-from collections import defaultdict
 from unittest.mock import patch
 
 from fastapi import HTTPException
@@ -13,12 +11,14 @@ class TestLoginRateLimit(unittest.TestCase):
 
     def setUp(self) -> None:
         from hermeshq.routers.auth import helpers as auth_module
+
         # Clear the rate limit state before each test
         auth_module._login_attempts.clear()
 
     def test_under_limit_allows(self) -> None:
         """Less than 10 attempts in window — no exception."""
         from hermeshq.routers.auth.helpers import _check_login_rate
+
         for _ in range(9):
             _check_login_rate("1.2.3.4")
         # 10th should not raise
@@ -27,6 +27,7 @@ class TestLoginRateLimit(unittest.TestCase):
     def test_at_limit_blocks(self) -> None:
         """Exactly 10 attempts in window — 11th raises HTTP 429."""
         from hermeshq.routers.auth.helpers import _check_login_rate, _record_login_attempt
+
         # Record 10 failed attempts first
         for _ in range(10):
             _record_login_attempt("1.2.3.4")
@@ -39,6 +40,7 @@ class TestLoginRateLimit(unittest.TestCase):
     def test_different_ips_independent(self) -> None:
         """Each IP has its own counter."""
         from hermeshq.routers.auth.helpers import _check_login_rate, _record_login_attempt
+
         # Fill up IP 1
         for _ in range(10):
             _record_login_attempt("1.1.1.1")
@@ -50,8 +52,8 @@ class TestLoginRateLimit(unittest.TestCase):
 
     def test_sliding_window_expiry(self) -> None:
         """Old entries expire, allowing new attempts."""
-        from hermeshq.routers.auth.helpers import _check_login_rate, _LOGIN_WINDOW_SECONDS
         from hermeshq.routers.auth import helpers as auth_module
+        from hermeshq.routers.auth.helpers import _LOGIN_WINDOW_SECONDS, _check_login_rate
 
         # Simulate 10 past attempts at time T
         base_time = 1000.0
@@ -67,8 +69,8 @@ class TestLoginRateLimit(unittest.TestCase):
 
     def test_cleanup_old_entries(self) -> None:
         """Old timestamps are pruned during rate-limit check."""
-        from hermeshq.routers.auth.helpers import _check_login_rate, _record_login_attempt, _LOGIN_WINDOW_SECONDS
         from hermeshq.routers.auth import helpers as auth_module
+        from hermeshq.routers.auth.helpers import _LOGIN_WINDOW_SECONDS, _check_login_rate, _record_login_attempt
 
         base_time = 1000.0
         # Simulate an old attempt recorded at base_time
@@ -86,8 +88,8 @@ class TestLoginRateLimit(unittest.TestCase):
 
     def test_exact_window_boundary(self) -> None:
         """At exactly the window boundary, old entries are evicted."""
-        from hermeshq.routers.auth.helpers import _check_login_rate, _LOGIN_WINDOW_SECONDS
         from hermeshq.routers.auth import helpers as auth_module
+        from hermeshq.routers.auth.helpers import _LOGIN_WINDOW_SECONDS, _check_login_rate
 
         base_time = 1000.0
         for _ in range(10):

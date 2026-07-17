@@ -1,8 +1,7 @@
 """Tests for the request logging middleware."""
 
-import logging
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from fastapi import FastAPI, Response
 from starlette.testclient import TestClient

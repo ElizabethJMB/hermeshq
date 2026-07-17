@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from hermeshq.core.security import ensure_agent_access, get_current_user
 from hermeshq.database import get_db_session
 from hermeshq.models.activity import ActivityLog
-from hermeshq.models.agent import Agent
 from hermeshq.models.secret import Secret
 from hermeshq.models.user import User
 from hermeshq.routers.agents_shared import _load_enabled_integration_slugs
@@ -60,7 +59,9 @@ async def test_agent_integration(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/{agent_id}/integrations/{integration_slug}/actions/{action_slug}", response_model=ManagedIntegrationActionResult)
+@router.post(
+    "/{agent_id}/integrations/{integration_slug}/actions/{action_slug}", response_model=ManagedIntegrationActionResult
+)
 async def run_agent_integration_action(
     agent_id: str,
     integration_slug: str,

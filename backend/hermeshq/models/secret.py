@@ -13,4 +13,3 @@ class Secret(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
     value_enc: Mapped[bytes] = mapped_column(LargeBinary)
-

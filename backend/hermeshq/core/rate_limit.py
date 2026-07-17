@@ -39,5 +39,6 @@ class RateLimiter:
     def guard(self, key: str) -> Callable:
         def _done() -> None:
             self.record(key)
+
         self.check(key)
         return _done

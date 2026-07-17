@@ -183,9 +183,9 @@ class GatewayLogManager:
         Runs inside an already-open session; caller must commit.
         Returns the list of created task IDs so the caller can publish events.
         """
+        from hermeshq.models.base import utcnow
         from hermeshq.models.task import Task
         from hermeshq.services.task_board import next_board_order
-        from hermeshq.models.base import utcnow
 
         truly_new = [e for e in new_entries if e["key"] not in existing_keys]
         inbound_entries = [e for e in truly_new if e["direction"] == "inbound"]
@@ -306,7 +306,10 @@ class GatewayLogManager:
         return new_entries
 
     def _read_session_entries(
-        self, path: Path, platform: str, last_offset: int = 0,
+        self,
+        path: Path,
+        platform: str,
+        last_offset: int = 0,
     ) -> tuple[list[dict], int]:
         """Read new entries from a JSONL session file starting at *last_offset*.
 
@@ -433,7 +436,9 @@ class GatewayLogManager:
             return "paired"
         if bridge_log_path and bridge_log_path.exists():
             try:
-                tail = "\n".join(bridge_log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-80:]).lower()
+                tail = "\n".join(
+                    bridge_log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-80:]
+                ).lower()
             except OSError:
                 tail = ""
             if "waiting for scan" in tail or "scan this qr code" in tail:
