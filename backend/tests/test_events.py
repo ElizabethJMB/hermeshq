@@ -34,6 +34,7 @@ class TestEventSubscription(unittest.TestCase):
 # Helper to create mock WebSockets
 # ---------------------------------------------------------------------------
 
+
 def _make_ws(*, send_side_effect=None):
     ws = AsyncMock()
     ws.accept = AsyncMock()
@@ -44,6 +45,7 @@ def _make_ws(*, send_side_effect=None):
 # ===================================================================
 # connect / disconnect
 # ===================================================================
+
 
 class TestConnectDisconnect(unittest.IsolatedAsyncioTestCase):
     """EventBroker.connect and EventBroker.disconnect."""
@@ -113,6 +115,7 @@ class TestConnectDisconnect(unittest.IsolatedAsyncioTestCase):
 # subscribe / unsubscribe
 # ===================================================================
 
+
 class TestSubscribeUnsubscribe(unittest.TestCase):
     """EventBroker.subscribe and EventBroker.unsubscribe (sync callbacks)."""
 
@@ -153,6 +156,7 @@ class TestSubscribeUnsubscribe(unittest.TestCase):
 # ===================================================================
 # publish – WebSocket delivery
 # ===================================================================
+
 
 class TestPublishWebSocketDelivery(unittest.IsolatedAsyncioTestCase):
     """EventBroker.publish routing to WebSocket connections."""
@@ -258,6 +262,7 @@ class TestPublishWebSocketDelivery(unittest.IsolatedAsyncioTestCase):
 # publish – user_id filtering (cross-user privacy)
 # ===================================================================
 
+
 class TestPublishUserIdFiltering(unittest.IsolatedAsyncioTestCase):
     """EventBroker.publish filters events by created_by_user_id to prevent cross-user leaks."""
 
@@ -338,6 +343,7 @@ class TestPublishUserIdFiltering(unittest.IsolatedAsyncioTestCase):
 # publish – internal subscribers
 # ===================================================================
 
+
 class TestPublishInternalSubscribers(unittest.IsolatedAsyncioTestCase):
     """EventBroker.publish notifies internal subscribers."""
 
@@ -414,6 +420,7 @@ class TestPublishInternalSubscribers(unittest.IsolatedAsyncioTestCase):
 # publish_many
 # ===================================================================
 
+
 class TestPublishMany(unittest.IsolatedAsyncioTestCase):
     """EventBroker.publish_many iterates and publishes each event."""
 
@@ -484,6 +491,66 @@ class TestPublishMany(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(ws_a.send_json.await_count, 2)
         self.assertEqual(ws_b.send_json.await_count, 1)
+
+
+# ===================================================================
+# publish – backpressure protection
+# ===================================================================
+
+
+class TestPublishBackpressure(unittest.IsolatedAsyncioTestCase):
+    """A slow/dead subscriber must not stall delivery to healthy ones."""
+
+    async def asyncSetUp(self):
+        self.broker = EventBroker()
+
+    async def test_slow_websocket_is_dropped_and_others_delivered(self):
+        import hermeshq.core.events as events_mod
+
+        slow_ws = _make_ws()
+        healthy_ws = _make_ws()
+
+        async def hang(_event):
+            await asyncio.sleep(60)
+
+        slow_ws.send_json = AsyncMock(side_effect=hang)
+        await self.broker.connect(slow_ws, is_admin=True, agent_ids=set())
+        await self.broker.connect(healthy_ws, is_admin=True, agent_ids=set())
+
+        original_timeout = events_mod._WS_SEND_TIMEOUT
+        events_mod._WS_SEND_TIMEOUT = 0.05
+        try:
+            await self.broker.publish({"type": "ping"})
+        finally:
+            events_mod._WS_SEND_TIMEOUT = original_timeout
+
+        self.assertNotIn(slow_ws, self.broker._connections)
+        healthy_ws.send_json.assert_awaited_once()
+
+    async def test_slow_internal_subscriber_does_not_block_websocket(self):
+        import hermeshq.core.events as events_mod
+
+        async def hang(_event):
+            await asyncio.sleep(60)
+
+        self.broker.subscribe(hang)
+        ws = _make_ws()
+        await self.broker.connect(ws, is_admin=True, agent_ids=set())
+
+        original_timeout = events_mod._INTERNAL_SUBSCRIBER_TIMEOUT
+        events_mod._INTERNAL_SUBSCRIBER_TIMEOUT = 0.05
+        try:
+            await asyncio.wait_for(self.broker.publish({"type": "ping"}), timeout=5)
+        finally:
+            events_mod._INTERNAL_SUBSCRIBER_TIMEOUT = original_timeout
+
+        ws.send_json.assert_awaited_once()
+
+    async def test_register_does_not_accept(self):
+        ws = _make_ws()
+        self.broker.register(ws, is_admin=True, agent_ids=set(), user_id="u1")
+        ws.accept.assert_not_awaited()
+        self.assertIn(ws, self.broker._connections)
 
 
 if __name__ == "__main__":
