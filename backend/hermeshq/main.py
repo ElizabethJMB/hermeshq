@@ -424,6 +424,15 @@ app.include_router(public_chat_widget_router)
 
 try:
     from prometheus_fastapi_instrumentator import Instrumentator
+    import prometheus_fastapi_instrumentator.routing as _pfi_routing
+
+    _orig_get_route_name = _pfi_routing._get_route_name
+
+    def _safe_get_route_name(scope, routes, route_name=None):
+        safe_routes = [r for r in routes if hasattr(r, "path")]
+        return _orig_get_route_name(scope, safe_routes, route_name)
+
+    _pfi_routing._get_route_name = _safe_get_route_name
 
     Instrumentator(
         should_group_status_codes=True,
