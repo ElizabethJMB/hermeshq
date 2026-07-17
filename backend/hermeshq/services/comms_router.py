@@ -74,11 +74,10 @@ class CommsRouter:
     async def broadcast(self, payload: BroadcastCreate) -> list[AgentMessage]:
         async with self.session_factory() as session:
             result = await session.execute(select(Agent))
-            recipients = [
-                agent for agent in result.scalars().all() if payload.team_tag in (agent.team_tags or [])
-            ]
+            recipients = [agent for agent in result.scalars().all() if payload.team_tag in (agent.team_tags or [])]
         if len(recipients) > self.MAX_BROADCAST_RECIPIENTS:
             from fastapi import HTTPException
+
             raise HTTPException(
                 status_code=400,
                 detail=f"Broadcast target group has {len(recipients)} agents; limit is {self.MAX_BROADCAST_RECIPIENTS}",

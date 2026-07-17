@@ -86,6 +86,7 @@ class PasswordResetResponse(BaseModel):
 
 class EmailConfigStatus(BaseModel):
     """Status of email configuration for the settings UI."""
+
     configured: bool = False
     from_email: str | None = None
     from_name: str | None = None
@@ -94,6 +95,7 @@ class EmailConfigStatus(BaseModel):
 
 class MfaRequiredResponse(BaseModel):
     """Response when login succeeds but MFA is required."""
+
     mfa_required: bool = True
     mfa_token: str
     email_mask: str | None = None
@@ -111,5 +113,6 @@ class MfaResendRequest(BaseModel):
 
 class MfaStatusResponse(BaseModel):
     """MFA configuration status."""
+
     enabled: bool = False
     email_configured: bool = False

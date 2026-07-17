@@ -1,4 +1,5 @@
 """Test page for the public chat widget. Admin-only."""
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 

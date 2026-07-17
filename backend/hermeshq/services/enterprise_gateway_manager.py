@@ -74,7 +74,8 @@ class EnterpriseGatewayManager:
                 except Exception:  # noqa: BLE001  # gateway bootstrap per-agent
                     logger.exception(
                         "Failed to bootstrap %s gateway for agent %s",
-                        platform, agent_id,
+                        platform,
+                        agent_id,
                     )
 
     # ---- lifecycle ----

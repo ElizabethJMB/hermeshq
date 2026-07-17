@@ -1,8 +1,10 @@
 """Tests for POST /auth/refresh – token refresh endpoint."""
+
 from __future__ import annotations
 
+from datetime import UTC
+
 import pytest
-from unittest.mock import MagicMock, patch
 
 from hermeshq.core.security import create_access_token
 
@@ -18,6 +20,7 @@ class TestRefreshEndpoint:
 
     def test_create_access_token_contains_subject(self):
         from jose import jwt
+
         from hermeshq.config import get_settings
 
         settings = get_settings()
@@ -34,15 +37,16 @@ class TestRefreshEndpoint:
 
     def test_refresh_requires_authentication(self):
         """Refresh endpoint requires a valid current token."""
-        from fastapi.testclient import TestClient
         # We test at the schema level that a missing token would fail
         # since we can't spin up the full app without DB
         from hermeshq.core.security import decode_access_token
+
         result = decode_access_token("")
         assert result is None
 
     def test_refresh_returns_new_token_with_same_subject(self):
         from jose import jwt
+
         from hermeshq.config import get_settings
 
         settings = get_settings()
@@ -61,13 +65,15 @@ class TestRefreshEndpoint:
         assert "exp" in payload2
 
     def test_expired_token_fails_decode(self):
+        from datetime import datetime, timedelta
+
         from jose import jwt
+
         from hermeshq.config import get_settings
-        from datetime import datetime, timedelta, timezone
 
         settings = get_settings()
         # Create an already-expired token
-        expired_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        expired_at = datetime.now(UTC) - timedelta(minutes=1)
         expired_token = jwt.encode(
             {"sub": "user-x", "sub_kind": "id", "exp": expired_at},
             settings.jwt_secret,
@@ -75,6 +81,7 @@ class TestRefreshEndpoint:
         )
 
         from hermeshq.core.security import decode_access_token
+
         result = decode_access_token(expired_token)
         assert result is None
 
@@ -84,12 +91,14 @@ class TestRefreshEndpointRouting:
 
     def test_auth_router_has_refresh_route(self):
         from hermeshq.routers.auth import router
+
         routes = [r.path for r in router.routes]
         assert "/refresh" in routes or "/auth/refresh" in routes
 
     def test_refresh_route_is_post(self):
-        from hermeshq.routers.auth import router
         from fastapi.routing import APIRoute
+
+        from hermeshq.routers.auth import router
 
         for route in router.routes:
             if isinstance(route, APIRoute) and route.path in ("/refresh", "/auth/refresh"):
@@ -99,8 +108,9 @@ class TestRefreshEndpointRouting:
             pytest.fail("Refresh route not found")
 
     def test_refresh_route_response_model(self):
-        from hermeshq.routers.auth import router
         from fastapi.routing import APIRoute
+
+        from hermeshq.routers.auth import router
         from hermeshq.schemas.auth import TokenResponse
 
         for route in router.routes:

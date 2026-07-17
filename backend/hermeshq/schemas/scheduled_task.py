@@ -31,4 +31,3 @@ class ScheduledTaskRead(ORMModel):
     next_run: datetime | None
     created_at: datetime
     updated_at: datetime
-

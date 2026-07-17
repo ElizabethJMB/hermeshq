@@ -5,6 +5,7 @@ Revises: c7a3f8d29e14
 Create Date: 2026-05-28 00:00:00.000000
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -35,7 +36,14 @@ def upgrade() -> None:
         op.create_table(
             "user_m365_tokens",
             sa.Column("id", sa.String(36), primary_key=True),
-            sa.Column("user_id", sa.String(36), sa.ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True, nullable=False),
+            sa.Column(
+                "user_id",
+                sa.String(36),
+                sa.ForeignKey("users.id", ondelete="CASCADE"),
+                unique=True,
+                index=True,
+                nullable=False,
+            ),
             sa.Column("account_email", sa.String(255), nullable=False),
             sa.Column("account_name", sa.String(255), nullable=True),
             sa.Column("token_cache_enc", sa.LargeBinary(), nullable=False),

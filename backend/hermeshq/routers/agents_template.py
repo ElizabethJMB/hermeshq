@@ -67,7 +67,9 @@ async def bootstrap_system_operator(
             status_code=400,
             detail="Configure a default secret ref first so HQ Operator can authenticate",
         )
-    local_runtime_result = await db.execute(select(Node).where(Node.name == "Local Runtime").order_by(Node.created_at.asc()))
+    local_runtime_result = await db.execute(
+        select(Node).where(Node.name == "Local Runtime").order_by(Node.created_at.asc())
+    )
     node = local_runtime_result.scalar_one_or_none()
     if not node:
         raise HTTPException(status_code=404, detail="Local Runtime node not found")

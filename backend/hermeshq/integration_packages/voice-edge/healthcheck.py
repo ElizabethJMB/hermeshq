@@ -19,8 +19,12 @@ async def test_connection(config: dict, resolve_secret):
             errors[module_name] = error
     if errors:
         return False, "Voice (Edge TTS) dependencies are missing.", {"errors": errors}
-    return True, "Voice (Edge TTS) dependencies are available.", {
-        "stt_model": str(config.get("stt_model") or "small"),
-        "stt_language": str(config.get("stt_language") or "es"),
-        "tts_voice": str(config.get("tts_voice") or "es-MX-JorgeNeural"),
-    }
+    return (
+        True,
+        "Voice (Edge TTS) dependencies are available.",
+        {
+            "stt_model": str(config.get("stt_model") or "small"),
+            "stt_language": str(config.get("stt_language") or "es"),
+            "tts_voice": str(config.get("tts_voice") or "es-MX-JorgeNeural"),
+        },
+    )

@@ -71,12 +71,15 @@ class DatabaseInitRegressionTests(unittest.IsolatedAsyncioTestCase):
         mock_result.returncode = 1
         mock_result.stderr = "migration failed"
         mock_result.stdout = ""
-        with patch("hermeshq.database._detect_db_state", new=AsyncMock(return_value="stamped")), patch(
-            "subprocess.run",
-            return_value=mock_result,
+        with (
+            patch("hermeshq.database._detect_db_state", new=AsyncMock(return_value="stamped")),
+            patch(
+                "subprocess.run",
+                return_value=mock_result,
+            ),
+            self.assertRaisesRegex(RuntimeError, "migration failed"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "migration failed"):
-                await init_database()
+            await init_database()
 
 
 class SchedulerRegressionTests(unittest.IsolatedAsyncioTestCase):
@@ -114,13 +117,18 @@ class PTYManagerRegressionTests(unittest.IsolatedAsyncioTestCase):
         async def fake_reader_loop(_session) -> None:
             return None
 
-        with patch("hermeshq.services.pty_manager.pty.openpty", return_value=(read_fd, write_fd)), patch(
-            "hermeshq.services.pty_manager.subprocess.Popen",
-            return_value=process,
-        ) as popen, patch.object(manager, "_resize_fd", return_value=None), patch.object(
-            manager,
-            "_reader_loop",
-            side_effect=fake_reader_loop,
+        with (
+            patch("hermeshq.services.pty_manager.pty.openpty", return_value=(read_fd, write_fd)),
+            patch(
+                "hermeshq.services.pty_manager.subprocess.Popen",
+                return_value=process,
+            ) as popen,
+            patch.object(manager, "_resize_fd", return_value=None),
+            patch.object(
+                manager,
+                "_reader_loop",
+                side_effect=fake_reader_loop,
+            ),
         ):
             first, second = await asyncio.gather(
                 manager.create_session("agent-1", "hybrid", "/tmp", command=["echo"]),

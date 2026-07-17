@@ -114,7 +114,9 @@ class InstanceBackupService:
         self._restore_jobs: dict[str, RestoreJobState] = {}
         self._restore_lock = asyncio.Lock()
 
-    async def create_backup_archive(self, payload: InstanceBackupCreateRequest) -> tuple[Path, str, InstanceBackupSummary]:
+    async def create_backup_archive(
+        self, payload: InstanceBackupCreateRequest
+    ) -> tuple[Path, str, InstanceBackupSummary]:
         if not payload.passphrase.strip():
             raise InstanceBackupError("Backup passphrase is required")
 
@@ -158,10 +160,14 @@ class InstanceBackupService:
                 for _agent_id, item in workspace_map.items():
                     source = Path(item["source_path"])
                     target = f"files/workspaces/{item['archive_dir']}"
-                    exclude = [] if payload.include_messaging_sessions else [
-                        ".hermes/sessions",
-                        ".hermes/whatsapp/session",
-                    ]
+                    exclude = (
+                        []
+                        if payload.include_messaging_sessions
+                        else [
+                            ".hermes/sessions",
+                            ".hermes/whatsapp/session",
+                        ]
+                    )
                     self._zip_directory(archive, source, target, exclude_prefixes=exclude)
         except OSError:
             if tmp_path.exists():
@@ -171,7 +177,9 @@ class InstanceBackupService:
         filename = f"hermeshq-backup-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}.zip"
         return tmp_path, filename, summary
 
-    async def validate_backup_archive(self, archive_path: Path, passphrase: str | None = None) -> InstanceBackupValidationRead:
+    async def validate_backup_archive(
+        self, archive_path: Path, passphrase: str | None = None
+    ) -> InstanceBackupValidationRead:
         try:
             with zipfile.ZipFile(archive_path, "r") as archive:
                 manifest = self._read_json(archive, "manifest.json")
@@ -202,7 +210,9 @@ class InstanceBackupService:
                 errors=[str(exc)],
             )
 
-    async def restore_backup_archive(self, archive_path: Path, passphrase: str, mode: str, app_state) -> InstanceBackupRestoreRead:
+    async def restore_backup_archive(
+        self, archive_path: Path, passphrase: str, mode: str, app_state
+    ) -> InstanceBackupRestoreRead:
         if mode not in {"replace", "merge"}:
             raise InstanceBackupError("Restore mode must be 'replace' or 'merge'")
         payload = await self._load_restore_payload(archive_path, passphrase)
@@ -407,7 +417,9 @@ class InstanceBackupService:
             encrypted_sections=["secrets"],
         )
 
-    def _manifest_payload(self, summary: InstanceBackupSummary, workspace_map: dict[str, dict[str, str]]) -> dict[str, Any]:
+    def _manifest_payload(
+        self, summary: InstanceBackupSummary, workspace_map: dict[str, dict[str, str]]
+    ) -> dict[str, Any]:
         return {
             "schema_version": summary.schema_version,
             "app_version": summary.app_version,
@@ -461,9 +473,7 @@ class InstanceBackupService:
             if name not in members:
                 errors.append(f"Backup archive is missing required member '{name}'.")
         if summary.schema_version != BACKUP_SCHEMA_VERSION:
-            errors.append(
-                f"Backup schema '{summary.schema_version}' is not supported by this HermesHQ version."
-            )
+            errors.append(f"Backup schema '{summary.schema_version}' is not supported by this HermesHQ version.")
         return errors
 
     async def _load_restore_payload(self, archive_path: Path, passphrase: str) -> RestorePayload:
@@ -577,7 +587,9 @@ class InstanceBackupService:
             count += 1
         return count
 
-    async def _rewrite_restored_workspace_paths(self, session: AsyncSession, workspace_map: dict[str, dict[str, str]]) -> None:
+    async def _rewrite_restored_workspace_paths(
+        self, session: AsyncSession, workspace_map: dict[str, dict[str, str]]
+    ) -> None:
         for agent_id, item in workspace_map.items():
             agent = await session.get(Agent, agent_id)
             if agent:
@@ -742,9 +754,7 @@ class InstanceBackupService:
 
     def _encrypt_payload(self, payload: dict[str, Any], passphrase: str) -> dict[str, str]:
         salt = os.urandom(16)
-        token = self._build_fernet(passphrase, salt).encrypt(
-            json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        )
+        token = self._build_fernet(passphrase, salt).encrypt(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
         return {
             "salt": base64.urlsafe_b64encode(salt).decode("ascii"),
             "token": token.decode("ascii"),

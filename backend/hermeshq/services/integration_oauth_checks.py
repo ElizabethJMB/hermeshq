@@ -85,7 +85,11 @@ async def test_microsoft_graph_credentials(
         return False, "Microsoft Graph verification request failed.", _decode_http_error(exc)
     except urllib.error.URLError as exc:
         return False, f"Microsoft Graph verification request could not be completed: {exc.reason}", None
-    return True, "Microsoft Graph connection test passed.", {"status_code": status_code, "resource": resource_path, "response": api_payload}
+    return (
+        True,
+        "Microsoft Graph connection test passed.",
+        {"status_code": status_code, "resource": resource_path, "response": api_payload},
+    )
 
 
 async def test_google_oauth_credentials(
@@ -134,7 +138,11 @@ async def test_google_oauth_credentials(
         return False, "Google Workspace verification request failed.", _decode_http_error(exc)
     except urllib.error.URLError as exc:
         return False, f"Google Workspace verification request could not be completed: {exc.reason}", None
-    return True, "Google Workspace connection test passed.", {"status_code": status_code, "resource": resource_url, "response": api_payload}
+    return (
+        True,
+        "Google Workspace connection test passed.",
+        {"status_code": status_code, "resource": resource_url, "response": api_payload},
+    )
 
 
 def parse_sharepoint_site_url(site_url: str) -> tuple[str, str] | None:

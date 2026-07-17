@@ -47,6 +47,7 @@ class M365TokenError(RuntimeError):
 def _get_msal():
     try:
         import msal
+
         return msal
     except ImportError as exc:
         raise M365ConfigError("msal no está instalado. Ejecuta: pip install msal") from exc
@@ -119,9 +120,7 @@ async def complete_device_flow(
     )
 
     loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(
-        None, lambda: app.acquire_token_by_device_flow(flow)
-    )
+    result = await loop.run_in_executor(None, lambda: app.acquire_token_by_device_flow(flow))
 
     if "access_token" not in result:
         error = result.get("error_description") or result.get("error") or "Error desconocido"
@@ -137,14 +136,13 @@ async def complete_device_flow(
     expires_at = None
     if result.get("expires_in"):
         from datetime import timedelta
+
         expires_at = datetime.now(UTC) + timedelta(seconds=int(result["expires_in"]))
 
     cache_json = cache.serialize()
     token_cache_enc = vault.encrypt(cache_json)
 
-    existing = await db.execute(
-        select(UserM365Token).where(UserM365Token.user_id == user_id)
-    )
+    existing = await db.execute(select(UserM365Token).where(UserM365Token.user_id == user_id))
     token_record = existing.scalar_one_or_none()
 
     if token_record:
@@ -217,12 +215,12 @@ async def get_valid_token(
             token_record.token_cache_enc = vault.encrypt(cache.serialize())
             if result_token.get("expires_in"):
                 from datetime import timedelta
-                token_record.expires_at = datetime.now(UTC) + timedelta(
-                    seconds=int(result_token["expires_in"])
-                )
+
+                token_record.expires_at = datetime.now(UTC) + timedelta(seconds=int(result_token["expires_in"]))
             await db.commit()
         except Exception:
             import logging
+
             logging.getLogger(__name__).warning("Failed to persist refreshed M365 token cache", exc_info=True)
             await db.rollback()
 
@@ -231,9 +229,7 @@ async def get_valid_token(
 
 
 async def revoke_user_token(user_id: str, db: AsyncSession) -> bool:
-    result = await db.execute(
-        select(UserM365Token).where(UserM365Token.user_id == user_id)
-    )
+    result = await db.execute(select(UserM365Token).where(UserM365Token.user_id == user_id))
     token_record = result.scalar_one_or_none()
     if not token_record:
         return False

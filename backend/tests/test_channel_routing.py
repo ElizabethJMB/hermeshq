@@ -1,8 +1,6 @@
 """Unit tests for channel routing — reply_to suppression of external delivery."""
 
-import asyncio
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class TestChannelRoutingSystemPrompt(unittest.TestCase):
@@ -17,9 +15,7 @@ class TestChannelRoutingSystemPrompt(unittest.TestCase):
         _reply_to = str(metadata.get("reply_to") or metadata.get("source") or "").strip().lower()
         if _reply_to == "mobile_app":
             runtime_system_prompt = (
-                base_prompt
-                + "\n\n"
-                + "IMPORTANT: You are responding through the SixAgentic mobile app. "
+                base_prompt + "\n\n" + "IMPORTANT: You are responding through the SixAgentic mobile app. "
                 "Always provide your response directly in the task response text. "
                 "Do NOT send responses through Telegram, WhatsApp, email, or any other "
                 "external channel. If you generate files, they will be automatically "
@@ -65,8 +61,7 @@ class TestChannelRoutingSystemPrompt(unittest.TestCase):
         _reply_to = str(metadata.get("reply_to") or metadata.get("source") or "").strip().lower()
         if _reply_to == "mobile_app":
             runtime_system_prompt = (
-                base_prompt + "\n\n"
-                + "IMPORTANT: You are responding through the SixAgentic mobile app. "
+                base_prompt + "\n\n" + "IMPORTANT: You are responding through the SixAgentic mobile app. "
                 "Always provide your response directly in the task response text. "
                 "Do NOT send responses through Telegram, WhatsApp, email, or any other "
                 "external channel."

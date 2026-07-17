@@ -7,9 +7,6 @@ tests/test_media_parser.py for current coverage. These tests are kept for
 reference but skipped because the functions they test no longer exist.
 """
 
-import json
-import os
-import shutil
 import sys
 import tempfile
 import unittest
@@ -18,7 +15,9 @@ from pathlib import Path
 import pytest
 
 # Skip entire module — functions moved to hermes_runtime MEDIA: parser
-pytestmark = pytest.mark.skip(reason="Attachment collection moved to hermes_runtime MEDIA: parser (test_media_parser.py)")
+pytestmark = pytest.mark.skip(
+    reason="Attachment collection moved to hermes_runtime MEDIA: parser (test_media_parser.py)"
+)
 
 # Ensure the scripts directory is importable
 _scripts_dir = str(Path(__file__).resolve().parents[1] / "hermeshq" / "scripts")
@@ -269,6 +268,7 @@ class TestCollectResponseAttachments(unittest.TestCase):
             self.assertEqual(len(attachments), 1)
             # file_id should be a UUID
             import re
+
             file_id = attachments[0]["file_id"]
             _uuid_re = re.compile(
                 r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",

@@ -45,6 +45,7 @@ class OidcProviderRead(BaseModel):
 
 class OidcProviderReadSafe(BaseModel):
     """Public-facing schema — no secrets."""
+
     slug: str
     name: str
     enabled: bool

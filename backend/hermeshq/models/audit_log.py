@@ -17,7 +17,9 @@ class AuditLog(TimestampMixin, Base):
 
     # Who performed the action
     actor_id: Mapped[str | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     actor_username: Mapped[str | None] = mapped_column(String(128), nullable=True)
     actor_role: Mapped[str | None] = mapped_column(String(20), nullable=True)

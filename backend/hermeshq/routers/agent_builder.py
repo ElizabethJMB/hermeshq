@@ -58,9 +58,7 @@ async def send_message(
 
     async def event_stream():
         try:
-            turn: AgentBuilderTurn = await process_builder_message(
-                session, payload.text, db
-            )
+            turn: AgentBuilderTurn = await process_builder_message(session, payload.text, db)
 
             if turn.assistant_text:
                 chunks = _chunk_text(turn.assistant_text, 80)
@@ -127,7 +125,6 @@ async def finalize_agent(
         )
 
     from hermeshq.models.app_settings import AppSettings
-    from hermeshq.services.managed_capabilities import list_available_integration_packages
 
     settings = await db.get(AppSettings, "default")
     enabled = settings.enabled_integration_packages if settings else []

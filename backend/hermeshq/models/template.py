@@ -13,4 +13,3 @@ class AgentTemplate(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     config: Mapped[dict] = mapped_column(JSON, default=dict)
-

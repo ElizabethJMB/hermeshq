@@ -165,49 +165,129 @@ def validate_draft(draft: IntegrationDraft) -> IntegrationDraftValidationRead:
     plugin_yaml_path = root / "plugin" / "plugin.yaml"
 
     if not root.exists():
-        checks.append(IntegrationDraftCheckRead(level="error", code="draft_missing", message="Draft package root is missing."))
+        checks.append(
+            IntegrationDraftCheckRead(level="error", code="draft_missing", message="Draft package root is missing.")
+        )
         return _validation_result(False, checks)
 
     manifest = _read_yaml(manifest_path)
     if not manifest:
-        checks.append(IntegrationDraftCheckRead(level="error", code="manifest_missing", message="manifest.yaml is missing or invalid.", path="manifest.yaml"))
+        checks.append(
+            IntegrationDraftCheckRead(
+                level="error",
+                code="manifest_missing",
+                message="manifest.yaml is missing or invalid.",
+                path="manifest.yaml",
+            )
+        )
     else:
         if str(manifest.get("slug") or "").strip() != draft.slug:
-            checks.append(IntegrationDraftCheckRead(level="error", code="manifest_slug_mismatch", message="manifest.yaml slug must match the draft slug.", path="manifest.yaml"))
+            checks.append(
+                IntegrationDraftCheckRead(
+                    level="error",
+                    code="manifest_slug_mismatch",
+                    message="manifest.yaml slug must match the draft slug.",
+                    path="manifest.yaml",
+                )
+            )
         if not str(manifest.get("name") or "").strip():
-            checks.append(IntegrationDraftCheckRead(level="error", code="manifest_name_missing", message="manifest.yaml is missing 'name'.", path="manifest.yaml"))
+            checks.append(
+                IntegrationDraftCheckRead(
+                    level="error",
+                    code="manifest_name_missing",
+                    message="manifest.yaml is missing 'name'.",
+                    path="manifest.yaml",
+                )
+            )
         if not str(manifest.get("plugin_slug") or "").strip():
-            checks.append(IntegrationDraftCheckRead(level="error", code="manifest_plugin_slug_missing", message="manifest.yaml is missing 'plugin_slug'.", path="manifest.yaml"))
+            checks.append(
+                IntegrationDraftCheckRead(
+                    level="error",
+                    code="manifest_plugin_slug_missing",
+                    message="manifest.yaml is missing 'plugin_slug'.",
+                    path="manifest.yaml",
+                )
+            )
         if not manifest.get("supported_profiles"):
-            checks.append(IntegrationDraftCheckRead(level="warning", code="manifest_supported_profiles_missing", message="manifest.yaml does not declare supported_profiles.", path="manifest.yaml"))
+            checks.append(
+                IntegrationDraftCheckRead(
+                    level="warning",
+                    code="manifest_supported_profiles_missing",
+                    message="manifest.yaml does not declare supported_profiles.",
+                    path="manifest.yaml",
+                )
+            )
 
     plugin_yaml = _read_yaml(plugin_yaml_path)
     if not plugin_yaml:
-        checks.append(IntegrationDraftCheckRead(level="error", code="plugin_yaml_missing", message="plugin/plugin.yaml is missing or invalid.", path="plugin/plugin.yaml"))
+        checks.append(
+            IntegrationDraftCheckRead(
+                level="error",
+                code="plugin_yaml_missing",
+                message="plugin/plugin.yaml is missing or invalid.",
+                path="plugin/plugin.yaml",
+            )
+        )
     elif not isinstance(plugin_yaml.get("provides_tools") or [], list):
-        checks.append(IntegrationDraftCheckRead(level="error", code="plugin_tools_invalid", message="plugin/plugin.yaml provides_tools must be a list.", path="plugin/plugin.yaml"))
+        checks.append(
+            IntegrationDraftCheckRead(
+                level="error",
+                code="plugin_tools_invalid",
+                message="plugin/plugin.yaml provides_tools must be a list.",
+                path="plugin/plugin.yaml",
+            )
+        )
     elif not (plugin_yaml.get("provides_tools") or []):
-        checks.append(IntegrationDraftCheckRead(level="warning", code="plugin_tools_empty", message="plugin/plugin.yaml does not expose any tools yet.", path="plugin/plugin.yaml"))
+        checks.append(
+            IntegrationDraftCheckRead(
+                level="warning",
+                code="plugin_tools_empty",
+                message="plugin/plugin.yaml does not expose any tools yet.",
+                path="plugin/plugin.yaml",
+            )
+        )
 
     if not plugin_init_path.exists():
-        checks.append(IntegrationDraftCheckRead(level="error", code="plugin_init_missing", message="plugin/__init__.py is missing.", path="plugin/__init__.py"))
+        checks.append(
+            IntegrationDraftCheckRead(
+                level="error",
+                code="plugin_init_missing",
+                message="plugin/__init__.py is missing.",
+                path="plugin/__init__.py",
+            )
+        )
 
     for file_path in sorted(root.rglob("*.py")):
         relative = str(file_path.relative_to(root))
         try:
             py_compile.compile(str(file_path), doraise=True)
         except py_compile.PyCompileError as exc:
-            checks.append(IntegrationDraftCheckRead(level="error", code="python_compile_failed", message=str(exc), path=relative))
+            checks.append(
+                IntegrationDraftCheckRead(level="error", code="python_compile_failed", message=str(exc), path=relative)
+            )
 
     skill_md = root / "skill" / "SKILL.md"
     if skill_md.exists():
-        checks.append(IntegrationDraftCheckRead(level="info", code="skill_present", message="Companion skill detected.", path="skill/SKILL.md"))
+        checks.append(
+            IntegrationDraftCheckRead(
+                level="info", code="skill_present", message="Companion skill detected.", path="skill/SKILL.md"
+            )
+        )
     else:
-        checks.append(IntegrationDraftCheckRead(level="warning", code="skill_missing", message="No companion skill found. This is optional but recommended.", path="skill/SKILL.md"))
+        checks.append(
+            IntegrationDraftCheckRead(
+                level="warning",
+                code="skill_missing",
+                message="No companion skill found. This is optional but recommended.",
+                path="skill/SKILL.md",
+            )
+        )
 
     valid = not any(check.level == "error" for check in checks)
     if valid:
-        checks.insert(0, IntegrationDraftCheckRead(level="info", code="draft_valid", message="Draft validation passed."))
+        checks.insert(
+            0, IntegrationDraftCheckRead(level="info", code="draft_valid", message="Draft validation passed.")
+        )
     return _validation_result(valid, checks)
 
 
@@ -287,7 +367,9 @@ def _read_yaml(path: Path) -> dict:
         return {}
 
 
-def _empty_template_files(*, package_slug: str, plugin_slug: str, name: str, description: str, version: str) -> dict[str, str]:
+def _empty_template_files(
+    *, package_slug: str, plugin_slug: str, name: str, description: str, version: str
+) -> dict[str, str]:
     manifest = {
         "slug": package_slug,
         "name": name,
@@ -305,11 +387,7 @@ def _empty_template_files(*, package_slug: str, plugin_slug: str, name: str, des
     }
     return {
         "manifest.yaml": yaml.safe_dump(manifest, sort_keys=False, allow_unicode=False),
-        "plugin/__init__.py": (
-            "from __future__ import annotations\n\n"
-            "def register(ctx):\n"
-            "    return None\n"
-        ),
+        "plugin/__init__.py": ("from __future__ import annotations\n\ndef register(ctx):\n    return None\n"),
         "plugin/plugin.yaml": yaml.safe_dump(
             {
                 "name": plugin_slug.replace("_", "-"),
@@ -324,12 +402,12 @@ def _empty_template_files(*, package_slug: str, plugin_slug: str, name: str, des
         "healthcheck.py": (
             "from __future__ import annotations\n\n"
             "async def test_connection(config: dict, resolve_secret):\n"
-            "    return True, \"Draft integration scaffold is reachable.\", {\"configured_fields\": sorted(config.keys())}\n"
+            '    return True, "Draft integration scaffold is reachable.", {"configured_fields": sorted(config.keys())}\n'
         ),
         "actions.py": (
             "from __future__ import annotations\n\n"
             "async def run_action(action_slug: str, *, agent, config: dict, resolve_secret, workspaces_root, package_root=None):\n"
-            "    return False, f\"Unknown action: {action_slug}\", None\n"
+            '    return False, f"Unknown action: {action_slug}", None\n'
         ),
         "skill/SKILL.md": (
             f"# {name}\n\n"
@@ -358,8 +436,18 @@ def _rest_api_template_files(
         "supported_profiles": ["standard", "technical", "security"],
         "required_fields": ["api_key_ref"],
         "fields": [
-            {"name": "api_key_ref", "label": f"{name} API key secret", "kind": "secret_ref", "secret_provider": package_slug},
-            {"name": "base_url", "label": f"{name} API base URL", "kind": "url", "placeholder": "https://api.example.com"},
+            {
+                "name": "api_key_ref",
+                "label": f"{name} API key secret",
+                "kind": "secret_ref",
+                "secret_provider": package_slug,
+            },
+            {
+                "name": "base_url",
+                "label": f"{name} API base URL",
+                "kind": "url",
+                "placeholder": "https://api.example.com",
+            },
         ],
         "defaults": {"base_url": "https://api.example.com"},
         "secret_provider": package_slug,
@@ -367,7 +455,11 @@ def _rest_api_template_files(
         "skill_identifier": f"local/{package_slug}",
         "test_action": "health",
         "actions": [
-            {"slug": "describe_config", "label": "Describe config", "description": "Return the effective integration config."}
+            {
+                "slug": "describe_config",
+                "label": "Describe config",
+                "description": "Return the effective integration config.",
+            }
         ],
         "env_map": {
             "base_url": f"{env_base}_BASE_URL",

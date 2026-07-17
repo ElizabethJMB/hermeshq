@@ -33,7 +33,9 @@ async def create_instance_backup(
     _: User = Depends(require_admin),
 ):
     try:
-        archive_path, filename, _summary = await request.app.state.instance_backup_service.create_backup_archive(payload)
+        archive_path, filename, _summary = await request.app.state.instance_backup_service.create_backup_archive(
+            payload
+        )
     except InstanceBackupError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return FileResponse(

@@ -106,9 +106,7 @@ async def list_channels(
 ) -> list[MessagingChannelRead]:
     await ensure_agent_access(db, current_user, agent_id)
     result = await db.execute(
-        select(MessagingChannel)
-        .where(MessagingChannel.agent_id == agent_id)
-        .order_by(MessagingChannel.platform.asc())
+        select(MessagingChannel).where(MessagingChannel.agent_id == agent_id).order_by(MessagingChannel.platform.asc())
     )
     return [MessagingChannelRead.model_validate(item) for item in result.scalars().all()]
 

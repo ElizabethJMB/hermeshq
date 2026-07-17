@@ -15,10 +15,10 @@ from hermeshq.services.gateway_process_manager import (
     GatewayProcessManager,
 )
 
-
 # ---------------------------------------------------------------------------
 # Test: _strip_tool_call_blocks
 # ---------------------------------------------------------------------------
+
 
 class TestStripToolCallBlocks(unittest.TestCase):
     def test_strips_closed_block(self):
@@ -60,6 +60,7 @@ class TestStripToolCallBlocks(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Test: _extract_inline_tool_calls
 # ---------------------------------------------------------------------------
+
 
 class TestExtractInlineToolCalls(unittest.TestCase):
     def test_parses_simple_call(self):
@@ -153,6 +154,7 @@ class TestExtractInlineToolCalls(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Test: Gateway auto-restart
 # ---------------------------------------------------------------------------
+
 
 def _make_process_manager():
     """Create a GatewayProcessManager with mocked dependencies."""
@@ -339,22 +341,25 @@ class TestAutoRestartDecision(unittest.IsolatedAsyncioTestCase):
 
         mgr._reload_agent = AsyncMock(return_value=agent)
         call_count = 0
+
         async def _fail_launch(*a, **kw):
             nonlocal call_count
             call_count += 1
             raise RuntimeError("boom")
+
         mgr._launch_gateway_process = AsyncMock(side_effect=_fail_launch)
 
         sleep_calls = 0
+
         async def _mock_sleep(seconds):
             nonlocal sleep_calls
             if seconds >= 300:
                 sleep_calls += 1
                 if sleep_calls > GATEWAY_RECOVERY_MAX_RETRIES:
                     raise asyncio.CancelledError()
-        with patch("asyncio.sleep", new=_mock_sleep):
-            with self.assertRaises(asyncio.CancelledError):
-                await mgr._auto_restart_gateway("agent-1", {"sixagentic"}, uptime=5.0, log_mgr=None)
+
+        with patch("asyncio.sleep", new=_mock_sleep), self.assertRaises(asyncio.CancelledError):
+            await mgr._auto_restart_gateway("agent-1", {"sixagentic"}, uptime=5.0, log_mgr=None)
 
         self.assertGreaterEqual(call_count, GATEWAY_AUTO_RESTART_MAX_ATTEMPTS)
         self.assertTrue(any(c.status == "error" for c in channels))
@@ -364,29 +369,33 @@ class TestAutoRestartDecision(unittest.IsolatedAsyncioTestCase):
 # Test: PDF plugin
 # ---------------------------------------------------------------------------
 
+
 class TestPdfPlugin(unittest.TestCase):
     def test_plugin_yaml_exists(self):
-        from pathlib import Path
         from hermeshq.services.managed_capabilities import plugin_templates_root
+
         plugin_dir = plugin_templates_root() / "hermeshq_pdf"
         self.assertTrue(plugin_dir.is_dir(), f"Plugin dir not found: {plugin_dir}")
         yaml_file = plugin_dir / "plugin.yaml"
-        self.assertTrue(yaml_file.is_file(), f"plugin.yaml not found")
+        self.assertTrue(yaml_file.is_file(), "plugin.yaml not found")
         init_file = plugin_dir / "__init__.py"
-        self.assertTrue(init_file.is_file(), f"__init__.py not found")
+        self.assertTrue(init_file.is_file(), "__init__.py not found")
 
     def test_plugin_in_core_catalog(self):
         from hermeshq.services.managed_capabilities import CORE_MANAGED_PLUGIN_CATALOG
+
         slugs = [p["slug"] for p in CORE_MANAGED_PLUGIN_CATALOG]
         self.assertIn("hermeshq_pdf", slugs)
 
     def test_pdf_in_standard_profile(self):
         from hermeshq.services.runtime_profiles import STANDARD_ENABLED_TOOLSETS
+
         self.assertIn("hermeshq_pdf", STANDARD_ENABLED_TOOLSETS)
 
     def test_register_callable(self):
         """Test that register() exists and accepts a ctx-like object."""
         from hermeshq.plugin_templates.hermeshq_pdf import register
+
         ctx = Mock()
         ctx.register_tool = Mock()
         register(ctx)
@@ -397,6 +406,7 @@ class TestPdfPlugin(unittest.TestCase):
     def test_generate_pdf_handler_returns_json(self):
         """Test that the PDF handler returns valid JSON."""
         from hermeshq.plugin_templates.hermeshq_pdf import _handle_generate_pdf
+
         result = _handle_generate_pdf({"title": "Test", "html_content": "<p>Hello</p>"})
         data = json.loads(result)
         self.assertIn("success", data)
@@ -406,28 +416,32 @@ class TestPdfPlugin(unittest.TestCase):
 # Test: Audio plugin
 # ---------------------------------------------------------------------------
 
+
 class TestAudioPlugin(unittest.TestCase):
     def test_plugin_yaml_exists(self):
-        from pathlib import Path
         from hermeshq.services.managed_capabilities import plugin_templates_root
+
         plugin_dir = plugin_templates_root() / "hermeshq_audio"
         self.assertTrue(plugin_dir.is_dir(), f"Plugin dir not found: {plugin_dir}")
         yaml_file = plugin_dir / "plugin.yaml"
-        self.assertTrue(yaml_file.is_file(), f"plugin.yaml not found")
+        self.assertTrue(yaml_file.is_file(), "plugin.yaml not found")
         init_file = plugin_dir / "__init__.py"
-        self.assertTrue(init_file.is_file(), f"__init__.py not found")
+        self.assertTrue(init_file.is_file(), "__init__.py not found")
 
     def test_plugin_in_core_catalog(self):
         from hermeshq.services.managed_capabilities import CORE_MANAGED_PLUGIN_CATALOG
+
         slugs = [p["slug"] for p in CORE_MANAGED_PLUGIN_CATALOG]
         self.assertIn("hermeshq_audio", slugs)
 
     def test_audio_in_standard_profile(self):
         from hermeshq.services.runtime_profiles import STANDARD_ENABLED_TOOLSETS
+
         self.assertIn("hermeshq_audio", STANDARD_ENABLED_TOOLSETS)
 
     def test_register_callable(self):
         from hermeshq.plugin_templates.hermeshq_audio import register
+
         ctx = Mock()
         ctx.register_tool = Mock()
         register(ctx)
@@ -437,6 +451,7 @@ class TestAudioPlugin(unittest.TestCase):
 
     def test_transcribe_missing_file_path(self):
         from hermeshq.plugin_templates.hermeshq_audio import _handle_transcribe_audio
+
         result = _handle_transcribe_audio({})
         data = json.loads(result)
         self.assertFalse(data["success"])
@@ -444,6 +459,7 @@ class TestAudioPlugin(unittest.TestCase):
 
     def test_transcribe_unsupported_format(self):
         from hermeshq.plugin_templates.hermeshq_audio import _handle_transcribe_audio
+
         result = _handle_transcribe_audio({"file_path": "test.txt"})
         data = json.loads(result)
         self.assertFalse(data["success"])
@@ -451,6 +467,7 @@ class TestAudioPlugin(unittest.TestCase):
 
     def test_transcribe_file_not_found(self):
         from hermeshq.plugin_templates.hermeshq_audio import _handle_transcribe_audio
+
         result = _handle_transcribe_audio({"file_path": "/nonexistent/audio.m4a"})
         data = json.loads(result)
         self.assertFalse(data["success"])
@@ -458,6 +475,7 @@ class TestAudioPlugin(unittest.TestCase):
 
     def test_no_duplicates_in_standard_toolsets(self):
         from hermeshq.services.runtime_profiles import STANDARD_ENABLED_TOOLSETS
+
         seen = set()
         dupes = [x for x in STANDARD_ENABLED_TOOLSETS if x in seen or seen.add(x)]
         self.assertEqual(dupes, [], f"Duplicate toolsets found: {dupes}")
@@ -466,6 +484,7 @@ class TestAudioPlugin(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Test: Bootstrap toolset inheritance respects disabled_toolsets
 # ---------------------------------------------------------------------------
+
 
 class TestBootstrapInheritance(unittest.TestCase):
     def test_inheritance_respects_disabled_toolsets(self):
@@ -488,39 +507,48 @@ class TestBootstrapInheritance(unittest.TestCase):
 # Test: Provider fallback — normalize_runtime_provider for all catalog slugs
 # ---------------------------------------------------------------------------
 
+
 class TestProviderFallbackAliases(unittest.TestCase):
     """Verify that all provider catalog slugs resolve to their runtime_provider."""
 
     def test_nvidia_nim_resolves_to_openai_codex(self):
         from hermeshq.services.provider_catalog import normalize_runtime_provider
+
         self.assertEqual(normalize_runtime_provider("nvidia-nim"), "openai-codex")
 
     def test_nous_api_resolves_to_openai_codex(self):
         from hermeshq.services.provider_catalog import normalize_runtime_provider
+
         self.assertEqual(normalize_runtime_provider("nous-api"), "openai-codex")
 
     def test_openai_api_resolves_to_openai_codex(self):
         from hermeshq.services.provider_catalog import normalize_runtime_provider
+
         self.assertEqual(normalize_runtime_provider("openai-api"), "openai-codex")
 
     def test_openai_compatible_resolves_to_openai_codex(self):
         from hermeshq.services.provider_catalog import normalize_runtime_provider
+
         self.assertEqual(normalize_runtime_provider("openai-compatible"), "openai-codex")
 
     def test_gemini_api_resolves_to_openai_codex(self):
         from hermeshq.services.provider_catalog import normalize_runtime_provider
+
         self.assertEqual(normalize_runtime_provider("gemini-api"), "openai-codex")
 
     def test_anthropic_api_resolves_to_anthropic(self):
         from hermeshq.services.provider_catalog import normalize_runtime_provider
+
         self.assertEqual(normalize_runtime_provider("anthropic-api"), "anthropic")
 
     def test_aws_bedrock_resolves_to_bedrock(self):
         from hermeshq.services.provider_catalog import normalize_runtime_provider
+
         self.assertEqual(normalize_runtime_provider("aws-bedrock"), "bedrock")
 
     def test_zai_passthrough(self):
         from hermeshq.services.provider_catalog import normalize_runtime_provider
+
         self.assertEqual(normalize_runtime_provider("zai"), "zai")
 
     def test_all_catalog_slugs_resolve_to_their_runtime_provider(self):
@@ -529,6 +557,7 @@ class TestProviderFallbackAliases(unittest.TestCase):
             BUILTIN_PROVIDERS,
             normalize_runtime_provider,
         )
+
         for p in BUILTIN_PROVIDERS:
             slug = p["slug"]
             rt = p.get("runtime_provider", "")
@@ -577,10 +606,24 @@ class TestProviderErrorDetection(unittest.TestCase):
 
     def setUp(self):
         self.patterns = (
-            "API call failed", "rate limit", "Rate limit", "429", "401", "403",
-            "Authentication", "timeout", "Connection", "service unavailable",
-            "internal server error", "insufficient_quota", "insufficient quota",
-            "quota exceeded", "credits", "billing", "overloaded", "capacity",
+            "API call failed",
+            "rate limit",
+            "Rate limit",
+            "429",
+            "401",
+            "403",
+            "Authentication",
+            "timeout",
+            "Connection",
+            "service unavailable",
+            "internal server error",
+            "insufficient_quota",
+            "insufficient quota",
+            "quota exceeded",
+            "credits",
+            "billing",
+            "overloaded",
+            "capacity",
         )
 
     def _detect(self, text: str) -> bool:
