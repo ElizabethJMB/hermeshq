@@ -259,11 +259,9 @@ async def resolve_builder_llm(
 
     Returns (api_key, model, base_url) or (None, None, None) if unavailable.
     """
-    from sqlalchemy import select
-
     from hermeshq.config import get_settings
-    from hermeshq.models.secret import Secret
-    from hermeshq.services.secret_vault import SecretVault
+    from hermeshq.services.credentials import resolve_secret_value
+    from hermeshq.services.secret_vault import build_vault_from_settings
 
     settings = get_settings()
     app_settings = await db.get(AppSettings, "default")
@@ -277,11 +275,8 @@ async def resolve_builder_llm(
         base_url = app_settings.default_base_url
         if app_settings.default_api_key_ref:
             try:
-                result = await db.execute(select(Secret).where(Secret.name == app_settings.default_api_key_ref))
-                secret = result.scalar_one_or_none()
-                if secret:
-                    vault = SecretVault(settings.jwt_secret)
-                    api_key = vault.decrypt(secret.value_enc)
+                vault = build_vault_from_settings(settings)
+                api_key = await resolve_secret_value(db, vault, app_settings.default_api_key_ref)
             except Exception:
                 logger.warning("Failed to resolve builder API key", exc_info=True)
 

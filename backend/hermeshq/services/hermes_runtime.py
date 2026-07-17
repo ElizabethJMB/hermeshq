@@ -1,16 +1,14 @@
 import asyncio
 import json
 import logging
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from hermeshq.models.agent import Agent
-from hermeshq.models.secret import Secret
 from hermeshq.models.task import Task
+from hermeshq.services.credentials import require_secret_value
 from hermeshq.services.hermes_installation import HermesInstallationManager
 from hermeshq.services.provider_catalog import normalize_runtime_provider
 from hermeshq.services.runtime_profiles import resolve_effective_toolsets
@@ -424,11 +422,7 @@ class HermesRuntime:
             return None
         try:
             async with self.session_factory() as session:
-                result = await session.execute(select(Secret).where(Secret.name == api_key_ref))
-                secret = result.scalar_one_or_none()
-            if not secret:
-                raise RuntimeExecutionError(f"Secret '{api_key_ref}' was not found")
-            return self.secret_vault.decrypt(secret.value_enc)
+                return await require_secret_value(session, self.secret_vault, api_key_ref, RuntimeExecutionError)
         except RuntimeExecutionError:
             raise
         except (KeyError, ValueError, RuntimeError) as exc:
@@ -461,24 +455,10 @@ class HermesRuntime:
     def _has_credentials(self, agent: Agent) -> bool:
         if self._provider_uses_sdk_auth(normalize_runtime_provider(agent.provider)):
             return True
-        if agent.api_key_ref:
-            return True
-        return any(
-            os.getenv(env_name)
-            for env_name in (
-                "OPENROUTER_API_KEY",
-                "OPENAI_API_KEY",
-                "ANTHROPIC_API_KEY",
-                "ANTHROPIC_TOKEN",
-                "CLAUDE_CODE_OAUTH_TOKEN",
-                "KIMI_API_KEY",
-                "GEMINI_API_KEY",
-                "GOOGLE_API_KEY",
-                "GLM_API_KEY",
-                "ZAI_API_KEY",
-                "Z_AI_API_KEY",
-            )
-        )
+        # Platform-level provider env keys are intentionally NOT accepted:
+        # they are stripped from the child environment (env_sanitize) so an
+        # agent without its own secret ref can never bill the platform.
+        return bool(agent.api_key_ref)
 
     def _provider_uses_sdk_auth(self, provider: str | None) -> bool:
         if not provider:
