@@ -21,20 +21,58 @@ logger = logging.getLogger(__name__)
 
 # ── Response attachment extension/MIME maps (shared with task_runner) ──
 _ALLOWED_MEDIA_EXTS = {
-    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg",
-    ".mp3", ".aac", ".ogg", ".wav", ".m4a", ".flac",
-    ".mp4", ".webm", ".mov", ".avi", ".mkv",
-    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
-    ".txt", ".csv", ".json", ".md", ".xml", ".html", ".zip",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".webp",
+    ".bmp",
+    ".svg",
+    ".mp3",
+    ".aac",
+    ".ogg",
+    ".wav",
+    ".m4a",
+    ".flac",
+    ".mp4",
+    ".webm",
+    ".mov",
+    ".avi",
+    ".mkv",
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".ppt",
+    ".pptx",
+    ".txt",
+    ".csv",
+    ".json",
+    ".md",
+    ".xml",
+    ".html",
+    ".zip",
 }
 _MEDIA_EXT_MIME_MAP = {
-    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
-    ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
     ".svg": "image/svg+xml",
-    ".mp3": "audio/mpeg", ".aac": "audio/aac", ".ogg": "audio/ogg",
-    ".wav": "audio/wav", ".m4a": "audio/mp4", ".flac": "audio/flac",
-    ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime",
-    ".avi": "video/x-msvideo", ".mkv": "video/x-matroska",
+    ".mp3": "audio/mpeg",
+    ".aac": "audio/aac",
+    ".ogg": "audio/ogg",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+    ".flac": "audio/flac",
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo",
+    ".mkv": "video/x-matroska",
     ".pdf": "application/pdf",
     ".doc": "application/msword",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -42,8 +80,12 @@ _MEDIA_EXT_MIME_MAP = {
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ".ppt": "application/vnd.ms-powerpoint",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ".txt": "text/plain", ".csv": "text/csv", ".json": "application/json",
-    ".md": "text/markdown", ".xml": "application/xml", ".html": "text/html",
+    ".txt": "text/plain",
+    ".csv": "text/csv",
+    ".json": "application/json",
+    ".md": "text/markdown",
+    ".xml": "application/xml",
+    ".html": "text/html",
     ".zip": "application/zip",
 }
 
@@ -78,6 +120,12 @@ class HermesRuntime:
     def available(self) -> bool:
         return True
 
+    @staticmethod
+    def _task_timeout_seconds() -> int:
+        from hermeshq.config import get_settings
+
+        return max(60, int(get_settings().task_timeout_seconds))
+
     async def execute(
         self,
         agent: Agent,
@@ -103,7 +151,7 @@ class HermesRuntime:
                 conversation_history=conversation_history,
                 session_id=session_id,
             )
-        except RuntimeExecutionError:
+        except RuntimeExecutionError as primary_exc:
             # ── Fallback provider retry ────────────────────────────────
             if not self._has_fallback(agent):
                 raise
@@ -126,8 +174,8 @@ class HermesRuntime:
                         "api_key": fallback_api_key,
                     },
                 )
-            except Exception:  # noqa: BLE001  # fallback failed — re-raise
-                raise  # Fallback also failed — raise its error
+            except Exception as fallback_exc:  # noqa: BLE001  # fallback failed — chain both errors
+                raise RuntimeExecutionError(f"Primary and fallback providers failed: {fallback_exc}") from primary_exc
         except Exception as exc:  # noqa: BLE001  # runtime execution catch-all → RuntimeExecutionError
             raise RuntimeExecutionError(str(exc)) from exc
 
@@ -161,9 +209,7 @@ class HermesRuntime:
         _reply_to = str(_task_meta.get("reply_to") or _task_meta.get("source") or "").strip().lower()
         if _reply_to == "mobile_app":
             runtime_system_prompt = (
-                runtime_system_prompt
-                + "\n\n"
-                + "IMPORTANT: You are responding through the SixAgentic mobile app. "
+                runtime_system_prompt + "\n\n" + "IMPORTANT: You are responding through the SixAgentic mobile app. "
                 "Always provide your response directly in the task response text. "
                 "Do NOT send responses through Telegram, WhatsApp, email, or any other "
                 "external channel. "
@@ -204,41 +250,66 @@ class HermesRuntime:
         process = await asyncio.create_subprocess_exec(
             runtime_python_bin,
             str(Path(__file__).resolve().parents[1] / "scripts" / "hermes_task_runner.py"),
+            stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             limit=1024 * 1024,
             cwd=str(Path(__file__).resolve().parents[2]),
-            env={**process_env, "HERMESHQ_TASK_PAYLOAD": json.dumps(payload)},
+            env=process_env,
         )
 
         final_result: dict | None = None
 
-        assert process.stdout is not None
-        while True:
-            line = await process.stdout.readline()
-            if not line:
-                break
-            text = line.decode("utf-8", errors="replace").strip()
-            if not text:
-                continue
+        async def _consume() -> dict | None:
+            result: dict | None = None
+            assert process.stdin is not None
             try:
-                event = json.loads(text)
-            except json.JSONDecodeError:
-                await stream_callback(text)
-                continue
+                process.stdin.write(json.dumps(payload).encode("utf-8"))
+                await process.stdin.drain()
+                process.stdin.close()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            assert process.stdout is not None
+            while True:
+                line = await process.stdout.readline()
+                if not line:
+                    break
+                text = line.decode("utf-8", errors="replace").strip()
+                if not text:
+                    continue
+                try:
+                    event = json.loads(text)
+                except json.JSONDecodeError:
+                    await stream_callback(text)
+                    continue
 
-            if event.get("event") == "delta" and event.get("data"):
-                await stream_callback(str(event["data"]))
-            elif event.get("event") == "result":
-                final_result = event
-            elif event.get("event") == "error":
-                raise RuntimeExecutionError(str(event.get("error") or "Hermes runtime process failed"))
+                if event.get("event") == "delta" and event.get("data"):
+                    await stream_callback(str(event["data"]))
+                elif event.get("event") == "result":
+                    result = event
+                elif event.get("event") == "error":
+                    raise RuntimeExecutionError(str(event.get("error") or "Hermes runtime process failed"))
+            return result
+
+        try:
+            final_result = await asyncio.wait_for(_consume(), timeout=self._task_timeout_seconds())
+        except TimeoutError as exc:
+            raise RuntimeExecutionError(
+                f"Hermes runtime exceeded the task timeout of {self._task_timeout_seconds()}s"
+            ) from exc
+        finally:
+            if process.returncode is None:
+                process.kill()
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=10)
+                except TimeoutError:
+                    logger.warning("Task runner subprocess %s did not exit after kill", process.pid)
 
         stderr_output = ""
         if process.stderr is not None:
             stderr_output = (await process.stderr.read()).decode("utf-8", errors="replace").strip()
 
-        return_code = await process.wait()
+        return_code = process.returncode if process.returncode is not None else await process.wait()
         if return_code != 0 and not final_result:
             raise RuntimeExecutionError(stderr_output or "Hermes runtime process exited with an error")
         if not final_result:
@@ -277,8 +348,8 @@ class HermesRuntime:
         # files it generated. We extract these, copy to uploads/, and strip
         # the references from the response text.
         import re as _re
-        import uuid as _uuid
         import shutil as _shutil
+        import uuid as _uuid
         from pathlib import Path as _Path
 
         media_attachments: list[dict] = []
@@ -315,14 +386,16 @@ class HermesRuntime:
                     continue
 
                 file_size = dest_path.stat().st_size
-                media_attachments.append({
-                    "file_id": file_id,
-                    "filename": file_path.name,
-                    "media_type": _MEDIA_EXT_MIME_MAP.get(ext, "application/octet-stream"),
-                    "size": file_size,
-                    "caption": "",
-                    "source_path": str(file_path),
-                })
+                media_attachments.append(
+                    {
+                        "file_id": file_id,
+                        "filename": file_path.name,
+                        "media_type": _MEDIA_EXT_MIME_MAP.get(ext, "application/octet-stream"),
+                        "size": file_size,
+                        "caption": "",
+                        "source_path": str(file_path),
+                    }
+                )
                 logger.info("MEDIA: collected %s (%d bytes) as %s", file_path.name, file_size, file_id)
 
             # Strip MEDIA: lines from the response text
@@ -451,9 +524,7 @@ class HermesRuntime:
 
             # Find the provider definition matching the agent's runtime provider
             result = await db.execute(
-                select(ProviderDefinition).where(
-                    ProviderDefinition.runtime_provider == (runtime_provider or "")
-                )
+                select(ProviderDefinition).where(ProviderDefinition.runtime_provider == (runtime_provider or ""))
             )
             provider = result.scalar_one_or_none()
             if provider and provider.default_model:

@@ -133,6 +133,10 @@ export function SettingsPage() {
   const createMcpAccessToken = useCreateMcpAccessToken();
   const updateMcpAccessToken = useUpdateMcpAccessToken();
   const revokeMcpAccessToken = useRevokeMcpAccessToken();
+  const createPublicChatKey = useCreatePublicChatKey();
+  const updatePublicChatKey = useUpdatePublicChatKey();
+  const deletePublicChatKey = useDeletePublicChatKey();
+  const permanentlyDeletePublicChatKey = usePermanentlyDeletePublicChatKey();
 
   /* ─── Tab state ─── */
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
@@ -302,10 +306,10 @@ export function SettingsPage() {
             <PublicChatKeysTab
               agents={agents}
               publicChatKeys={publicChatKeys}
-              createPublicChatKey={useCreatePublicChatKey()}
-              updatePublicChatKey={useUpdatePublicChatKey()}
-              deletePublicChatKey={useDeletePublicChatKey()}
-              permanentlyDeletePublicChatKey={usePermanentlyDeletePublicChatKey()}
+              createPublicChatKey={createPublicChatKey}
+              updatePublicChatKey={updatePublicChatKey}
+              deletePublicChatKey={deletePublicChatKey}
+              permanentlyDeletePublicChatKey={permanentlyDeletePublicChatKey}
             />
           )}
         </Suspense>

@@ -40,6 +40,8 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hermeshq}:${POSTGRES_PASSWORD:-hermeshq}@postgres:5432/${POSTGRES_DB:-hermeshq}
       JWT_SECRET: ${JWT_SECRET:-}
+      FERNET_KEY: ${FERNET_KEY:-}
+      TASK_TIMEOUT_SECONDS: ${TASK_TIMEOUT_SECONDS:-3600}
       AUTH_MODE: ${AUTH_MODE:-local}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
       OIDC_DISCOVERY_URL: ${OIDC_DISCOVERY_URL:-}

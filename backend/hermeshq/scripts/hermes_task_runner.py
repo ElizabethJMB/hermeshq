@@ -28,9 +28,19 @@ def _extract_tool_calls(messages: list[dict]) -> list[dict]:
 
 
 def main() -> int:
-    payload_raw = os.environ.get("HERMESHQ_TASK_PAYLOAD", "")
+    # Payload arrives via stdin (keeps the API key out of the process
+    # environment, where it would be visible via /proc/<pid>/environ).
+    # Fall back to the legacy env var for backwards compatibility.
+    payload_raw = ""
+    if not sys.stdin.isatty():
+        try:
+            payload_raw = sys.stdin.read().strip()
+        except OSError:
+            payload_raw = ""
     if not payload_raw:
-        _emit({"event": "error", "error": "Missing HERMESHQ_TASK_PAYLOAD"})
+        payload_raw = os.environ.get("HERMESHQ_TASK_PAYLOAD", "")
+    if not payload_raw:
+        _emit({"event": "error", "error": "Missing task payload (stdin or HERMESHQ_TASK_PAYLOAD)"})
         return 1
 
     payload = json.loads(payload_raw)
@@ -66,9 +76,9 @@ def main() -> int:
                 full_path = Path(payload["cwd"]) / att_path
                 if full_path.exists():
                     line = f"- [{att.get('media_type', 'file')}] {att_path}"
-                    if att.get('filename'):
+                    if att.get("filename"):
                         line += f" (filename: {att['filename']})"
-                    if att.get('caption'):
+                    if att.get("caption"):
                         line += f" — {att['caption']}"
                     attachment_lines.append(line)
         if attachment_lines:
