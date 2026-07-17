@@ -15,6 +15,7 @@ from starlette.websockets import WebSocketState
 
 from hermeshq.config import get_settings
 from hermeshq.core.events import EventBroker
+from hermeshq.core.public_chat_cors import PublicChatCORSMiddleware
 from hermeshq.core.security import get_accessible_agent_ids, get_websocket_user, hash_password, is_admin
 from hermeshq.database import AsyncSessionLocal, init_database
 from hermeshq.models import ActivityLog, Agent, AppSettings, Node, ProviderDefinition, TerminalSession, User
@@ -380,7 +381,6 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"],
 )
 
-from hermeshq.core.public_chat_cors import PublicChatCORSMiddleware
 app.add_middleware(PublicChatCORSMiddleware)
 
 app.include_router(auth.router, prefix=settings.api_prefix)
