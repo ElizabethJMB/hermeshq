@@ -66,8 +66,8 @@ async def db_engine():
     await admin_engine.dispose()
 
     engine = create_async_engine(_scratch_url(db_name))
-    from hermeshq.models.base import Base
     import hermeshq.models  # noqa: F401  (register all tables)
+    from hermeshq.models.base import Base
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

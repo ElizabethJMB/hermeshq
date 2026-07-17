@@ -7,10 +7,9 @@ login → refresh (cookie) → logout end-to-end. Skipped when no DB is reachabl
 from __future__ import annotations
 
 import pytest
+from conftest import requires_database
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-
-from conftest import requires_database
 
 from hermeshq.core.security import hash_password
 from hermeshq.database import get_db_session
@@ -73,8 +72,6 @@ class TestLoginRefreshLogoutFlow:
             json={"username": "integration-admin", "password": "Sup3rSecret!"},
         )
         assert login.status_code == 200
-        first_token = login.json()["access_token"]
-
         # Cookie-based refresh (as the SPA does after an OIDC redirect)
         refresh = await auth_client.post("/api/auth/refresh")
         assert refresh.status_code == 200, refresh.text
