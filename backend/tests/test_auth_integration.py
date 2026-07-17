@@ -22,7 +22,7 @@ pytestmark = [pytest.mark.integration, requires_database]
 @pytest.fixture
 async def auth_client(db_session):
     app = FastAPI()
-    app.include_router(auth_router, prefix="/api/auth")
+    app.include_router(auth_router, prefix="/api")
 
     async def _override_session():
         yield db_session

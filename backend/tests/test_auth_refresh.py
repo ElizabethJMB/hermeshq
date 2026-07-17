@@ -89,31 +89,29 @@ class TestRefreshEndpoint:
 class TestRefreshEndpointRouting:
     """Verify the refresh route is properly registered."""
 
-    def test_auth_router_has_refresh_route(self):
-        from hermeshq.routers.auth import router
-
-        routes = [r.path for r in router.routes]
-        assert "/refresh" in routes or "/auth/refresh" in routes
-
-    def test_refresh_route_is_post(self):
+    def _collect_api_routes(self):
         from fastapi.routing import APIRoute
 
-        from hermeshq.routers.auth import router
+        from hermeshq.routers.auth.local import router
 
-        for route in router.routes:
-            if isinstance(route, APIRoute) and route.path in ("/refresh", "/auth/refresh"):
+        return [r for r in router.routes if isinstance(r, APIRoute)]
+
+    def test_auth_router_has_refresh_route(self):
+        routes = [r.path for r in self._collect_api_routes()]
+        assert "/refresh" in routes
+
+    def test_refresh_route_is_post(self):
+        for route in self._collect_api_routes():
+            if route.path == "/refresh":
                 assert "POST" in route.methods
                 break
         else:
             pytest.fail("Refresh route not found")
 
     def test_refresh_route_response_model(self):
-        from fastapi.routing import APIRoute
-
-        from hermeshq.routers.auth import router
         from hermeshq.schemas.auth import TokenResponse
 
-        for route in router.routes:
-            if isinstance(route, APIRoute) and route.path == "/refresh":
+        for route in self._collect_api_routes():
+            if route.path == "/refresh":
                 assert route.response_model == TokenResponse
                 break
