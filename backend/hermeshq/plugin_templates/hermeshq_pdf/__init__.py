@@ -135,7 +135,7 @@ def _sanitize_html(html: str) -> str:
                 "td": {"colspan", "rowspan"},
                 "th": {"colspan", "rowspan"},
             },
-            protocols={"data", "https"},
+            url_schemes={"data", "https"},
         )
     except ImportError:
         return html
