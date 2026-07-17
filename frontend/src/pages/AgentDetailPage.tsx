@@ -40,7 +40,7 @@ export function AgentDetailPage() {
   const isAdmin = currentUser?.role === "admin";
   const { t } = useI18n();
   const { data: agent, isLoading } = useAgent(agentId);
-  const { data: tasks } = useTasks();
+  const { data: tasks } = useTasks(agentId);
   const [activityQuery, setActivityQuery] = useState("");
   const {
     data: logs,
@@ -79,10 +79,7 @@ export function AgentDetailPage() {
     secrets,
   );
 
-  const agentTasks = useMemo(
-    () => (tasks ?? []).filter((task) => task.agent_id === agentId),
-    [tasks, agentId],
-  );
+  const agentTasks = useMemo(() => tasks ?? [], [tasks]);
   const filteredLedgerEntries = useMemo(() => {
     const query = ledgerQuery.trim().toLowerCase();
     if (!query) {
