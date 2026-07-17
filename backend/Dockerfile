@@ -24,10 +24,10 @@ WORKDIR /app
 
 # --- Python dependencies ---
 COPY backend/requirements.txt /app/requirements.txt
+# hermes-agent is pinned by commit SHA (tags are mutable). v2026.5.7 = e19fc91
 RUN pip install --no-cache-dir --prefix=/install -r /app/requirements.txt \
     && pip install --no-cache-dir --prefix=/install \
-       Pillow \
-       git+https://github.com/NousResearch/hermes-agent.git@v2026.5.7
+       git+https://github.com/NousResearch/hermes-agent.git@e19fc91cb82cb4e0dc74f6d63a89d9b6c2135241
 
 # --- Node.js dependencies (whatsapp-bridge) ---
 RUN mkdir -p /app/hermeshq/assets/whatsapp-bridge
@@ -52,7 +52,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
     libfreetype6 \
-    libjpeg-dev \
+    libjpeg62-turbo \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
        | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
