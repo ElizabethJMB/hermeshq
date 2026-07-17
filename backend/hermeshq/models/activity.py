@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from sqlalchemy import JSON, ForeignKey, String, Text
+from sqlalchemy import JSON, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from hermeshq.models.base import Base, TimestampMixin
@@ -8,6 +8,7 @@ from hermeshq.models.base import Base, TimestampMixin
 
 class ActivityLog(TimestampMixin, Base):
     __tablename__ = "activity_logs"
+    __table_args__ = (Index("ix_activity_logs_created_at", "created_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     agent_id: Mapped[str | None] = mapped_column(
