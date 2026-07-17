@@ -158,6 +158,20 @@ async def kapso_mark_read(
         return None
 
 
+def _markdown_to_whatsapp(text: str) -> str:
+    """Convert common Markdown formatting to WhatsApp-native formatting."""
+    # Bold: **text** or __text__ → *text*
+    text = re.sub(r"\*\*(.+?)\*\*", r"*\1*", text)
+    text = re.sub(r"__(.+?)__", r"*\1*", text)
+    # Strikethrough: ~~text~~ → ~text~
+    text = re.sub(r"~~(.+?)~~", r"~\1~", text)
+    # Headers: ### Header → *Header*
+    text = re.sub(r"^#{1,6}\s+(.+)$", r"*\1*", text, flags=re.MULTILINE)
+    # Horizontal rules: --- or *** → ———
+    text = re.sub(r"^[-*]{3,}\s*$", "———", text, flags=re.MULTILINE)
+    return text
+
+
 _WA_MAX_CHARS = 4000  # WhatsApp hard limit is 4096 — use 4000 for safety margin
 
 
@@ -222,6 +236,7 @@ async def kapso_send_text_chunked(
     text: str,
 ) -> None:
     """Send a (possibly long) text, splitting it into WhatsApp-safe chunks."""
+    text = _markdown_to_whatsapp(text)
     for chunk in _split_message(text):
         await kapso_send_text(api_key, phone_number_id, to, chunk)
 
@@ -507,16 +522,12 @@ class KapsoWhatsAppGateway:
                         logger.exception("Failed to send unauthorized reply")
                 return
 
-        # Mark message as read and send acknowledgment
+        # Mark message as read (blue double-check confirms receipt to the user)
         if message_id:
             t1 = asyncio.create_task(
                 kapso_mark_read(self._api_key, self._phone_number_id, message_id)
             )
             t1.add_done_callback(lambda t: logger.exception("kapso_mark_read failed", exc_info=t.exception()) if t.exception() else None)
-        t2 = asyncio.create_task(
-            kapso_send_text(self._api_key, self._phone_number_id, sender_wa_id, "⏳")
-        )
-        t2.add_done_callback(lambda t: logger.exception("kapso_send_text failed", exc_info=t.exception()) if t.exception() else None)
 
         # Resolve HermesHQ user from the sender's Kapso ID (kapso_id stores the WA phone number)
         hermeshq_user_id: str | None = None
@@ -574,6 +585,8 @@ class KapsoWhatsAppGateway:
                 metadata_json={
                     "source": "kapso_whatsapp",
                     "platform": "kapso_whatsapp",
+                    "conversation": True,
+                    "thread_id": f"kapso_wa_{sender_wa_id}",
                     "sender_wa_id": sender_wa_id,
                     "sender_username": sender_username,
                     "kapso_message_id": message_id,
