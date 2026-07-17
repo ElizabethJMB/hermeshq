@@ -1,26 +1,15 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { useAgents, useBootstrapSystemOperator } from "../api/agents";
+import { useAgents } from "../api/agents";
 import {
   useCreateInstanceBackup,
   useRestoreInstanceBackup,
-  useRestoreInstanceBackupJob,
   useValidateInstanceBackup,
 } from "../api/backup";
-import {
-  useCreateHermesVersion,
-  useHermesVersions,
-} from "../api/hermesVersions";
-import {
-  useInstallIntegrationPackage,
-  useIntegrationPackages,
-  useUninstallIntegrationPackage,
-  useUploadIntegrationPackage,
-} from "../api/integrationPackages";
+import { useHermesVersions } from "../api/hermesVersions";
 import {
   useCreateIntegrationDraft,
-  useIntegrationDraftFile,
   useIntegrationDrafts,
   useDeleteIntegrationDraft,
   useDeleteIntegrationDraftFile,
@@ -35,8 +24,6 @@ import {
   useRevokeMcpAccessToken,
   useUpdateMcpAccessToken,
 } from "../api/mcpAccess";
-import { useProviders, useUpdateProvider } from "../api/providers";
-import { useRuntimeCapabilityOverview } from "../api/runtimeProfiles";
 import {
   useCreatePublicChatKey,
   useDeletePublicChatKey,
@@ -44,7 +31,6 @@ import {
   usePublicChatKeys,
   useUpdatePublicChatKey,
 } from "../api/publicChatKeys";
-import { useCreateSecret, useSecrets } from "../api/secrets";
 import {
   useDeleteBrandAsset,
   useDeleteTuiSkin,
@@ -53,7 +39,6 @@ import {
   useUploadBrandAsset,
   useUploadTuiSkin,
 } from "../api/settings";
-import { useCreateTemplate, useTemplates } from "../api/templates";
 import { useI18n } from "../lib/i18n";
 import { useSessionStore } from "../stores/sessionStore";
 
@@ -94,22 +79,13 @@ export function SettingsPage() {
 
   /* ─── Data hooks ─── */
   const { data: agents } = useAgents();
-  const bootstrapSystemOperator = useBootstrapSystemOperator();
-  const { data: secrets } = useSecrets(isAdmin);
-  const { data: providers } = useProviders(Boolean(currentUser));
   const { data: hermesVersions } = useHermesVersions(isAdmin);
-  const { data: runtimeCapabilityOverview } = useRuntimeCapabilityOverview(Boolean(currentUser));
-  const { data: integrationPackages } = useIntegrationPackages(isAdmin);
   const { data: integrationDrafts } = useIntegrationDrafts(isAdmin);
   const { data: mcpAccessTokens } = useMcpAccessTokens(isAdmin);
-  const { data: templates } = useTemplates(isAdmin);
   const { data: settings } = useSettings(isAdmin);
   const { data: publicChatKeys } = usePublicChatKeys(isAdmin);
 
   /* ─── Mutation hooks ─── */
-  const updateProvider = useUpdateProvider();
-  const createSecret = useCreateSecret();
-  const createTemplate = useCreateTemplate();
   const updateSettings = useUpdateSettings();
   const uploadLogo = useUploadBrandAsset("logo");
   const uploadFavicon = useUploadBrandAsset("favicon");
@@ -120,9 +96,6 @@ export function SettingsPage() {
   const createInstanceBackup = useCreateInstanceBackup();
   const validateInstanceBackup = useValidateInstanceBackup();
   const restoreInstanceBackup = useRestoreInstanceBackup();
-  const uploadIntegrationPackage = useUploadIntegrationPackage();
-  const installIntegrationPackage = useInstallIntegrationPackage();
-  const uninstallIntegrationPackage = useUninstallIntegrationPackage();
   const createIntegrationDraft = useCreateIntegrationDraft();
   const updateIntegrationDraft = useUpdateIntegrationDraft();
   const saveIntegrationDraftFile = useSaveIntegrationDraftFile();
@@ -140,17 +113,6 @@ export function SettingsPage() {
 
   /* ─── Tab state ─── */
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
-
-  /* ─── Restore job polling ─── */
-  const [activeRestoreJobId, setActiveRestoreJobId] = useState<string | null>(null);
-  const { data: restoreJob } = useRestoreInstanceBackupJob(activeRestoreJobId);
-
-  /* ─── Integration draft file ─── */
-  const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
-  const [selectedDraftPath, setSelectedDraftPath] = useState<string | null>(null);
-  const { data: selectedDraftFile } = useIntegrationDraftFile(
-    selectedDraftId, selectedDraftPath, Boolean(isAdmin && activeTab === "factory"),
-  );
 
   /* ─── Tab persistence ─── */
   useEffect(() => {
@@ -243,7 +205,6 @@ export function SettingsPage() {
               createInstanceBackup={createInstanceBackup}
               validateInstanceBackup={validateInstanceBackup}
               restoreInstanceBackup={restoreInstanceBackup}
-              restoreJob={restoreJob}
               queryClient={queryClient}
             />
           )}
@@ -266,8 +227,6 @@ export function SettingsPage() {
               deleteIntegrationDraftFile={deleteIntegrationDraftFile}
               validateIntegrationDraft={validateIntegrationDraft}
               publishIntegrationDraft={publishIntegrationDraft}
-              integrationDraftFiles={selectedDraftFile}
-              queryClient={queryClient}
             />
           )}
           {activeTab === "externalAccess" && (

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { getVoiceConfig, transcribeAudio, synthesizeText, type VoiceConfig } from "../api/voice";
+import { getVoiceConfig, transcribeAudio, synthesizeText } from "../api/voice";
 import {
   createBuilderSession,
   sendBuilderMessage,

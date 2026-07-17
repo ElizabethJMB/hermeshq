@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useI18n } from "../../lib/i18n";
 import {
   useUpstreamHermesVersions,
   useCreateHermesVersionFromUpstream,
@@ -17,7 +16,6 @@ interface HermesVersionsTabProps {
 }
 
 export default function HermesVersionsTab({ hermesVersions }: HermesVersionsTabProps) {
-  const { t } = useI18n();
 
   const [newHermesVersion, setNewHermesVersion] = useState("");
   const [newHermesReleaseTag, setNewHermesReleaseTag] = useState("");

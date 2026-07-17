@@ -437,7 +437,6 @@ export function AgentDetailPage() {
         integrationTestResults={drafts.integrationTestResults}
         integrationActionResults={drafts.integrationActionResults}
         integrationPending={integrationPending}
-        secrets={secrets}
         secretsByProvider={drafts.secretsByProvider}
         runtimeCapabilityOverview={runtimeCapabilityOverview}
         currentRuntimeCapabilityProfile={drafts.currentRuntimeCapabilityProfile}

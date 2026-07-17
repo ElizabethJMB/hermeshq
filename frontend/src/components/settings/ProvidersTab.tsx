@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useProviders, useUpdateProvider } from "../../api/providers";
 import { useI18n } from "../../lib/i18n";
