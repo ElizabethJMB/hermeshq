@@ -17,6 +17,10 @@ class EventSubscription:
     user_id: str | None = None
 
 
+_INTERNAL_SUBSCRIBER_TIMEOUT = 10.0
+_WS_SEND_TIMEOUT = 5.0
+
+
 class EventBroker:
     def __init__(self) -> None:
         self._connections: dict[WebSocket, EventSubscription] = {}
@@ -63,13 +67,15 @@ class EventBroker:
     async def publish(self, event: dict) -> None:
         # Notify internal subscribers first (gateways, services, etc.)
         snapshot = list(self._internal_subscribers)
-        internal_tasks = [callback(event) for callback in snapshot]
+        internal_tasks = [self._call_internal(callback, event) for callback in snapshot]
         results = await asyncio.gather(*internal_tasks, return_exceptions=True)
         for callback, result in zip(snapshot, results, strict=False):
             if isinstance(result, Exception):
                 logger.exception("Internal subscriber %s failed", getattr(callback, "__qualname__", callback))
 
-        # Then push to WebSocket connections (frontend)
+        # Then push to WebSocket connections (frontend). Each send has its
+        # own timeout so a slow/dead client cannot stall delivery to the
+        # rest of subscribers or block the publisher.
         stale_connections: list[WebSocket] = []
         event_agent_id = event.get("agent_id")
         event_user_id = event.get("created_by_user_id")
@@ -85,15 +91,29 @@ class EventBroker:
                 and event_user_id != subscription.user_id
             ):
                 continue
-            send_tasks.append((connection, asyncio.ensure_future(connection.send_json(event))))
+            send_tasks.append((connection, asyncio.ensure_future(self._send_with_timeout(connection, event))))
 
         for connection, task in send_tasks:
             try:
-                await task
+                delivered = await task
+                if not delivered:
+                    stale_connections.append(connection)
             except Exception:  # noqa: BLE001  # WebSocket send — connection is stale
                 stale_connections.append(connection)
         for connection in stale_connections:
             self.disconnect(connection)
+
+    async def _call_internal(self, callback: Callable, event: dict) -> None:
+        await asyncio.wait_for(callback(event), timeout=_INTERNAL_SUBSCRIBER_TIMEOUT)
+
+    @staticmethod
+    async def _send_with_timeout(connection: WebSocket, event: dict) -> bool:
+        try:
+            await asyncio.wait_for(connection.send_json(event), timeout=_WS_SEND_TIMEOUT)
+            return True
+        except TimeoutError:
+            logger.warning("Dropping slow WebSocket subscriber (send timeout)")
+            return False
 
     async def publish_many(self, events: Iterable[dict]) -> None:
         for event in events:
