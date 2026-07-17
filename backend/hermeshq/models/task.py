@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import JSON, BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hermeshq.models.base import Base, utcnow
@@ -35,7 +35,7 @@ class Task(Base):
     tool_calls: Mapped[list[dict]] = mapped_column(JSON, default=list)
     tokens_used: Mapped[int] = mapped_column(Integer, default=0)
     iterations: Mapped[int] = mapped_column(Integer, default=0)
-    queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     metadata_json: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
@@ -45,6 +45,7 @@ class Task(Base):
             "status IN ('pending', 'queued', 'running', 'completed', 'failed', 'cancelled')",
             name="ck_tasks_status",
         ),
+        Index("ix_tasks_agent_status", "agent_id", "status"),
     )
 
     agent = relationship("Agent", back_populates="tasks", foreign_keys=[agent_id])

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from sqlalchemy import JSON, ForeignKey, String
+from sqlalchemy import JSON, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from hermeshq.models.base import Base, TimestampMixin
@@ -12,6 +12,7 @@ from hermeshq.models.base import Base, TimestampMixin
 
 class AuditLog(TimestampMixin, Base):
     __tablename__ = "audit_logs"
+    __table_args__ = (Index("ix_audit_logs_created_at", "created_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
 
