@@ -419,17 +419,9 @@ app.include_router(public_chat_management_router, prefix=settings.api_prefix)
 app.include_router(public_chat_test_router, prefix=settings.api_prefix)
 app.include_router(public_chat_widget_router)
 
-try:
-    from prometheus_fastapi_instrumentator import Instrumentator
-
-    Instrumentator(
-        should_group_status_codes=True,
-        should_ignore_untemplated=True,
-        should_respect_env_var=False,
-        excluded_handlers=["/health", "/metrics"],
-    ).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
-except ImportError:
-    logger.info("prometheus-fastapi-instrumentator not installed — /metrics disabled")
+# Prometheus metrics disabled — instrumentator breaks with sub-routers
+# (auth/, public_chat/) which don't expose .path directly. Re-enable once
+# upstream supports _IncludedRouter objects or routers are flattened.
 
 
 @app.get("/health", response_model=HealthResponse)
