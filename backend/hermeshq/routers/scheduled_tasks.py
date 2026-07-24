@@ -2,7 +2,7 @@ import logging
 from datetime import UTC, datetime
 
 from croniter import croniter
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import false, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -75,6 +75,49 @@ async def update_scheduled_task(
         item.next_run = _compute_next_run(payload.cron_expression)
     await db.commit()
     await db.refresh(item)
+    return ScheduledTaskRead.model_validate(item)
+
+
+@router.post("/{scheduled_task_id}/run", response_model=ScheduledTaskRead, status_code=status.HTTP_202_ACCEPTED)
+async def run_scheduled_task_now(
+    scheduled_task_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> ScheduledTaskRead:
+    from hermeshq.models.activity import ActivityLog
+    from hermeshq.models.task import Task
+
+    item = await db.get(ScheduledTask, scheduled_task_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Scheduled task not found")
+    await ensure_agent_access(db, current_user, item.agent_id)
+
+    task = Task(
+        agent_id=item.agent_id,
+        title=item.name,
+        prompt=item.prompt,
+        metadata_json={"scheduled_task_id": item.id, "scheduled": True, "manual_trigger": True},
+    )
+    db.add(task)
+    await db.flush()
+    item.last_run = datetime.now(UTC)
+    db.add(
+        ActivityLog(
+            agent_id=item.agent_id,
+            task_id=task.id,
+            event_type="schedule.triggered",
+            message=f"{item.name} (manual)",
+            details={"schedule_id": item.id, "manual": True},
+        )
+    )
+    await db.commit()
+    await db.refresh(item)
+
+    supervisor = getattr(request.app.state, "supervisor", None)
+    if supervisor:
+        await supervisor.submit_task(task.id)
+
     return ScheduledTaskRead.model_validate(item)
 
 

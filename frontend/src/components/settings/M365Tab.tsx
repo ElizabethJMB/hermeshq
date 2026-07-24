@@ -108,7 +108,7 @@ export default function M365Tab() {
           </button>
           {saved && <p className="text-sm text-[var(--success)]">Guardado</p>}
           {updateConfig.isError && (
-            <p className="text-sm text-[var(--accent)]">Error al guardar</p>
+            <p className="text-sm text-[var(--danger)]">Error al guardar</p>
           )}
         </div>
       </article>

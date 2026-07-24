@@ -222,6 +222,14 @@ export function AppShell() {
               <img src={logoutIcon} alt="" className="app-shell-nav-icon h-4 w-4 shrink-0" />
               {t("nav.signOut")}
             </button>
+
+            <a
+              href="/v2"
+              className="panel-button-secondary w-full rounded-none flex items-center justify-center gap-3 !py-1 !px-3"
+              style={{ fontSize: 11, opacity: 0.7 }}
+            >
+              ✨ V2 Preview
+            </a>
           </>
         ) : (
           <div className="flex flex-col gap-6">

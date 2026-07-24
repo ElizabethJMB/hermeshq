@@ -2,6 +2,7 @@ import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "
 
 import { useI18n } from "../lib/i18n";
 import type { Task } from "../types/api";
+import { MarkdownText } from "./MarkdownText";
 
 type ConversationEntry = {
   id: string;
@@ -10,6 +11,7 @@ type ConversationEntry = {
   timestamp: string;
   status: string;
   title?: string | null;
+  prompt?: string;
 };
 
 function buildAssistantContent(task: Task) {
@@ -39,7 +41,7 @@ function buildAssistantContent(task: Task) {
 function statusTone(status: string) {
   if (status === "completed") return "text-[var(--success)]";
   if (status === "running" || status === "queued") return "text-[var(--warning)]";
-  if (status === "failed") return "text-[var(--accent)]";
+  if (status === "failed") return "text-[var(--danger)]";
   return "text-[var(--text-secondary)]";
 }
 
@@ -76,6 +78,7 @@ export function AgentConversationPanel({
           timestamp: task.queued_at,
           status: task.status,
           title: task.title,
+          prompt: task.prompt,
         },
       ];
 
@@ -88,6 +91,7 @@ export function AgentConversationPanel({
           timestamp: task.completed_at ?? task.started_at ?? task.queued_at,
           status: task.status,
           title: task.title,
+          prompt: task.prompt,
         });
       }
 
@@ -95,9 +99,18 @@ export function AgentConversationPanel({
     });
   }, [tasks]);
 
+  const userNearBottomRef = useRef(true);
+
+  function handleFeedScroll() {
+    const node = feedRef.current;
+    if (!node) return;
+    const distanceToBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+    userNearBottomRef.current = distanceToBottom < 80;
+  }
+
   useEffect(() => {
     const node = feedRef.current;
-    if (!node) {
+    if (!node || !userNearBottomRef.current) {
       return;
     }
     node.scrollTop = node.scrollHeight;
@@ -110,6 +123,7 @@ export function AgentConversationPanel({
     }
     await onSubmit(draftPrompt.trim());
     setDraftPrompt("");
+    userNearBottomRef.current = true;
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -142,6 +156,7 @@ export function AgentConversationPanel({
 
       <div
         ref={feedRef}
+        onScroll={handleFeedScroll}
         className={`${embedded ? "mt-0" : "mt-6"} max-h-[560px] space-y-4 overflow-y-auto border border-[var(--border)] p-4`}
         style={{ background: "color-mix(in srgb, var(--surface) 60%, transparent)" }}
       >
@@ -156,7 +171,7 @@ export function AgentConversationPanel({
                   isUser
                     ? "ml-auto border-[var(--text-display)] bg-[var(--text-display)] text-[var(--black)]"
                     : isSystem
-                      ? "border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--text-primary)]"
+                      ? "border-[var(--danger)] bg-[var(--danger-subtle)] text-[var(--text-primary)]"
                       : "border-[var(--border-visible)] bg-[var(--surface-raised)] text-[var(--text-primary)]"
                 }`}
               >
@@ -173,16 +188,33 @@ export function AgentConversationPanel({
                     {entry.title}
                   </p>
                 ) : null}
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-6">
-                  {entry.content === "__QUEUED__"
-                    ? t("agent.queuedWaiting")
-                    : entry.content === "__RUNNING__"
-                      ? t("agent.running")
-                      : entry.content}
-                </p>
-                <p className={`mt-3 text-xs uppercase tracking-[0.1em] ${isUser ? "[color:var(--contrast-muted)]" : "text-[var(--text-disabled)]"}`}>
-                  {formatDateTime(entry.timestamp)}
-                </p>
+                {entry.content === "__QUEUED__" || entry.content === "__RUNNING__" ? (
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-6">
+                    {entry.content === "__QUEUED__" ? t("agent.queuedWaiting") : t("agent.running")}
+                  </p>
+                ) : (
+                  <div className="mt-3 text-sm leading-6">
+                    <MarkdownText>{entry.content}</MarkdownText>
+                  </div>
+                )}
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <p className={`text-xs uppercase tracking-[0.1em] ${isUser ? "[color:var(--contrast-muted)]" : "text-[var(--text-disabled)]"}`}>
+                    {formatDateTime(entry.timestamp)}
+                  </p>
+                  {entry.status === "failed" && entry.prompt && !disabled ? (
+                    <button
+                      type="button"
+                      className="panel-button-secondary px-3 py-1 text-xs"
+                      disabled={isSubmitting}
+                      onClick={() => {
+                        userNearBottomRef.current = true;
+                        void onSubmit(entry.prompt!);
+                      }}
+                    >
+                      {t("agent.retry")}
+                    </button>
+                  ) : null}
+                </div>
               </article>
             );
           })

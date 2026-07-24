@@ -773,7 +773,7 @@ export function AgentsPage() {
                 </button>
                 {isAdmin ? (
                   <button
-                    className={`panel-button-secondary w-full ${agent.is_archived ? "border-red-500 text-red-500" : "border-[var(--accent)] text-[var(--accent)]"}`}
+                    className={`panel-button-secondary w-full ${agent.is_archived ? "border-red-500 text-red-500" : "border-[var(--danger)] text-[var(--danger)]"}`}
                     onClick={() => onDelete(agent.id, agent.name, agent.is_archived)}
                     disabled={deleteAgent.isPending}
                   >

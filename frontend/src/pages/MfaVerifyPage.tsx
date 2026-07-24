@@ -202,7 +202,7 @@ export function MfaVerifyPage() {
               )}
 
               {error && (
-                <p className="panel-inline-status text-[var(--accent)]">[ERROR] {error}</p>
+                <p className="panel-inline-status text-[var(--danger)]">[ERROR] {error}</p>
               )}
             </form>
           </div>

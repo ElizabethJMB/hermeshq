@@ -72,7 +72,7 @@ export function SecretsTab() {
               </div>
               <button
                 type="button"
-                className="panel-button-secondary border-[var(--accent)] text-[var(--accent)] shrink-0"
+                className="panel-button-secondary border-[var(--danger)] text-[var(--danger)] shrink-0"
                 disabled={deleteSecret.isPending}
                 onClick={() => {
                   if (window.confirm(`Delete secret "${String(secret.name)}"?`)) {
