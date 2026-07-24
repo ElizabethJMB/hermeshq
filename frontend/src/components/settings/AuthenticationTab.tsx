@@ -193,7 +193,7 @@ export function AuthenticationTab() {
               <button type="button" className="panel-button-secondary text-xs" onClick={() => startEdit(p)}>
                 {t("common.edit")}
               </button>
-              <button type="button" className="panel-button-secondary text-xs text-[var(--accent)]" onClick={() => handleDelete(p.id)}>
+              <button type="button" className="panel-button-secondary text-xs text-[var(--danger)]" onClick={() => handleDelete(p.id)}>
                 {t("common.delete")}
               </button>
             </div>

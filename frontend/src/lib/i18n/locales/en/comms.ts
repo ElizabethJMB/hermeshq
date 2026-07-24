@@ -38,6 +38,7 @@ const ns: Record<string, string> = {
   "comms.messageEdges": "Message edges",
   "comms.history": "History",
   "comms.recentMessages": "Recent messages",
+  "comms.emptyHistory": "No messages yet",
 };
 
 export default ns;

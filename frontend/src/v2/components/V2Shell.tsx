@@ -1,0 +1,122 @@
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+
+import { useFleetHealth } from "../../api/dashboard";
+import { useAgents } from "../../api/agents";
+import { useSessionStore } from "../../stores/sessionStore";
+import { useV2ToastStore } from "../toast";
+
+type V2Theme = "paper" | "slate" | "enterprise";
+
+const THEME_LABELS: Record<V2Theme, string> = {
+  paper: "Paper",
+  slate: "Slate",
+  enterprise: "Corp",
+};
+
+export function V2Shell() {
+  const location = useLocation();
+  const [theme, setTheme] = useState<V2Theme>(() => {
+    return (localStorage.getItem("v2.theme") as V2Theme) || "enterprise";
+  });
+  const { data: health } = useFleetHealth();
+  const { data: agents } = useAgents();
+  const currentUser = useSessionStore((state) => state.user);
+  const toasts = useV2ToastStore((state) => state.toasts);
+  const dismissToast = useV2ToastStore((state) => state.dismiss);
+
+  useEffect(() => {
+    localStorage.setItem("v2.theme", theme);
+  }, [theme]);
+
+  const errorAgents = (agents ?? []).filter((a) => a.status === "error").length;
+  const recentErrors = health?.recent_errors?.length ?? 0;
+  const healthTone = errorAgents > 0 || recentErrors > 0 ? "error" : "success";
+  const healthText = errorAgents > 0
+    ? `${errorAgents} agent${errorAgents > 1 ? "s" : ""} down`
+    : recentErrors > 0
+      ? `${recentErrors} recent errors`
+      : "All systems OK";
+
+  const navItems = [
+    { to: "/v2", label: "Overview", end: true },
+    { to: "/v2/agents", label: "Agents" },
+    { to: "/v2/builder", label: "✨ Builder" },
+    { to: "/v2/tasks", label: "Tasks" },
+    { to: "/v2/schedules", label: "Schedules" },
+    { to: "/v2/comms", label: "Comms" },
+    { to: "/v2/audit", label: "Audit" },
+    { to: "/v2/users", label: "Users" },
+    { to: "/v2/settings", label: "Settings" },
+  ];
+
+  return (
+    <div className="v2-root" data-v2theme={theme}>
+      <header className="v2-topbar">
+        <div className="v2-topbar-inner">
+          <Link to="/v2" className="v2-brand">
+            <span className="v2-brand-mark">H</span>
+            HermesHQ
+          </Link>
+          <nav className="v2-nav">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) => "v2-nav-link"}
+                data-active={({ isActive }: { isActive: boolean }) => undefined}
+                style={({ isActive }) => (isActive ? { color: "var(--v2-text)", background: "var(--v2-bg-sunken)", fontWeight: 600 } : undefined)}
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+          <Link to="/v2/agents" className="v2-health" data-tone={healthTone}>
+            <span className="v2-health-dot" />
+            {healthText}
+          </Link>
+          <div className="v2-theme-switcher">
+            {(Object.keys(THEME_LABELS) as V2Theme[]).map((t) => (
+              <button
+                key={t}
+                className="v2-theme-btn"
+                data-active={theme === t}
+                onClick={() => setTheme(t)}
+              >
+                {THEME_LABELS[t]}
+              </button>
+            ))}
+          </div>
+          <Link to="/v2/account" className="v2-agent-avatar" style={{ width: 30, height: 30, fontSize: 12, textDecoration: "none" }} title="My account">
+            {(currentUser?.display_name || currentUser?.username || "U").slice(0, 1).toUpperCase()}
+          </Link>
+        </div>
+      </header>
+
+      <main className="v2-page">
+        <Outlet context={{ theme }} />
+      </main>
+
+      <footer style={{ borderTop: "1px solid var(--v2-border)", padding: "14px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 1440, margin: "0 auto" }}>
+        <span style={{ fontSize: 12, color: "var(--v2-text-muted)" }}>HermesHQ · v2 preview</span>
+        <div style={{ display: "flex", gap: 16 }}>
+          <Link to="/manual" style={{ fontSize: 12, color: "var(--v2-text-secondary)", textDecoration: "none" }}>Manual</Link>
+          <Link to="/" style={{ fontSize: 12, color: "var(--v2-text-secondary)", textDecoration: "none" }}>Classic view</Link>
+        </div>
+      </footer>
+
+      <div className="v2-toast-stack">
+        {toasts.map((toast) => (
+          <div key={toast.id} className="v2-toast" data-tone={toast.tone} onClick={() => dismissToast(toast.id)}>
+            {toast.message}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function useV2Location() {
+  return useLocation();
+}

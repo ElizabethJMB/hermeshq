@@ -105,6 +105,7 @@ const ns: Record<string, string> = {
   "agent.emptyConversation": "[EMPTY] send the first message to start a conversation thread",
   "agent.queuedWaiting": "Queued. HermesHQ is waiting for runtime execution.",
   "agent.running": "Running...",
+  "agent.retry": "Retry",
   "agent.liveDispatch": "[LIVE] message dispatches immediately",
   "agent.autoDispatch": "[AUTO] HermesHQ will start the runtime before dispatching",
   "agent.terminal": "Terminal",

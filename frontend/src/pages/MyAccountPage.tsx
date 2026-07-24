@@ -321,7 +321,7 @@ export function MyAccountPage() {
           <button className="panel-button-primary w-full" type="submit" disabled={changePassword.isPending}>
             {t("account.savePassword")}
           </button>
-          {passwordError ? <p className="text-sm text-[var(--accent)]">{passwordError}</p> : null}
+          {passwordError ? <p className="text-sm text-[var(--danger)]">{passwordError}</p> : null}
           {passwordMessage ? <p className="text-sm text-[var(--success)]">{passwordMessage}</p> : null}
         </form>
       </section>

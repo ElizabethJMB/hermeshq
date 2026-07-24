@@ -15,6 +15,9 @@ const ns: Record<string, string> = {
   "schedules.never": "nunca",
   "schedules.openAgent": "Abrir agente",
   "schedules.delete": "Eliminar programación",
+  "schedules.enable": "Activar",
+  "schedules.disable": "Desactivar",
+  "schedules.runNow": "Ejecutar ahora",
   "schedules.empty": "[VACÍO] no hay tareas recurrentes configuradas para este alcance",
   "schedules.invalidCron": "Expresión cron inválida. Se esperan 5 campos separados por espacios (ej. */15 * * * *)",
 };

@@ -92,8 +92,16 @@ export function CommsPage() {
   const [teamTag, setTeamTag] = useState("");
   const [content, setContent] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [historyAgentFilter, setHistoryAgentFilter] = useState("");
 
   const agentMap = useMemo(() => buildAgentMap(agents ?? []), [agents]);
+  const filteredHistory = useMemo(() => {
+    const messages = history ?? [];
+    if (!historyAgentFilter) return messages;
+    return messages.filter(
+      (message) => message.from_agent_id === historyAgentFilter || message.to_agent_id === historyAgentFilter,
+    );
+  }, [history, historyAgentFilter]);
   const sourceAgent = fromAgentId ? agentMap.get(fromAgentId) : undefined;
   const delegateOptions = useMemo(
     () =>
@@ -275,7 +283,7 @@ export function CommsPage() {
           >
             {t("comms.dispatch")}
           </button>
-          {submitError ? <p className="text-sm text-[var(--accent)]">{submitError}</p> : null}
+          {submitError ? <p className="text-sm text-[var(--danger)]">{submitError}</p> : null}
         </div>
       </form>
 
@@ -409,20 +417,62 @@ export function CommsPage() {
         </section>
 
         <section className="comms-history-card panel-frame p-6">
-          <div className="border-b border-[var(--border)] pb-4">
-            <p className="panel-label">{t("comms.history")}</p>
-            <h3 className="mt-2 text-2xl text-[var(--text-display)]">{t("comms.recentMessages")}</h3>
+          <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[var(--border)] pb-4">
+            <div>
+              <p className="panel-label">{t("comms.history")}</p>
+              <h3 className="mt-2 text-2xl text-[var(--text-display)]">{t("comms.recentMessages")}</h3>
+            </div>
+            <label className="panel-field !mt-0 min-w-[14rem]">
+              <span className="panel-label">{t("tasks.filterAgent")}</span>
+              <select
+                value={historyAgentFilter}
+                onChange={(event) => setHistoryAgentFilter(event.target.value)}
+                className="text-xs md:text-sm"
+              >
+                <option value="">{t("tasks.allAgents")}</option>
+                {(agents ?? []).map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agentLabel(agent)}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className="mt-2">
-            {(history ?? []).map((message) => (
-              <article key={message.id} className="comms-history-row border-b border-[var(--border)] py-4">
-                <div className="flex items-center justify-between gap-4">
-                  <p className="panel-label">{message.message_type}</p>
-                  <p className="panel-label">{formatDateTime(message.created_at)}</p>
-                </div>
-                <p className="mt-2 text-sm text-[var(--text-primary)]">{message.content}</p>
-              </article>
-            ))}
+            {filteredHistory.length ? (
+              filteredHistory.map((message) => {
+                const fromAgent = agentMap.get(message.from_agent_id);
+                const toAgent = agentMap.get(message.to_agent_id);
+                const typeTone =
+                  message.message_type === "broadcast"
+                    ? "border-[var(--interactive)] text-[var(--interactive)]"
+                    : message.message_type === "delegate"
+                      ? "border-[var(--warning)] text-[var(--warning)]"
+                      : "border-[var(--border-visible)] text-[var(--text-secondary)]";
+                return (
+                  <article key={message.id} className="comms-history-row border-b border-[var(--border)] py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-[var(--border-visible)] px-2.5 py-1 text-xs text-[var(--text-display)]">
+                          {fromAgent ? agentLabel(fromAgent) : message.from_agent_id.slice(0, 8)}
+                        </span>
+                        <span className="text-[var(--text-disabled)]">→</span>
+                        <span className="rounded-full border border-[var(--border-visible)] px-2.5 py-1 text-xs text-[var(--text-display)]">
+                          {toAgent ? agentLabel(toAgent) : message.to_agent_id.slice(0, 8)}
+                        </span>
+                        <span className={`rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] ${typeTone}`}>
+                          {message.message_type}
+                        </span>
+                      </div>
+                      <p className="panel-label">{formatDateTime(message.created_at)}</p>
+                    </div>
+                    <p className="mt-2 text-sm text-[var(--text-primary)]">{message.content}</p>
+                  </article>
+                );
+              })
+            ) : (
+              <p className="panel-inline-status py-4">{t("comms.emptyHistory")}</p>
+            )}
           </div>
         </section>
       </div>

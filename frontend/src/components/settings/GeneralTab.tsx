@@ -353,7 +353,7 @@ export default function GeneralTab({
           ) : null}
           {restoreJob ? (
             <div className="space-y-4">
-              <div className={`rounded-2xl border px-4 py-3 text-sm ${restoreJob.status === "failed" ? "border-[var(--danger)]/30 text-[var(--danger)]" : restoreJob.status === "succeeded" ? "border-[var(--success)]/30 text-[var(--text-display)]" : "border-[var(--accent)]/30 text-[var(--text-display)]"}`}>
+              <div className={`rounded-2xl border px-4 py-3 text-sm ${restoreJob.status === "failed" ? "border-[var(--danger)]/30 text-[var(--danger)]" : restoreJob.status === "succeeded" ? "border-[var(--success)]/30 text-[var(--text-display)]" : "border-[var(--danger)]/30 text-[var(--text-display)]"}`}>
                 {restoreJob.status === "queued" ? `Restore job queued (${restoreJob.mode}).` : restoreJob.status === "running" ? `Restore running (${restoreJob.mode}).` : restoreJob.status === "succeeded" ? `Restore completed in ${restoreJob.mode} mode.` : `Restore failed in ${restoreJob.mode} mode.`}
               </div>
               <div className="space-y-1 text-sm text-[var(--text-secondary)]">
