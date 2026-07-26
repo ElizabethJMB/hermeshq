@@ -16,6 +16,7 @@ class ProviderUpdate(BaseModel):
     supports_secret_ref: bool | None = None
     supports_custom_base_url: bool | None = None
     enabled: bool | None = None
+    api_key_ref: str | None = None
 
 
 class ProviderRead(ORMModel):
@@ -33,6 +34,7 @@ class ProviderRead(ORMModel):
     supports_custom_base_url: bool
     enabled: bool
     sort_order: int
+    api_key_ref: str | None = None
     models_refreshed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime

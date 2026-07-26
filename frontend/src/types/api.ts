@@ -285,6 +285,7 @@ export interface ProviderDefinition {
   supports_custom_base_url: boolean;
   enabled: boolean;
     sort_order: number;
+    api_key_ref: string | null;
     models_refreshed_at: string | null;
     created_at: string;
   updated_at: string;
