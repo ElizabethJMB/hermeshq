@@ -15,20 +15,14 @@ logger = logging.getLogger(__name__)
 
 MODELS_CACHE_TTL_SECONDS = 3600
 
-_OPENAI_COMPATIBLE_PROVIDERS = {
-    "openai-codex",
-    "nvidia-nim",
-    "nous-api",
-    "openai-api",
-    "openai-compatible",
-    "gemini-api",
-}
-
-GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
+_NON_FETCHABLE_PROVIDERS = {"anthropic", "anthropic-api", "bedrock"}
 
 
 def _can_fetch_models(runtime_provider: str) -> bool:
-    return runtime_provider in _OPENAI_COMPATIBLE_PROVIDERS
+    return runtime_provider not in _NON_FETCHABLE_PROVIDERS
+
+
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
 async def _resolve_api_key(
@@ -37,18 +31,49 @@ async def _resolve_api_key(
     settings: AppSettings | None,
     vault: SecretVault,
 ) -> str | None:
+    from hermeshq.models.agent import Agent
+
+    def _decrypt(secret_row):
+        try:
+            return vault.decrypt(secret_row.value_enc)
+        except Exception:
+            logger.warning("Failed to decrypt secret '%s'", secret_row.name)
+            return None
+
+    # 1. Global default API key
     default_ref = settings.default_api_key_ref if settings else None
-    ref = default_ref or None
-    if not ref:
-        return None
-    result = await db.get(Secret, ref)
-    if not result:
-        return None
-    try:
-        return vault.decrypt(result.value_enc)
-    except Exception:
-        logger.warning("Failed to decrypt secret '%s' for provider models fetch", ref)
-        return None
+    if default_ref:
+        secret = await db.get(Secret, default_ref)
+        if secret:
+            key = _decrypt(secret)
+            if key:
+                return key
+
+    # 2. Secret associated with this provider (Secret.provider == slug)
+    result = await db.execute(
+        select(Secret).where(Secret.provider == provider.slug)
+    )
+    for secret in result.scalars().all():
+        key = _decrypt(secret)
+        if key:
+            return key
+
+    # 3. Any agent using this provider — use its api_key_ref
+    result = await db.execute(
+        select(Agent.api_key_ref).where(
+            Agent.provider == provider.runtime_provider,
+            Agent.api_key_ref.isnot(None),
+        ).limit(1)
+    )
+    agent_ref = result.scalar_one_or_none()
+    if agent_ref:
+        secret = await db.get(Secret, agent_ref)
+        if secret:
+            key = _decrypt(secret)
+            if key:
+                return key
+
+    return None
 
 
 async def _fetch_openai_models(base_url: str, api_key: str) -> list[str]:
