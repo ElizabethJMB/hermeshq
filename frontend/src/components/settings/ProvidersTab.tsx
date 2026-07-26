@@ -4,9 +4,11 @@ import { useProviders, useUpdateProvider, useRefreshProviderModels } from "../..
 import { useI18n } from "../../lib/i18n";
 import { useSessionStore } from "../../stores/sessionStore";
 
-const FETCHABLE_PROVIDERS = new Set([
-  "openai-codex", "nvidia-nim", "nous-api", "openai-api", "openai-compatible", "gemini-api",
-]);
+const NON_FETCHABLE = new Set(["anthropic", "anthropic-api", "bedrock"]);
+
+function canFetchModels(provider: { auth_type: string; base_url: string | null; runtime_provider: string }): boolean {
+  return provider.auth_type === "api_key" && Boolean(provider.base_url) && !NON_FETCHABLE.has(provider.runtime_provider);
+}
 
 export function ProvidersTab() {
   const currentUser = useSessionStore((state) => state.user);
@@ -172,7 +174,7 @@ export function ProvidersTab() {
                     }
                   />
                 </label>
-                {FETCHABLE_PROVIDERS.has(provider.runtime_provider) ? (
+                {canFetchModels(provider) ? (
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
