@@ -15,11 +15,8 @@ logger = logging.getLogger(__name__)
 
 MODELS_CACHE_TTL_SECONDS = 3600
 
-_NON_FETCHABLE_PROVIDERS = {"anthropic", "anthropic-api", "bedrock"}
-
-
 def _can_fetch_models(runtime_provider: str) -> bool:
-    return runtime_provider not in _NON_FETCHABLE_PROVIDERS
+    return True
 
 
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
@@ -78,8 +75,24 @@ async def _resolve_api_key(
 
 async def _fetch_openai_models(base_url: str, api_key: str) -> list[str]:
     url = base_url.rstrip("/") + "/models"
+    headers = {"Authorization": f"Bearer {api_key}"}
     async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
+        response = await client.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+    models = []
+    for item in data.get("data", []):
+        model_id = item.get("id")
+        if model_id:
+            models.append(model_id)
+    return sorted(set(models))
+
+
+async def _fetch_anthropic_models(base_url: str, api_key: str) -> list[str]:
+    url = base_url.rstrip("/") + "/models"
+    headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
     models = []
@@ -126,6 +139,8 @@ async def refresh_provider_models(
     try:
         if provider.runtime_provider == "gemini-api":
             models = await _fetch_gemini_models(api_key)
+        elif provider.runtime_provider in ("anthropic", "anthropic-api"):
+            models = await _fetch_anthropic_models(base_url, api_key)
         else:
             models = await _fetch_openai_models(base_url, api_key)
     except httpx.HTTPStatusError as exc:
