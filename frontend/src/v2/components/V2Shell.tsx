@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { useFleetHealth } from "../../api/dashboard";
 import { useAgents } from "../../api/agents";
+import { usePublicBranding, resolveAssetUrl } from "../../api/settings";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useV2ToastStore } from "../toast";
 
@@ -19,6 +20,10 @@ export function V2Shell() {
   const [theme, setTheme] = useState<V2Theme>(() => {
     return (localStorage.getItem("v2.theme") as V2Theme) || "enterprise";
   });
+  const { data: branding } = usePublicBranding();
+  const appName = branding?.app_name || "HermesHQ";
+  const logoUrl = resolveAssetUrl(branding?.logo_url);
+  const appShortName = branding?.app_short_name || appName.slice(0, 2);
   const { data: health } = useFleetHealth();
   const { data: agents } = useAgents();
   const currentUser = useSessionStore((state) => state.user);
@@ -55,8 +60,12 @@ export function V2Shell() {
       <header className="v2-topbar">
         <div className="v2-topbar-inner">
           <Link to="/v2" className="v2-brand">
-            <span className="v2-brand-mark">H</span>
-            HermesHQ
+            {logoUrl ? (
+              <img src={logoUrl} alt={appName} style={{ height: 24, maxWidth: 140, objectFit: "contain", borderRadius: 4 }} />
+            ) : (
+              <span className="v2-brand-mark">{appShortName.slice(0, 1)}</span>
+            )}
+            {appName}
           </Link>
           <nav className="v2-nav">
             {navItems.map((item) => (
@@ -99,7 +108,7 @@ export function V2Shell() {
       </main>
 
       <footer style={{ borderTop: "1px solid var(--v2-border)", padding: "14px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 1440, margin: "0 auto" }}>
-        <span style={{ fontSize: 12, color: "var(--v2-text-muted)" }}>HermesHQ · v2 preview</span>
+        <span style={{ fontSize: 12, color: "var(--v2-text-muted)" }}>{appName} · v2 preview</span>
         <div style={{ display: "flex", gap: 16 }}>
           <Link to="/manual" style={{ fontSize: 12, color: "var(--v2-text-secondary)", textDecoration: "none" }}>Manual</Link>
           <Link to="/" style={{ fontSize: 12, color: "var(--v2-text-secondary)", textDecoration: "none" }}>Classic view</Link>

@@ -2,6 +2,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-do
 import { useEffect, useMemo, useState, useCallback } from "react";
 
 import { useAgents, useAgentAction } from "../../api/agents";
+import { usePublicBranding } from "../../api/settings";
 import { useRealtimeStore } from "../../stores/realtimeStore";
 import { useV2ToastStore } from "../../v2/toast";
 
@@ -17,6 +18,8 @@ export function V3Shell() {
   const navigate = useNavigate();
   const location = useLocation();
   const { data: agents } = useAgents();
+  const { data: branding } = usePublicBranding();
+  const appName = branding?.app_name || "HermesHQ";
   const startAgent = useAgentAction("start");
   const stopAgent = useAgentAction("stop");
   const toasts = useV2ToastStore((state) => state.toasts);
@@ -164,7 +167,7 @@ export function V3Shell() {
           <div className="v3-strip">
             <div>
               <div className="v3-strip-title">{currentPage}</div>
-              <div className="v3-strip-meta">HermesHQ · Mission Control</div>
+              <div className="v3-strip-meta">{appName} · Mission Control</div>
             </div>
             <div className="v3-statuslights">
               <span className="v3-statuslight" data-tone="ok">{running} RUN</span>
