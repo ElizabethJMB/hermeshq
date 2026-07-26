@@ -2,6 +2,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useAgents, useAgentAction, useCreateAgent } from "../../api/agents";
+import { AgentAvatar } from "../../components/AgentAvatar";
 import { useNodes } from "../../api/nodes";
 import { useProviders } from "../../api/providers";
 import { useSecrets } from "../../api/secrets";
@@ -278,7 +279,7 @@ export function V2AgentsPage() {
             return (
               <div key={agent.id} className="v2-agent-row">
                 <Link to={`/v2/agents/${agent.id}`} style={{ display: "flex", alignItems: "center", gap: 14, flex: 1, textDecoration: "none", color: "inherit", minWidth: 0 }}>
-                  <span className="v2-agent-avatar">{name.slice(0, 1).toUpperCase()}</span>
+                  <AgentAvatar agent={agent} sizeClass="h-9 w-9" roundedClass="rounded-lg" />
                   <div style={{ minWidth: 0 }}>
                     <div className="v2-agent-name">{name}</div>
                     <div className="v2-agent-meta">

@@ -5,6 +5,7 @@ import { useAgents, useAgentAction } from "../../api/agents";
 import { useFleetHealth, useDashboardOverview, useTaskAnalytics } from "../../api/dashboard";
 import { useTasks } from "../../api/tasks";
 import { v2toast, extractErrorMessage } from "../toast";
+import { AgentAvatar } from "../../components/AgentAvatar";
 import { AreaChart, DonutChart, HBarChart, Sparkline, formatDuration } from "../charts";
 
 function statusTone(status: string): "success" | "error" | "warn" | "neutral" {
@@ -215,7 +216,7 @@ export function V2Dashboard() {
                 return (
                   <div key={agent.id} className="v2-agent-row">
                     <Link to={`/v2/agents/${agent.id}`} style={{ display: "flex", alignItems: "center", gap: 14, flex: 1, textDecoration: "none", color: "inherit", minWidth: 0 }}>
-                      <span className="v2-agent-avatar">{name.slice(0, 1).toUpperCase()}</span>
+                      <AgentAvatar agent={agent} sizeClass="h-9 w-9" roundedClass="rounded-lg" />
                       <div style={{ minWidth: 0 }}>
                         <div className="v2-agent-name">{name}</div>
                         <div className="v2-agent-meta">{agent.model?.split("/").pop() ?? agent.provider}</div>

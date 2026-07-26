@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 
 import { useChangeMyPassword, useUpdateMyPreferences, useUpdateMyProfile } from "../../api/auth";
+import { AgentAvatar } from "../../components/AgentAvatar";
 import { useSessionStore } from "../../stores/sessionStore";
 import { performLogout } from "../../api/auth";
 import { v2toast, extractErrorMessage } from "../toast";
@@ -82,9 +83,7 @@ export function V2MyAccountPage() {
           </div>
           <div className="v2-card-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <span className="v2-agent-avatar" style={{ width: 52, height: 52, fontSize: 20 }}>
-                {(currentUser.display_name || currentUser.username).slice(0, 1).toUpperCase()}
-              </span>
+              <AgentAvatar agent={currentUser as any} sizeClass="h-13 w-13" roundedClass="rounded-lg" />
               <div>
                 <div style={{ fontWeight: 620, fontSize: 16 }}>{currentUser.display_name || currentUser.username}</div>
                 <div className="v2-agent-meta">@{currentUser.username} · {currentUser.auth_source}</div>

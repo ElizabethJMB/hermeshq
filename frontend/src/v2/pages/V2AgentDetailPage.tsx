@@ -6,6 +6,7 @@ import { useLogs } from "../../api/logs";
 import { useRuntimeLedger } from "../../api/runtimeLedger";
 import { useTasks, useCreateTask } from "../../api/tasks";
 import { AgentMessagingPanel } from "../../components/AgentMessagingPanel";
+import { AgentAvatar } from "../../components/AgentAvatar";
 import { AgentM365ScopesPanel } from "../../components/AgentM365ScopesPanel";
 import { AgentSkillsPanel } from "../../components/AgentSkillsPanel";
 import { AgentTerminal } from "../../components/AgentTerminal";
@@ -197,7 +198,7 @@ export function V2AgentDetailPage() {
 
       <div className="v2-page-header" style={{ marginBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <span className="v2-agent-avatar" style={{ width: 44, height: 44, fontSize: 17 }}>{name.slice(0, 1).toUpperCase()}</span>
+          <AgentAvatar agent={agent} sizeClass="h-11 w-11" roundedClass="rounded-lg" />
           <div>
             <h1 className="v2-page-title" style={{ fontSize: 22 }}>{name}</h1>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
