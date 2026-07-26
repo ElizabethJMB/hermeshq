@@ -37,7 +37,15 @@ async def _resolve_api_key(
             logger.warning("Failed to decrypt secret '%s'", secret_row.name)
             return None
 
-    # 1. Global default API key
+    # 1. Provider-specific API key (set in Settings > Providers)
+    if provider.api_key_ref:
+        secret = await db.get(Secret, provider.api_key_ref)
+        if secret:
+            key = _decrypt(secret)
+            if key:
+                return key
+
+    # 2. Global default API key
     default_ref = settings.default_api_key_ref if settings else None
     if default_ref:
         secret = await db.get(Secret, default_ref)
@@ -46,7 +54,7 @@ async def _resolve_api_key(
             if key:
                 return key
 
-    # 2. Secret associated with this provider (Secret.provider == slug)
+    # 3. Secret associated with this provider (Secret.provider == slug)
     result = await db.execute(
         select(Secret).where(Secret.provider == provider.slug)
     )
@@ -55,7 +63,7 @@ async def _resolve_api_key(
         if key:
             return key
 
-    # 3. Any agent using this provider — use its api_key_ref
+    # 4. Any agent using this provider — use its api_key_ref
     result = await db.execute(
         select(Agent.api_key_ref).where(
             Agent.provider == provider.runtime_provider,

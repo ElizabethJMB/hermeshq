@@ -24,4 +24,5 @@ class ProviderDefinition(TimestampMixin, Base):
     supports_custom_base_url: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    api_key_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     models_refreshed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

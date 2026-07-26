@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { useProviders, useUpdateProvider, useRefreshProviderModels } from "../../api/providers";
+import { useSecrets } from "../../api/secrets";
 import { useI18n } from "../../lib/i18n";
 import { useSessionStore } from "../../stores/sessionStore";
 
@@ -16,6 +17,7 @@ export function ProvidersTab() {
   const { data: providers } = useProviders(Boolean(currentUser));
   const updateProvider = useUpdateProvider();
   const refreshModels = useRefreshProviderModels();
+  const { data: secrets } = useSecrets(Boolean(currentUser));
   const [refreshStatus, setRefreshStatus] = useState<Record<string, { ok: boolean; msg: string } | null>>({});
 
   const [providerDrafts, setProviderDrafts] = useState<Record<string, {
@@ -24,6 +26,7 @@ export function ProvidersTab() {
     default_model: string;
     available_models: string;
     enabled: boolean;
+    api_key_ref: string;
   }>>({});
 
   useEffect(() => {
@@ -37,6 +40,7 @@ export function ProvidersTab() {
             default_model: provider.default_model ?? "",
             available_models: (provider.available_models ?? []).join("\n"),
             enabled: provider.enabled,
+            api_key_ref: provider.api_key_ref ?? "",
           },
         ]),
       ),
@@ -59,6 +63,7 @@ export function ProvidersTab() {
           .map((s) => s.trim())
           .filter(Boolean),
         enabled: draft.enabled,
+        api_key_ref: draft.api_key_ref || null,
       },
     });
   }
@@ -218,6 +223,25 @@ export function ProvidersTab() {
                       </span>
                     ) : null}
                   </div>
+                ) : null}
+                {provider.supports_secret_ref && (secrets ?? []).length > 0 ? (
+                  <label className="panel-field">
+                    <span className="panel-label">API key (secret for model refresh)</span>
+                    <select
+                      value={draft.api_key_ref}
+                      onChange={(event) =>
+                        setProviderDrafts((current) => ({
+                          ...current,
+                          [provider.slug]: { ...current[provider.slug], api_key_ref: event.target.value },
+                        }))
+                      }
+                    >
+                      <option value="">None</option>
+                      {(secrets ?? []).map((s) => (
+                        <option key={s.name} value={s.name}>{s.name}</option>
+                      ))}
+                    </select>
+                  </label>
                 ) : null}
                 <div className="grid gap-2 text-sm text-[var(--text-secondary)]">
                   <p>{t("providers.authType")}: {provider.auth_type}</p>
