@@ -2,6 +2,7 @@ import { FormEvent, useMemo, useRef, useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useAgent, useAgentAction, useUpdateAgent, useDeleteAgent } from "../../api/agents";
+import { useProviders } from "../../api/providers";
 import { useLogs } from "../../api/logs";
 import { useRuntimeLedger } from "../../api/runtimeLedger";
 import { useTasks, useCreateTask } from "../../api/tasks";
@@ -50,6 +51,7 @@ export function V2AgentDetailPage() {
   const updateAgent = useUpdateAgent();
   const deleteAgent = useDeleteAgent();
   const createTask = useCreateTask();
+  const { data: providers } = useProviders(true);
   const currentUser = useSessionStore((state) => state.user);
   const isAdmin = currentUser?.role === "admin";
 
@@ -353,9 +355,60 @@ export function V2AgentDetailPage() {
                 <h2 className="v2-card-title">Configuration</h2>
               </div>
               <div className="v2-card-body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <div>
-                  <div className="v2-field-label">Model</div>
-                  <div className="v2-mono" style={{ fontSize: 13 }}>{agent.model ?? "—"}</div>
+                <div className="v2-field">
+                  <label className="v2-field-label">Model</label>
+                  {(() => {
+                    const agentProvider = (providers ?? []).find(
+                      (p) => p.runtime_provider === agent.provider || p.slug === agent.provider,
+                    );
+                    const availableModels = agentProvider?.available_models ?? [];
+                    const currentModel = agent.model ?? "";
+                    if (availableModels.length > 0) {
+                      return (
+                        <select
+                          className="v2-select"
+                          defaultValue={currentModel}
+                          onChange={async (e) => {
+                            try {
+                              await updateAgent.mutateAsync({
+                                agentId: agent.id,
+                                payload: { model: e.target.value, use_provider_default: false },
+                              });
+                              v2toast.success("Model updated");
+                            } catch (error) {
+                              v2toast.error(extractErrorMessage(error, "Update failed"));
+                            }
+                          }}
+                        >
+                          {!availableModels.includes(currentModel) && currentModel ? (
+                            <option value={currentModel}>{currentModel} (current)</option>
+                          ) : null}
+                          {availableModels.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      );
+                    }
+                    return (
+                      <input
+                        className="v2-input"
+                        defaultValue={currentModel}
+                        onBlur={async (e) => {
+                          if (e.target.value !== currentModel) {
+                            try {
+                              await updateAgent.mutateAsync({
+                                agentId: agent.id,
+                                payload: { model: e.target.value, use_provider_default: false },
+                              });
+                              v2toast.success("Model updated");
+                            } catch (error) {
+                              v2toast.error(extractErrorMessage(error, "Update failed"));
+                            }
+                          }
+                        }}
+                      />
+                    );
+                  })()}
                 </div>
                 <div>
                   <div className="v2-field-label">Provider</div>
