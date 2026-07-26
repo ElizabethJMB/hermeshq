@@ -789,6 +789,18 @@
   font-weight: 650;
   font-size: 14px;
   flex-shrink: 0;
+  border: 1px solid var(--v2-border);
+}
+
+/* When AgentAvatar (V1 component) renders inside V2, style its fallback */
+.v2-root .org-icon-background,
+.v2-root [class*="org-icon-background"] {
+  background: var(--v2-accent-subtle) !important;
+}
+
+.v2-root img[class*="object-cover"] {
+  border-radius: 8px;
+  border: 1px solid var(--v2-border);
 }
 
 .v2-agent-name {
