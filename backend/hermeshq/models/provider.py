@@ -1,4 +1,6 @@
-from sqlalchemy import Boolean, Integer, String, Text
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -22,3 +24,4 @@ class ProviderDefinition(TimestampMixin, Base):
     supports_custom_base_url: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    models_refreshed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

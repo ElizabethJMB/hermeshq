@@ -1,14 +1,20 @@
 import { useEffect, useState } from "react";
 
-import { useProviders, useUpdateProvider } from "../../api/providers";
+import { useProviders, useUpdateProvider, useRefreshProviderModels } from "../../api/providers";
 import { useI18n } from "../../lib/i18n";
 import { useSessionStore } from "../../stores/sessionStore";
+
+const FETCHABLE_PROVIDERS = new Set([
+  "openai-codex", "nvidia-nim", "nous-api", "openai-api", "openai-compatible", "gemini-api",
+]);
 
 export function ProvidersTab() {
   const currentUser = useSessionStore((state) => state.user);
   const { t } = useI18n();
   const { data: providers } = useProviders(Boolean(currentUser));
   const updateProvider = useUpdateProvider();
+  const refreshModels = useRefreshProviderModels();
+  const [refreshStatus, setRefreshStatus] = useState<Record<string, { ok: boolean; msg: string } | null>>({});
 
   const [providerDrafts, setProviderDrafts] = useState<Record<string, {
     name: string;
@@ -68,7 +74,23 @@ export function ProvidersTab() {
         {(providers ?? []).map((provider) => {
           const draft = providerDrafts[provider.slug];
           if (!draft) return null;
-          return (
+  async function refreshProviderModels(providerSlug: string) {
+    setRefreshStatus((prev) => ({ ...prev, [providerSlug]: null }));
+    try {
+      const result = await refreshModels.mutateAsync(providerSlug);
+      setRefreshStatus((prev) => ({
+        ...prev,
+        [providerSlug]: { ok: true, msg: `${result.count} models fetched` },
+      }));
+    } catch (error) {
+      const msg = error && typeof error === "object" && "response" in error
+        ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? "Refresh failed"
+        : "Refresh failed";
+      setRefreshStatus((prev) => ({ ...prev, [providerSlug]: { ok: false, msg } }));
+    }
+  }
+
+  return (
             <article key={provider.slug} className="border border-[var(--border)] bg-[var(--surface-raised)] p-5">
               <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-4">
                 <div>
@@ -150,6 +172,33 @@ export function ProvidersTab() {
                     }
                   />
                 </label>
+                {FETCHABLE_PROVIDERS.has(provider.runtime_provider) ? (
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="panel-button-secondary text-sm"
+                      onClick={() => void refreshProviderModels(provider.slug)}
+                      disabled={refreshModels.isPending && refreshModels.variables === provider.slug}
+                    >
+                      {refreshModels.isPending && refreshModels.variables === provider.slug
+                        ? "Fetching…"
+                        : "↻ Refresh from API"}
+                    </button>
+                    {refreshStatus[provider.slug] ? (
+                      <span
+                        className="text-sm"
+                        style={{ color: refreshStatus[provider.slug]!.ok ? "var(--success)" : "var(--danger)" }}
+                      >
+                        {refreshStatus[provider.slug]!.ok ? "✓ " : "✗ "}
+                        {refreshStatus[provider.slug]!.msg}
+                      </span>
+                    ) : provider.models_refreshed_at ? (
+                      <span className="text-xs text-[var(--text-disabled)]">
+                        Last: {new Date(provider.models_refreshed_at).toLocaleString()}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="grid gap-2 text-sm text-[var(--text-secondary)]">
                   <p>{t("providers.authType")}: {provider.auth_type}</p>
                   <p>{t("providers.secretUsage")}: {provider.supports_secret_ref ? t("providers.secretSupported") : t("providers.secretNotSupported")}</p>

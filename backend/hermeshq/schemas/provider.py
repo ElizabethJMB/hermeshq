@@ -33,5 +33,6 @@ class ProviderRead(ORMModel):
     supports_custom_base_url: bool
     enabled: bool
     sort_order: int
+    models_refreshed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
