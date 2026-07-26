@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useAgent, useAgentAction, useUpdateAgent, useDeleteAgent } from "../../api/agents";
 import { useProviders } from "../../api/providers";
+import { useSecrets } from "../../api/secrets";
+import { useHermesVersions } from "../../api/hermesVersions";
 import { useLogs } from "../../api/logs";
 import { useRuntimeLedger } from "../../api/runtimeLedger";
 import { useTasks, useCreateTask } from "../../api/tasks";
@@ -54,6 +56,8 @@ export function V2AgentDetailPage() {
   const { data: providers } = useProviders(true);
   const currentUser = useSessionStore((state) => state.user);
   const isAdmin = currentUser?.role === "admin";
+  const { data: secrets } = useSecrets(isAdmin);
+  const { data: hermesVersions } = useHermesVersions(isAdmin);
 
   const [tab, setTab] = useState<DetailTab>("conversation");
   const [prompt, setPrompt] = useState("");
@@ -359,8 +363,8 @@ export function V2AgentDetailPage() {
                   <label className="v2-field-label">Model</label>
                   {(() => {
                     const agentProvider = (providers ?? []).find(
-                      (p) => p.runtime_provider === agent.provider || p.slug === agent.provider,
-                    );
+                      (p) => p.runtime_provider === agent.provider && (p.available_models ?? []).length > 0,
+                    ) ?? (providers ?? []).find((p) => p.slug === agent.provider);
                     const availableModels = agentProvider?.available_models ?? [];
                     const currentModel = agent.model ?? "";
                     if (availableModels.length > 0) {
