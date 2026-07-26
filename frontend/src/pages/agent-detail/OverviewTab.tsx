@@ -441,7 +441,9 @@ export function OverviewTab({
                         <span className="panel-label">{t("agents.model")}</span>
                         {isAdmin ? (
                           (() => {
-                            const agentProvider = providers?.find((p) => p.slug === agent?.provider);
+                            const agentProvider = providers?.find(
+                              (p) => p.runtime_provider === agent?.provider && (p.available_models ?? []).length > 0,
+                            ) ?? providers?.find((p) => p.slug === agent?.provider);
                             const providerModels = [
                               ...(agentProvider?.default_model ? [agentProvider.default_model] : []),
                               ...(agentProvider?.available_models ?? []),
