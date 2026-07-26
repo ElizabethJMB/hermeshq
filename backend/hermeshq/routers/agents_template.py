@@ -95,7 +95,8 @@ async def bootstrap_system_operator(
         existing.is_system_agent = True
         existing.system_scope = "admin"
         existing.team_tags = ["system", "control-plane", "operations"]
-        existing.enabled_toolsets = []
+        from hermeshq.services.runtime_capabilities import STANDARD_ENABLED_TOOLSETS
+        existing.enabled_toolsets = list(STANDARD_ENABLED_TOOLSETS) + ["hermeshq_control", "hermeshq_comms"]
         existing.disabled_toolsets = []
         existing.can_send_tasks = True
         existing.can_receive_tasks = True
@@ -145,8 +146,8 @@ async def bootstrap_system_operator(
         can_receive_tasks=True,
     )
     _apply_runtime_profile_defaults(agent, "technical", overwrite_toolsets=True)
-    agent.enabled_toolsets = []
-    agent.disabled_toolsets = []
+    from hermeshq.services.runtime_capabilities import STANDARD_ENABLED_TOOLSETS
+    agent.enabled_toolsets = list(STANDARD_ENABLED_TOOLSETS) + ["hermeshq_control", "hermeshq_comms"]
     db.add(agent)
     await db.flush()
     workspace_manager = request.app.state.workspace_manager
