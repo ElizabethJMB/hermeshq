@@ -383,7 +383,7 @@
 
 .v2-btn-primary {
   background: var(--v2-accent);
-  color: var(--v2-accent-contrast);
+  color: var(--v2-accent-contrast) !important;
 }
 
 .v2-btn-primary:hover:not(:disabled) {
@@ -912,7 +912,7 @@
   cursor: pointer;
   border: 1px solid transparent;
   background: var(--v2-accent);
-  color: var(--v2-accent-contrast);
+  color: var(--v2-accent-contrast) !important;
   transition: all 0.15s ease;
   white-space: nowrap;
 }
