@@ -33,3 +33,18 @@ export function useUpdateProvider() {
     },
   });
 }
+
+export function useRefreshProviderModels() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (providerSlug: string) => {
+      const { data } = await apiClient.post<{ models: string[]; count: number; refreshed_at: string }>(
+        `/providers/${providerSlug}/refresh-models`,
+      );
+      return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["providers"] });
+    },
+  });
+}
