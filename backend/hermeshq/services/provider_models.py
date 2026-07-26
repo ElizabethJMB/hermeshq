@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.models.app_settings import AppSettings
