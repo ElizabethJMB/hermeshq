@@ -4,7 +4,7 @@ import { useProviders, useUpdateProvider, useRefreshProviderModels } from "../..
 import { useI18n } from "../../lib/i18n";
 import { useSessionStore } from "../../stores/sessionStore";
 
-const NON_FETCHABLE = new Set(["anthropic", "anthropic-api", "bedrock"]);
+const NON_FETCHABLE = new Set(["bedrock"]);
 
 function canFetchModels(provider: { auth_type: string; base_url: string | null; runtime_provider: string }): boolean {
   return provider.auth_type === "api_key" && Boolean(provider.base_url) && !NON_FETCHABLE.has(provider.runtime_provider);
@@ -150,15 +150,33 @@ export function ProvidersTab() {
                 </label>
                 <label className="panel-field">
                   <span className="panel-label">{t("providers.defaultModel")}</span>
-                  <input
-                    value={draft.default_model}
-                    onChange={(event) =>
-                      setProviderDrafts((current) => ({
-                        ...current,
-                        [provider.slug]: { ...current[provider.slug], default_model: event.target.value },
-                      }))
-                    }
-                  />
+                  {(provider.available_models ?? []).length > 0 ? (
+                    <select
+                      value={draft.default_model}
+                      onChange={(event) =>
+                        setProviderDrafts((current) => ({
+                          ...current,
+                          [provider.slug]: { ...current[provider.slug], default_model: event.target.value },
+                        }))
+                      }
+                    >
+                      <option value="">— Select model —</option>
+                      {(provider.available_models ?? []).map((model) => (
+                        <option key={model} value={model}>{model}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={draft.default_model}
+                      onChange={(event) =>
+                        setProviderDrafts((current) => ({
+                          ...current,
+                          [provider.slug]: { ...current[provider.slug], default_model: event.target.value },
+                        }))
+                      }
+                      placeholder="Refresh models first or type manually"
+                    />
+                  )}
                 </label>
                 <label className="panel-field">
                   <span className="panel-label">{t("providers.availableModels")}</span>
