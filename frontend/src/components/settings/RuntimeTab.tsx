@@ -211,7 +211,17 @@ export function RuntimeTab() {
             <button
               className="panel-button-primary"
               type="button"
-              onClick={() => bootstrapSystemOperator.mutate()}
+              onClick={() => {
+                bootstrapSystemOperator.mutate(undefined, {
+                  onSuccess: () => alert("HQ Operator created successfully"),
+                  onError: (error) => {
+                    const msg = error && typeof error === "object" && "response" in error
+                      ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? "Failed to create"
+                      : "Failed to create HQ Operator";
+                    alert(msg);
+                  },
+                });
+              }}
               disabled={bootstrapSystemOperator.isPending}
             >
               {bootstrapSystemOperator.isPending

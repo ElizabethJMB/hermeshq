@@ -61,6 +61,9 @@ export function useBootstrapSystemOperator() {
       await queryClient.invalidateQueries({ queryKey: ["agents", agent.id] });
       await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
+    onError: (error) => {
+      console.error("Bootstrap failed:", error);
+    },
   });
 }
 

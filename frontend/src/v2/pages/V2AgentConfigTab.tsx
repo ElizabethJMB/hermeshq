@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import type { Agent, ProviderDefinition, Secret, HermesVersion } from "../../types/api";
+import type { Agent, ProviderDefinition, Secret, HermesVersion, AuxiliaryModelEntry } from "../../types/api";
 import type { UseMutationResult } from "@tanstack/react-query";
 import type { AppSettings } from "../../types/api";
 import { v2toast, extractErrorMessage } from "../toast";
@@ -47,11 +47,20 @@ export function V2AgentConfigTab({
   const [approvalMode, setApprovalMode] = useState(agent.approval_mode ?? "inherit");
   const [toolProgressMode, setToolProgressMode] = useState(agent.tool_progress_mode ?? "inherit");
   const [gatewayNotifMode, setGatewayNotifMode] = useState(agent.gateway_notifications_mode ?? "inherit");
+  const [runtimeProfile, setRuntimeProfile] = useState(agent.runtime_profile ?? "standard");
   const [hermesVersion, setHermesVersion] = useState(agent.hermes_version || "");
   const [fbProvider, setFbProvider] = useState(agent.fallback_provider ?? "");
   const [fbModel, setFbModel] = useState(agent.fallback_model ?? "");
   const [fbKeyRef, setFbKeyRef] = useState(agent.fallback_api_key_ref ?? "");
   const [fbBaseUrl, setFbBaseUrl] = useState(agent.fallback_base_url ?? "");
+  const [auxDraft, setAuxDraft] = useState<Record<string, AuxiliaryModelEntry>>(
+    agent.auxiliary_models ?? {},
+  );
+  const AUX_TASKS = [
+    { key: "vision", label: "Vision" },
+    { key: "compression", label: "Compression" },
+    { key: "web_extract", label: "Web extract" },
+  ];
 
   const fbProviderDef = providers.find((p) => p.runtime_provider === fbProvider && (p.available_models ?? []).length > 0);
 
@@ -65,11 +74,13 @@ export function V2AgentConfigTab({
       approval_mode: approvalMode,
       tool_progress_mode: toolProgressMode,
       gateway_notifications_mode: gatewayNotifMode,
+      runtime_profile: runtimeProfile,
       hermes_version: hermesVersion || null,
       fallback_provider: fbProvider || null,
       fallback_model: fbModel || null,
       fallback_api_key_ref: fbKeyRef || null,
       fallback_base_url: fbBaseUrl || null,
+      auxiliary_models: Object.keys(auxDraft).length > 0 ? auxDraft : null,
     };
     if (!useProviderDefault) payload.model = customModel || null;
     updateAgent
@@ -158,6 +169,13 @@ export function V2AgentConfigTab({
         <div className="v2-card-header"><h2 className="v2-card-title">Runtime & interaction</h2></div>
         <div className="v2-card-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div className="v2-field">
+            <label className="v2-field-label">Runtime profile</label>
+            <select className="v2-select" value={runtimeProfile} onChange={(e) => setRuntimeProfile(e.target.value)} disabled={!isAdmin}>
+              <option value="standard">Standard</option>
+              <option value="technical">Technical</option>
+            </select>
+          </div>
+          <div className="v2-field">
             <label className="v2-field-label">Hermes version</label>
             <select className="v2-select" value={hermesVersion} onChange={(e) => setHermesVersion(e.target.value)} disabled={!isAdmin}>
               <option value="">Instance default</option>
@@ -229,6 +247,72 @@ export function V2AgentConfigTab({
               <label className="v2-field-label">Base URL</label>
               <input className="v2-input v2-mono" value={fbBaseUrl} onChange={(e) => setFbBaseUrl(e.target.value)} disabled={!isAdmin || !fbProvider} />
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="v2-card" style={{ gridColumn: "1 / -1" }}>
+        <div className="v2-card-header"><h2 className="v2-card-title">Auxiliary models</h2></div>
+        <div className="v2-card-body">
+          <p className="v2-field-hint" style={{ marginBottom: 14 }}>
+            Override the provider/model used for background tasks (vision, compression, web extraction). Leave empty to use the agent's default.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+            {AUX_TASKS.map((task) => {
+              const entry = auxDraft[task.key] ?? { provider: null, model: null, api_key_ref: null, base_url: null };
+              const auxProv = providers.find((p) => p.runtime_provider === entry.provider && (p.available_models ?? []).length > 0);
+              return (
+                <div key={task.key} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div className="v2-field-label">{task.label}</div>
+                  <select
+                    className="v2-select"
+                    value={entry.provider ?? ""}
+                    onChange={(e) => setAuxDraft((prev) => ({
+                      ...prev,
+                      [task.key]: { ...entry, provider: e.target.value || null },
+                    }))}
+                    disabled={!isAdmin}
+                  >
+                    <option value="">Use default</option>
+                    {providers.filter((p) => p.enabled).map((p) => (
+                      <option key={p.slug} value={p.runtime_provider}>{p.name}</option>
+                    ))}
+                  </select>
+                  {entry.provider ? (
+                    <>
+                      <select
+                        className="v2-select"
+                        value={entry.model ?? ""}
+                        onChange={(e) => setAuxDraft((prev) => ({
+                          ...prev,
+                          [task.key]: { ...entry, model: e.target.value || null },
+                        }))}
+                        disabled={!isAdmin}
+                      >
+                        <option value="">Default model</option>
+                        {(auxProv?.available_models ?? []).map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                      <select
+                        className="v2-select"
+                        value={entry.api_key_ref ?? ""}
+                        onChange={(e) => setAuxDraft((prev) => ({
+                          ...prev,
+                          [task.key]: { ...entry, api_key_ref: e.target.value || null },
+                        }))}
+                        disabled={!isAdmin}
+                      >
+                        <option value="">Default key</option>
+                        {secrets.map((s) => (
+                          <option key={s.name} value={s.name}>{s.name}</option>
+                        ))}
+                      </select>
+                    </>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
