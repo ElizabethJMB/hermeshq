@@ -20,12 +20,6 @@ export function V2AgentConfigTab({
   hermesVersions: HermesVersion[];
   updateAgent: UseMutationResult<Agent, Error, { agentId: string; payload: Record<string, unknown> }>;
 }) {
-  const agentProvider =
-    providers.find((p) => p.runtime_provider === provider && (p.available_models ?? []).length > 0) ??
-    providers.find((p) => p.runtime_provider === agent.provider && (p.available_models ?? []).length > 0) ??
-    providers.find((p) => p.slug === agent.provider);
-  const availableModels = agentProvider?.available_models ?? [];
-
   const [useProviderDefault, setUseProviderDefault] = useState(agent.use_provider_default);
   const [customModel, setCustomModel] = useState(agent.model ?? "");
   const [provider, setProvider] = useState(agent.provider ?? "");
@@ -52,6 +46,11 @@ export function V2AgentConfigTab({
     { key: "web_extract", label: "Web extract" },
   ];
 
+  const agentProvider =
+    providers.find((p) => p.runtime_provider === provider && (p.available_models ?? []).length > 0) ??
+    providers.find((p) => p.runtime_provider === agent.provider && (p.available_models ?? []).length > 0) ??
+    providers.find((p) => p.slug === agent.provider);
+  const availableModels = agentProvider?.available_models ?? [];
   const fbProviderDef = providers.find((p) => p.runtime_provider === fbProvider && (p.available_models ?? []).length > 0);
 
   function saveRuntimeConfig() {
