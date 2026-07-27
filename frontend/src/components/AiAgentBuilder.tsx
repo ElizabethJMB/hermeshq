@@ -32,20 +32,28 @@ interface EditableDraft extends AgentDraft {
 
 const TEMPLATES = [
   {
-    name: "Support Agent",
-    prompt: "Create a customer support agent that can answer questions about our product, escalate issues to human agents, and maintain a friendly tone.",
+    name: "Agente de Soporte",
+    prompt: "Crea un agente de soporte al cliente que pueda responder preguntas sobre nuestro producto, escalar problemas a agentes humanos y mantener un tono amable.",
   },
   {
-    name: "News Summarizer",
-    prompt: "Create an agent that searches for news on a specific topic, summarizes them into a daily digest, and sends it via email or Telegram.",
+    name: "Resumidor de Noticias",
+    prompt: "Crea un agente que busque noticias sobre un tema específico, las resuma en un digest diario y lo envíe por correo o Telegram.",
   },
   {
-    name: "Admin Assistant",
-    prompt: "Create an administrative assistant agent that can manage calendar events, draft emails, and organize documents in SharePoint.",
+    name: "Asistente Administrativo",
+    prompt: "Crea un asistente administrativo que pueda gestionar eventos de calendario, redactar correos y organizar documentos en SharePoint.",
   },
   {
-    name: "Data Analyst",
-    prompt: "Create a data analyst agent that can read CSV/Excel files, generate reports with charts, and answer questions about the data.",
+    name: "Analista de Datos",
+    prompt: "Crea un analista de datos que pueda leer archivos CSV/Excel, generar reportes con gráficos y responder preguntas sobre los datos.",
+  },
+  {
+    name: "Monitor de Redes",
+    prompt: "Crea un agente técnico que monitore equipos de red, ejecute diagnósticos (ping, traceroute) y reporte el estado de la infraestructura.",
+  },
+  {
+    name: "Gestor de Tareas",
+    prompt: "Crea un agente supervisor que pueda delegar tareas a otros agentes, hacer seguimiento del estado y reportar resultados consolidados.",
   },
 ];
 
