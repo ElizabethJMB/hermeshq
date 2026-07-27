@@ -3,20 +3,7 @@ import { Link } from "react-router-dom";
 
 import type { Agent, ProviderDefinition, Secret, HermesVersion, AuxiliaryModelEntry } from "../../types/api";
 import type { UseMutationResult } from "@tanstack/react-query";
-import type { AppSettings } from "../../types/api";
 import { v2toast, extractErrorMessage } from "../toast";
-
-function saveField(
-  updateAgent: UseMutationResult<Agent, Error, { agentId: string; payload: Record<string, unknown> }>,
-  agentId: string,
-  field: string,
-  value: unknown,
-) {
-  updateAgent
-    .mutateAsync({ agentId, payload: { [field]: value } })
-    .then(() => v2toast.success("Saved"))
-    .catch((error) => v2toast.error(extractErrorMessage(error, "Save failed")));
-}
 
 export function V2AgentConfigTab({
   agent,
@@ -46,6 +33,7 @@ export function V2AgentConfigTab({
   const [baseUrl, setBaseUrl] = useState(agent.base_url ?? "");
   const [systemPrompt, setSystemPrompt] = useState(agent.system_prompt ?? "");
   const [friendlyName, setFriendlyName] = useState(agent.friendly_name ?? "");
+  const [description, setDescription] = useState(agent.description ?? "");
   const [approvalMode, setApprovalMode] = useState(agent.approval_mode ?? "inherit");
   const [toolProgressMode, setToolProgressMode] = useState(agent.tool_progress_mode ?? "inherit");
   const [gatewayNotifMode, setGatewayNotifMode] = useState(agent.gateway_notifications_mode ?? "inherit");
@@ -69,6 +57,7 @@ export function V2AgentConfigTab({
   function saveRuntimeConfig() {
     const payload: Record<string, unknown> = {
       friendly_name: friendlyName,
+      description: description || null,
       provider: provider || agent.provider,
       use_provider_default: useProviderDefault,
       api_key_ref: apiKeyRef || null,
@@ -107,8 +96,7 @@ export function V2AgentConfigTab({
           </div>
           <div className="v2-field">
             <label className="v2-field-label">Description</label>
-            <input className="v2-input" defaultValue={agent.description ?? ""} disabled={!isAdmin}
-              onBlur={(e) => isAdmin && saveField(updateAgent, agent.id, "description", e.target.value || null)} />
+            <input className="v2-input" value={description} onChange={(e) => setDescription(e.target.value)} disabled={!isAdmin} />
           </div>
         </div>
       </section>
