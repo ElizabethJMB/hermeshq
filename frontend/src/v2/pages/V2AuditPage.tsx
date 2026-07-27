@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { useAgents } from "../../api/agents";
 import { useLogs } from "../../api/logs";
+import { useI18n } from "../../lib/i18n";
 
 function severityTone(severity: string): "error" | "warn" | "info" | "neutral" {
   if (severity === "error" || severity === "critical") return "error";
@@ -11,6 +12,7 @@ function severityTone(severity: string): "error" | "warn" | "info" | "neutral" {
 }
 
 export function V2AuditPage() {
+  const { t } = useI18n();
   const { data: agents } = useAgents();
   const [agentFilter, setAgentFilter] = useState("");
   const [query, setQuery] = useState("");
@@ -22,19 +24,19 @@ export function V2AuditPage() {
     <div>
       <div className="v2-page-header">
         <div>
-          <h1 className="v2-page-title">Audit log</h1>
-          <p className="v2-page-subtitle">Activity across all agents and users</p>
+          <h1 className="v2-page-title">{t("v2.auditLog")}</h1>
+          <p className="v2-page-subtitle">{t("v2.activityAllAgents")}</p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           <input
             className="v2-input"
             style={{ width: 220 }}
-            placeholder="Search events…"
+            placeholder={t("v2.searchEvents")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
           <select className="v2-select" style={{ width: 180 }} value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)}>
-            <option value="">All agents</option>
+            <option value="">{t("v2.allAgents")}</option>
             {(agents ?? []).map((agent) => (
               <option key={agent.id} value={agent.id}>{agent.friendly_name || agent.name}</option>
             ))}
@@ -46,10 +48,10 @@ export function V2AuditPage() {
         <table className="v2-table">
           <thead>
             <tr>
-              <th>Time</th>
-              <th>Event</th>
-              <th>Message</th>
-              <th>Severity</th>
+              <th>{t("v2.time")}</th>
+              <th>{t("v2.event")}</th>
+              <th>{t("v2.message")}</th>
+              <th>{t("v2.severity")}</th>
             </tr>
           </thead>
           <tbody>
@@ -57,7 +59,7 @@ export function V2AuditPage() {
               <tr>
                 <td colSpan={4}>
                   <div className="v2-empty">
-                    <p className="v2-empty-title">No events</p>
+                    <p className="v2-empty-title">{t("v2.noEvents")}</p>
                   </div>
                 </td>
               </tr>
@@ -90,7 +92,7 @@ export function V2AuditPage() {
         {hasNextPage ? (
           <div style={{ padding: 14, textAlign: "center", borderTop: "1px solid var(--v2-border)" }}>
             <button className="v2-btn v2-btn-secondary" onClick={() => void fetchNextPage()} disabled={isFetchingNextPage}>
-              {isFetchingNextPage ? "Loading…" : "Load older events"}
+              {isFetchingNextPage ? t("v2.loading") : t("v2.loadOlder")}
             </button>
           </div>
         ) : null}

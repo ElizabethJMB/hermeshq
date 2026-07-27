@@ -17,6 +17,7 @@ import settings from "./settings";
 import shell from "./shell";
 import tasks from "./tasks";
 import users from "./users";
+import v2 from "./v2";
 
 const en: Record<string, string> = {
   ...account,
@@ -38,6 +39,7 @@ const en: Record<string, string> = {
   ...shell,
   ...tasks,
   ...users,
+  ...v2,
 };
 
 export default en;

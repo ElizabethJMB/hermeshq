@@ -8,6 +8,7 @@ import { useProviders } from "../../api/providers";
 import { useSecrets } from "../../api/secrets";
 import { useSessionStore } from "../../stores/sessionStore";
 import { v2toast, extractErrorMessage } from "../toast";
+import { useI18n } from "../../lib/i18n";
 
 function statusTone(status: string): "success" | "error" | "warn" | "neutral" {
   if (status === "running") return "success";
@@ -26,6 +27,7 @@ function slugify(value: string) {
 }
 
 export function V2AgentsPage() {
+  const { t } = useI18n();
   const { data: agents, isLoading } = useAgents();
   const { data: nodes } = useNodes();
   const { data: providers } = useProviders();
@@ -85,12 +87,12 @@ export function V2AgentsPage() {
     setCreateError(null);
     const nodeId = nodes?.[0]?.id;
     if (!nodeId) {
-      setCreateError("No compute node available");
+      setCreateError(t("v2.noComputeNode"));
       return;
     }
     const name = friendlyName.trim();
     if (!name) {
-      setCreateError("Name is required");
+      setCreateError(t("v2.nameRequired"));
       return;
     }
     try {
@@ -113,30 +115,30 @@ export function V2AgentsPage() {
         payload.system_prompt = systemPrompt.trim();
       }
       const created = await createAgent.mutateAsync(payload);
-      v2toast.success(`Agent "${name}" created`);
+      v2toast.success(t("v2.agentCreated", { name }));
       resetCreateForm();
       setShowCreate(false);
       window.location.href = `/v2/agents/${created.id}`;
     } catch (error) {
-      setCreateError(extractErrorMessage(error, "Agent creation failed"));
+      setCreateError(extractErrorMessage(error, t("v2.agentCreationFailed")));
     }
   }
 
   async function handleStart(agentId: string, name: string) {
     try {
       await startAgent.mutateAsync(agentId);
-      v2toast.success(`${name} started`);
+      v2toast.success(t("v2.agentStarted", { name }));
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, `Failed to start ${name}`));
+      v2toast.error(extractErrorMessage(error, t("v2.failedToStart", { name })));
     }
   }
 
   async function handleStop(agentId: string, name: string) {
     try {
       await stopAgent.mutateAsync(agentId);
-      v2toast.success(`${name} stopped`);
+      v2toast.success(t("v2.agentStopped", { name }));
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, `Failed to stop ${name}`));
+      v2toast.error(extractErrorMessage(error, t("v2.failedToStop", { name })));
     }
   }
 
@@ -144,20 +146,20 @@ export function V2AgentsPage() {
     <div>
       <div className="v2-page-header">
         <div>
-          <h1 className="v2-page-title">Agents</h1>
-          <p className="v2-page-subtitle">{(agents ?? []).length} agents configured</p>
+          <h1 className="v2-page-title">{t("v2.agents")}</h1>
+          <p className="v2-page-subtitle">{(agents ?? []).length} {t("v2.agentsConfigured")}</p>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <input
             className="v2-input"
             style={{ width: 240 }}
-            placeholder="Filter by name, model, status…"
+            placeholder={t("v2.filterPlaceholder")}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
           {isAdmin ? (
             <button className="v2-btn v2-btn-primary" onClick={() => setShowCreate((v) => !v)}>
-              {showCreate ? "Close" : "New agent"}
+              {showCreate ? t("v2.close") : t("v2.newAgentBtn")}
             </button>
           ) : null}
         </div>
@@ -166,20 +168,20 @@ export function V2AgentsPage() {
       {showCreate && isAdmin ? (
         <form className="v2-card v2-section" onSubmit={onCreateSubmit}>
           <div className="v2-card-header">
-            <h2 className="v2-card-title">Create agent</h2>
+            <h2 className="v2-card-title">{t("v2.createAgent")}</h2>
             <Link to="/builder" className="v2-btn v2-btn-ghost" style={{ fontSize: 12 }}>
-              Prefer the AI Builder? ✨
+              {t("v2.preferAiBuilder")}
             </Link>
           </div>
           <div className="v2-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div className="v2-field">
-                <label className="v2-field-label">Name *</label>
-                <input className="v2-input" value={friendlyName} onChange={(e) => setFriendlyName(e.target.value)} required placeholder="e.g. Support Agent" autoFocus />
-                <span className="v2-field-hint">Slug: {friendlyName.trim() ? slugify(friendlyName) : "—"}</span>
+                <label className="v2-field-label">{t("v2.name")} *</label>
+                <input className="v2-input" value={friendlyName} onChange={(e) => setFriendlyName(e.target.value)} required placeholder={t("v2.namePlaceholder")} autoFocus />
+                <span className="v2-field-hint">{t("v2.slug")}: {friendlyName.trim() ? slugify(friendlyName) : "—"}</span>
               </div>
               <div className="v2-field">
-                <label className="v2-field-label">Provider preset</label>
+                <label className="v2-field-label">{t("v2.providerPreset")}</label>
                 <select
                   className="v2-select"
                   value={provider}
@@ -190,7 +192,7 @@ export function V2AgentsPage() {
                     if (p?.base_url) setBaseUrl(p.base_url);
                   }}
                 >
-                  <option value="">Use instance default</option>
+                  <option value="">{t("v2.useInstanceDefault")}</option>
                   {(providers ?? []).filter((p) => p.enabled).map((p) => (
                     <option key={p.slug} value={p.runtime_provider}>{p.name}</option>
                   ))}
@@ -198,7 +200,7 @@ export function V2AgentsPage() {
               </div>
               {provider ? (
                 <div className="v2-field">
-                  <label className="v2-field-label">Model</label>
+                  <label className="v2-field-label">{t("v2.model")}</label>
                   {selectedProvider?.available_models?.length ? (
                     <select className="v2-select" value={model} onChange={(e) => setModel(e.target.value)}>
                       {selectedProvider.available_models.map((m) => (
@@ -216,36 +218,36 @@ export function V2AgentsPage() {
               {provider ? (
                 <>
                   <div className="v2-field">
-                    <label className="v2-field-label">API key (secret)</label>
+                    <label className="v2-field-label">{t("v2.apiKey")}</label>
                     <select className="v2-select" value={apiKeyRef} onChange={(e) => setApiKeyRef(e.target.value)}>
-                      <option value="">None</option>
+                      <option value="">{t("v2.none")}</option>
                       {providerSecrets.map((s) => (
                         <option key={s.name} value={s.name}>{s.name}</option>
                       ))}
                     </select>
                   </div>
                   <div className="v2-field">
-                    <label className="v2-field-label">Base URL</label>
+                    <label className="v2-field-label">{t("v2.baseUrl")}</label>
                     <input className="v2-input" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={selectedProvider?.base_url ?? "https://api.example.com/v1"} />
                   </div>
                 </>
               ) : null}
               <details className="v2-details">
-                <summary>Advanced</summary>
+                <summary>{t("v2.advanced")}</summary>
                 <div className="v2-details-body" style={{ paddingTop: 14 }}>
                   <div className="v2-field">
-                    <label className="v2-field-label">System prompt</label>
-                    <textarea className="v2-textarea" rows={5} value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} placeholder="Custom instructions for this agent (optional)" />
+                    <label className="v2-field-label">{t("v2.systemPrompt")}</label>
+                    <textarea className="v2-textarea" rows={5} value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} placeholder={t("v2.systemPromptPlaceholder")} />
                   </div>
                 </div>
               </details>
               {createError ? <p className="v2-field-error">{createError}</p> : null}
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                 <button type="submit" className="v2-btn v2-btn-primary" disabled={createAgent.isPending}>
-                  {createAgent.isPending ? "Creating…" : "Create agent"}
+                  {createAgent.isPending ? t("v2.creating") : t("v2.createAgent")}
                 </button>
                 <button type="button" className="v2-btn v2-btn-secondary" onClick={() => { resetCreateForm(); setShowCreate(false); }}>
-                  Cancel
+                  {t("v2.cancel")}
                 </button>
               </div>
             </div>
@@ -262,13 +264,13 @@ export function V2AgentsPage() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="v2-empty">
-            <p className="v2-empty-title">{filter ? "No agents match your filter" : "No agents yet"}</p>
+            <p className="v2-empty-title">{filter ? t("v2.noAgentsMatch") : t("v2.noAgentsYet")}</p>
             <p className="v2-empty-text">
-              {filter ? "Try a different search." : "Create your first agent to get started."}
+              {filter ? t("v2.tryDifferentSearch") : t("v2.createFirstAgentShort")}
             </p>
             {!filter && isAdmin ? (
               <div className="v2-empty-action">
-                <button className="v2-btn v2-btn-primary" onClick={() => setShowCreate(true)}>Create agent</button>
+                <button className="v2-btn v2-btn-primary" onClick={() => setShowCreate(true)}>{t("v2.createAgent")}</button>
               </div>
             ) : null}
           </div>
@@ -293,11 +295,11 @@ export function V2AgentsPage() {
                 </span>
                 {isRunning ? (
                   <button className="v2-btn v2-btn-secondary" style={{ padding: "6px 12px", fontSize: 12.5 }} disabled={stopAgent.isPending} onClick={() => void handleStop(agent.id, name)}>
-                    Stop
+                    {t("v2.stop")}
                   </button>
                 ) : (
                   <button className="v2-btn v2-btn-secondary" style={{ padding: "6px 12px", fontSize: 12.5 }} disabled={startAgent.isPending} onClick={() => void handleStart(agent.id, name)}>
-                    Start
+                    {t("v2.start")}
                   </button>
                 )}
               </div>

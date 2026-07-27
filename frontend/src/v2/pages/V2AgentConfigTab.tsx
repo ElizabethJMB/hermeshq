@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import type { Agent, ProviderDefinition, Secret, HermesVersion, AuxiliaryModelEntry } from "../../types/api";
 import type { UseMutationResult } from "@tanstack/react-query";
 import { v2toast, extractErrorMessage } from "../toast";
+import { useI18n } from "../../lib/i18n";
 
 export function V2AgentConfigTab({
   agent,
@@ -20,6 +21,7 @@ export function V2AgentConfigTab({
   hermesVersions: HermesVersion[];
   updateAgent: UseMutationResult<Agent, Error, { agentId: string; payload: Record<string, unknown> }>;
 }) {
+  const { t } = useI18n();
   const [useProviderDefault, setUseProviderDefault] = useState(agent.use_provider_default);
   const [customModel, setCustomModel] = useState(agent.model ?? "");
   const [provider, setProvider] = useState(agent.provider ?? "");
@@ -41,9 +43,9 @@ export function V2AgentConfigTab({
     agent.auxiliary_models ?? {},
   );
   const AUX_TASKS = [
-    { key: "vision", label: "Vision" },
-    { key: "compression", label: "Compression" },
-    { key: "web_extract", label: "Web extract" },
+    { key: "vision", label: t("v2.vision") },
+    { key: "compression", label: t("v2.compression") },
+    { key: "web_extract", label: t("v2.webExtract") },
   ];
 
   const agentProvider =
@@ -76,35 +78,35 @@ export function V2AgentConfigTab({
     if (!useProviderDefault) payload.model = customModel || null;
     updateAgent
       .mutateAsync({ agentId: agent.id, payload })
-      .then(() => v2toast.success("Runtime config saved"))
-      .catch((error) => v2toast.error(extractErrorMessage(error, "Save failed")));
+      .then(() => v2toast.success(t("v2.runtimeConfigSaved")))
+      .catch((error) => v2toast.error(extractErrorMessage(error, t("v2.saveFailed"))));
   }
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, alignItems: "start" }}>
       <section className="v2-card">
-        <div className="v2-card-header"><h2 className="v2-card-title">Identity</h2></div>
+        <div className="v2-card-header"><h2 className="v2-card-title">{t("v2.identity")}</h2></div>
         <div className="v2-card-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div className="v2-field">
-            <label className="v2-field-label">Friendly name</label>
+            <label className="v2-field-label">{t("v2.friendlyName")}</label>
             <input className="v2-input" value={friendlyName} onChange={(e) => setFriendlyName(e.target.value)} disabled={!isAdmin} />
           </div>
           <div className="v2-field">
-            <label className="v2-field-label">Slug</label>
+            <label className="v2-field-label">{t("v2.slug")}</label>
             <input className="v2-input v2-mono" value={agent.slug} disabled />
           </div>
           <div className="v2-field">
-            <label className="v2-field-label">Description</label>
+            <label className="v2-field-label">{t("v2.description")}</label>
             <input className="v2-input" value={description} onChange={(e) => setDescription(e.target.value)} disabled={!isAdmin} />
           </div>
         </div>
       </section>
 
       <section className="v2-card">
-        <div className="v2-card-header"><h2 className="v2-card-title">Model & Provider</h2></div>
+        <div className="v2-card-header"><h2 className="v2-card-title">{t("v2.modelProvider")}</h2></div>
         <div className="v2-card-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div className="v2-field">
-            <label className="v2-field-label">Provider</label>
+            <label className="v2-field-label">{t("v2.provider")}</label>
             <select
               className="v2-select"
               value={provider}
@@ -119,7 +121,7 @@ export function V2AgentConfigTab({
               }}
               disabled={!isAdmin}
             >
-              <option value="">{agent.provider} (current)</option>
+              <option value="">{agent.provider} ({t("v2.current")})</option>
               {providers.filter((p) => p.enabled).map((p) => (
                 <option key={p.slug} value={p.runtime_provider}>
                   {p.name}
@@ -128,18 +130,18 @@ export function V2AgentConfigTab({
             </select>
           </div>
           <div className="v2-field">
-            <label className="v2-field-label">Use provider default model</label>
+            <label className="v2-field-label">{t("v2.useProviderDefault")}</label>
             <select className="v2-select" value={useProviderDefault ? "true" : "false"} onChange={(e) => setUseProviderDefault(e.target.value === "true")} disabled={!isAdmin}>
-              <option value="true">Yes</option>
-              <option value="false">No — choose custom model</option>
+              <option value="true">{t("v2.yes")}</option>
+              <option value="false">{t("v2.noCustom")}</option>
             </select>
           </div>
           {!useProviderDefault ? (
             <div className="v2-field">
-              <label className="v2-field-label">Model</label>
+              <label className="v2-field-label">{t("v2.model")}</label>
               {availableModels.length > 0 ? (
                 <select className="v2-select" value={customModel} onChange={(e) => setCustomModel(e.target.value)} disabled={!isAdmin}>
-                  {!availableModels.includes(customModel) && customModel ? <option value={customModel}>{customModel} (current)</option> : null}
+                  {!availableModels.includes(customModel) && customModel ? <option value={customModel}>{customModel} ({t("v2.current")})</option> : null}
                   {availableModels.map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
               ) : (
@@ -148,14 +150,14 @@ export function V2AgentConfigTab({
             </div>
           ) : null}
           <div className="v2-field">
-            <label className="v2-field-label">API key (secret)</label>
+            <label className="v2-field-label">{t("v2.apiKey")}</label>
             <select className="v2-select" value={apiKeyRef} onChange={(e) => setApiKeyRef(e.target.value)} disabled={!isAdmin}>
-              <option value="">None</option>
+              <option value="">{t("v2.none")}</option>
               {secrets.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
             </select>
           </div>
           <div className="v2-field">
-            <label className="v2-field-label">Base URL</label>
+            <label className="v2-field-label">{t("v2.baseUrl")}</label>
             <input className="v2-input v2-mono" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} disabled={!isAdmin}
               placeholder={agentProvider?.base_url ?? "https://api.example.com/v1"} />
           </div>
@@ -163,81 +165,81 @@ export function V2AgentConfigTab({
       </section>
 
       <section className="v2-card">
-        <div className="v2-card-header"><h2 className="v2-card-title">System prompt</h2></div>
+        <div className="v2-card-header"><h2 className="v2-card-title">{t("v2.systemPrompt")}</h2></div>
         <div className="v2-card-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div className="v2-field">
-            <label className="v2-field-label">System prompt</label>
+            <label className="v2-field-label">{t("v2.systemPrompt")}</label>
             <textarea className="v2-textarea" rows={8} value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} disabled={!isAdmin}
-              placeholder="Instructions that define the agent's behavior…" />
+              placeholder={t("v2.systemPromptPrompt")} />
           </div>
         </div>
       </section>
 
       <section className="v2-card">
-        <div className="v2-card-header"><h2 className="v2-card-title">Runtime & interaction</h2></div>
+        <div className="v2-card-header"><h2 className="v2-card-title">{t("v2.runtimeInteraction")}</h2></div>
         <div className="v2-card-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div className="v2-field">
-            <label className="v2-field-label">Runtime profile</label>
+            <label className="v2-field-label">{t("v2.runtimeProfile")}</label>
             <select className="v2-select" value={runtimeProfile} onChange={(e) => setRuntimeProfile(e.target.value)} disabled={!isAdmin}>
-              <option value="standard">Standard</option>
-              <option value="technical">Technical</option>
+              <option value="standard">{t("v2.standard")}</option>
+              <option value="technical">{t("v2.technical")}</option>
             </select>
           </div>
           <div className="v2-field">
-            <label className="v2-field-label">Hermes version</label>
+            <label className="v2-field-label">{t("v2.hermesVersion")}</label>
             <select className="v2-select" value={hermesVersion} onChange={(e) => setHermesVersion(e.target.value)} disabled={!isAdmin}>
-              <option value="">Instance default</option>
+              <option value="">{t("v2.instanceDefault")}</option>
               {hermesVersions.map((v) => <option key={v.version} value={v.release_tag ?? ""}>{v.version}</option>)}
             </select>
           </div>
           <div className="v2-field">
-            <label className="v2-field-label">Approval mode</label>
+            <label className="v2-field-label">{t("v2.approvalMode")}</label>
             <select className="v2-select" value={approvalMode} onChange={(e) => setApprovalMode(e.target.value)} disabled={!isAdmin}>
-              <option value="inherit">Inherit</option>
-              <option value="off">Off</option>
-              <option value="on_request">On request</option>
-              <option value="on_failure">On failure</option>
+              <option value="inherit">{t("v2.inherit")}</option>
+              <option value="off">{t("v2.off")}</option>
+              <option value="on_request">{t("v2.onRequest")}</option>
+              <option value="on_failure">{t("v2.onFailure")}</option>
             </select>
           </div>
           <div className="v2-field">
-            <label className="v2-field-label">Tool progress mode</label>
+            <label className="v2-field-label">{t("v2.toolProgress")}</label>
             <select className="v2-select" value={toolProgressMode} onChange={(e) => setToolProgressMode(e.target.value)} disabled={!isAdmin}>
-              <option value="inherit">Inherit</option>
-              <option value="on">On</option>
-              <option value="off">Off</option>
+              <option value="inherit">{t("v2.inherit")}</option>
+              <option value="on">{t("v2.on")}</option>
+              <option value="off">{t("v2.off")}</option>
             </select>
           </div>
           <div className="v2-field">
-            <label className="v2-field-label">Gateway notifications</label>
+            <label className="v2-field-label">{t("v2.gatewayNotif")}</label>
             <select className="v2-select" value={gatewayNotifMode} onChange={(e) => setGatewayNotifMode(e.target.value)} disabled={!isAdmin}>
-              <option value="inherit">Inherit</option>
-              <option value="all">All</option>
-              <option value="result">Result only</option>
-              <option value="off">Off</option>
+              <option value="inherit">{t("v2.inherit")}</option>
+              <option value="all">{t("v2.allOption")}</option>
+              <option value="result">{t("v2.resultOnly")}</option>
+              <option value="off">{t("v2.off")}</option>
             </select>
           </div>
         </div>
       </section>
 
       <section className="v2-card" style={{ gridColumn: "1 / -1" }}>
-        <div className="v2-card-header"><h2 className="v2-card-title">Fallback provider</h2></div>
+        <div className="v2-card-header"><h2 className="v2-card-title">{t("v2.fallbackProvider")}</h2></div>
         <div className="v2-card-body">
           <p className="v2-field-hint" style={{ marginBottom: 14 }}>
-            When the primary provider fails (rate limit, auth error, timeout), the agent retries with this fallback.
+            {t("v2.fallbackDesc")}
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14 }}>
             <div className="v2-field">
-              <label className="v2-field-label">Provider</label>
+              <label className="v2-field-label">{t("v2.provider")}</label>
               <select className="v2-select" value={fbProvider} onChange={(e) => setFbProvider(e.target.value)} disabled={!isAdmin}>
-                <option value="">None</option>
+                <option value="">{t("v2.none")}</option>
                 {providers.filter((p) => p.enabled).map((p) => <option key={p.slug} value={p.runtime_provider}>{p.name}</option>)}
               </select>
             </div>
             <div className="v2-field">
-              <label className="v2-field-label">Model</label>
+              <label className="v2-field-label">{t("v2.model")}</label>
               {(fbProviderDef?.available_models ?? []).length > 0 ? (
                 <select className="v2-select" value={fbModel} onChange={(e) => setFbModel(e.target.value)} disabled={!isAdmin || !fbProvider}>
-                  <option value="">Default</option>
+                  <option value="">{t("v2.defaultOption")}</option>
                   {(fbProviderDef?.available_models ?? []).map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
               ) : (
@@ -245,14 +247,14 @@ export function V2AgentConfigTab({
               )}
             </div>
             <div className="v2-field">
-              <label className="v2-field-label">API key</label>
+              <label className="v2-field-label">{t("v2.apiKeyShort")}</label>
               <select className="v2-select" value={fbKeyRef} onChange={(e) => setFbKeyRef(e.target.value)} disabled={!isAdmin || !fbProvider}>
-                <option value="">None</option>
+                <option value="">{t("v2.none")}</option>
                 {secrets.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
               </select>
             </div>
             <div className="v2-field">
-              <label className="v2-field-label">Base URL</label>
+              <label className="v2-field-label">{t("v2.baseUrl")}</label>
               <input className="v2-input v2-mono" value={fbBaseUrl} onChange={(e) => setFbBaseUrl(e.target.value)} disabled={!isAdmin || !fbProvider} />
             </div>
           </div>
@@ -260,10 +262,10 @@ export function V2AgentConfigTab({
       </section>
 
       <section className="v2-card" style={{ gridColumn: "1 / -1" }}>
-        <div className="v2-card-header"><h2 className="v2-card-title">Auxiliary models</h2></div>
+        <div className="v2-card-header"><h2 className="v2-card-title">{t("v2.auxiliaryModels")}</h2></div>
         <div className="v2-card-body">
           <p className="v2-field-hint" style={{ marginBottom: 14 }}>
-            Override the provider/model used for background tasks (vision, compression, web extraction). Leave empty to use the agent's default.
+            {t("v2.auxiliaryDesc")}
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
             {AUX_TASKS.map((task) => {
@@ -281,7 +283,7 @@ export function V2AgentConfigTab({
                     }))}
                     disabled={!isAdmin}
                   >
-                    <option value="">Use default</option>
+                    <option value="">{t("v2.useDefault")}</option>
                     {providers.filter((p) => p.enabled).map((p) => (
                       <option key={p.slug} value={p.runtime_provider}>{p.name}</option>
                     ))}
@@ -297,7 +299,7 @@ export function V2AgentConfigTab({
                         }))}
                         disabled={!isAdmin}
                       >
-                        <option value="">Default model</option>
+                        <option value="">{t("v2.defaultModel")}</option>
                         {(auxProv?.available_models ?? []).map((m) => (
                           <option key={m} value={m}>{m}</option>
                         ))}
@@ -311,7 +313,7 @@ export function V2AgentConfigTab({
                         }))}
                         disabled={!isAdmin}
                       >
-                        <option value="">Default key</option>
+                        <option value="">{t("v2.defaultKey")}</option>
                         {secrets.map((s) => (
                           <option key={s.name} value={s.name}>{s.name}</option>
                         ))}
@@ -328,11 +330,11 @@ export function V2AgentConfigTab({
       <div style={{ gridColumn: "1 / -1", display: "flex", gap: 10, alignItems: "center" }}>
         {isAdmin ? (
           <button className="v2-btn v2-btn-primary" onClick={() => saveRuntimeConfig()} disabled={updateAgent.isPending}>
-            {updateAgent.isPending ? "Saving…" : "Save all changes"}
+            {updateAgent.isPending ? t("v2.saving") : t("v2.saveAll")}
           </button>
         ) : null}
         <Link to={`/agents/${agent.id}`} className="v2-btn v2-btn-ghost" style={{ fontSize: 12.5 }}>
-          Open classic view →
+          {t("v2.openClassicView")}
         </Link>
       </div>
     </div>

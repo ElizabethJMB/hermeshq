@@ -12,6 +12,7 @@ import {
 import { describeCron, isValidCron } from "../../lib/cron";
 import { v2toast, extractErrorMessage } from "../toast";
 import type { ScheduledTask } from "../../types/api";
+import { useI18n } from "../../lib/i18n";
 
 function agentLabel(agent: { friendly_name: string | null; name: string }) {
   return agent.friendly_name || agent.name;
@@ -25,6 +26,7 @@ interface EditingSchedule {
 }
 
 export function V2SchedulesPage() {
+  const { t } = useI18n();
   const { data: agents } = useAgents();
   const { data: schedules } = useScheduledTasks();
   const createScheduledTask = useCreateScheduledTask();
@@ -74,7 +76,7 @@ export function V2SchedulesPage() {
     event.preventDefault();
     setFormError(null);
     if (!isValidCron(cronExpression)) {
-      setFormError("Invalid cron expression");
+      setFormError(t("v2.invalidCron"));
       return;
     }
     try {
@@ -87,34 +89,34 @@ export function V2SchedulesPage() {
       });
       setScheduleName("");
       setSchedulePrompt("");
-      v2toast.success("Schedule created");
+      v2toast.success(t("v2.scheduleCreated"));
     } catch (error) {
-      setFormError(extractErrorMessage(error, "Schedule creation failed"));
+      setFormError(extractErrorMessage(error, t("v2.scheduleCreationFailed")));
     }
   }
 
   async function onToggleEnabled(schedule: ScheduledTask) {
     try {
       await updateScheduledTask.mutateAsync({ id: schedule.id, enabled: !schedule.enabled });
-      v2toast.success(schedule.enabled ? "Schedule disabled" : "Schedule enabled");
+      v2toast.success(schedule.enabled ? t("v2.scheduleDisabled") : t("v2.scheduleEnabled"));
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, "Update failed"));
+      v2toast.error(extractErrorMessage(error, t("v2.updateFailed")));
     }
   }
 
   async function onRunNow(schedule: ScheduledTask) {
     try {
       await runNow.mutateAsync(schedule.id);
-      v2toast.success(`"${schedule.name}" dispatched`);
+      v2toast.success(t("v2.scheduleDispatched", { name: schedule.name }));
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, "Run failed"));
+      v2toast.error(extractErrorMessage(error, t("v2.runFailed")));
     }
   }
 
   async function onSaveEdit() {
     if (!editing) return;
     if (!isValidCron(editing.cron_expression)) {
-      v2toast.error("Invalid cron expression");
+      v2toast.error(t("v2.invalidCron"));
       return;
     }
     try {
@@ -125,18 +127,18 @@ export function V2SchedulesPage() {
         prompt: editing.prompt,
       });
       setEditing(null);
-      v2toast.success("Schedule updated");
+      v2toast.success(t("v2.scheduleUpdated"));
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, "Update failed"));
+      v2toast.error(extractErrorMessage(error, t("v2.updateFailed")));
     }
   }
 
   async function onDelete(schedule: ScheduledTask) {
     try {
       await deleteScheduledTask.mutateAsync(schedule.id);
-      v2toast.success(`"${schedule.name}" deleted`);
+      v2toast.success(t("v2.scheduleDeleted", { name: schedule.name }));
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, "Delete failed"));
+      v2toast.error(extractErrorMessage(error, t("v2.deleteFailed")));
     }
   }
 
@@ -144,61 +146,61 @@ export function V2SchedulesPage() {
     <div>
       <div className="v2-page-header">
         <div>
-          <h1 className="v2-page-title">Schedules</h1>
-          <p className="v2-page-subtitle">{visibleSchedules.length} recurring tasks configured</p>
+          <h1 className="v2-page-title">{t("v2.schedules")}</h1>
+          <p className="v2-page-subtitle">{visibleSchedules.length} {t("v2.recurringTasks")}</p>
         </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(300px, 380px) 1fr", gap: 20, alignItems: "start" }}>
         <form className="v2-card" onSubmit={onSubmit}>
           <div className="v2-card-header">
-            <h2 className="v2-card-title">New schedule</h2>
+            <h2 className="v2-card-title">{t("v2.newSchedule")}</h2>
           </div>
           <div className="v2-card-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div className="v2-field">
-              <label className="v2-field-label">Agent</label>
+              <label className="v2-field-label">{t("v2.agentField")}</label>
               <select className="v2-select" value={scheduleAgentId} onChange={(e) => setScheduleAgentId(e.target.value)}>
-                <option value="">Select agent…</option>
+                <option value="">{t("v2.selectAgent")}</option>
                 {(agents ?? []).map((agent) => (
                   <option key={agent.id} value={agent.id}>{agentLabel(agent)}</option>
                 ))}
               </select>
             </div>
             <div className="v2-field">
-              <label className="v2-field-label">Name</label>
-              <input className="v2-input" value={scheduleName} onChange={(e) => setScheduleName(e.target.value)} required placeholder="Daily news summary" />
+              <label className="v2-field-label">{t("v2.name")}</label>
+              <input className="v2-input" value={scheduleName} onChange={(e) => setScheduleName(e.target.value)} required placeholder={t("v2.dailyNewsSummary")} />
             </div>
             <div className="v2-field">
-              <label className="v2-field-label">Cron expression</label>
+              <label className="v2-field-label">{t("v2.cronExpression")}</label>
               <input className="v2-input v2-mono" value={cronExpression} onChange={(e) => setCronExpression(e.target.value)} required />
               {cronPreview ? (
                 <span className="v2-field-hint" style={{ color: "var(--v2-success)" }}>{cronPreview}</span>
               ) : cronExpression.trim() ? (
-                <span className="v2-field-error">Invalid cron expression</span>
+                <span className="v2-field-error">{t("v2.invalidCron")}</span>
               ) : (
-                <span className="v2-field-hint">e.g. "0 9 * * 1-5" for weekdays at 09:00</span>
+                <span className="v2-field-hint">{t("v2.cronPlaceholder")}</span>
               )}
             </div>
             <div className="v2-field">
-              <label className="v2-field-label">Prompt</label>
-              <textarea className="v2-textarea" rows={5} value={schedulePrompt} onChange={(e) => setSchedulePrompt(e.target.value)} required placeholder="What should the agent do on each run?" />
+              <label className="v2-field-label">{t("v2.prompt")}</label>
+              <textarea className="v2-textarea" rows={5} value={schedulePrompt} onChange={(e) => setSchedulePrompt(e.target.value)} required placeholder={t("v2.whatShouldAgentDoEach")} />
             </div>
             {formError ? <p className="v2-field-error">{formError}</p> : null}
             <button type="submit" className="v2-btn v2-btn-primary" disabled={createScheduledTask.isPending}>
-              {createScheduledTask.isPending ? "Creating…" : "Create schedule"}
+              {createScheduledTask.isPending ? t("v2.creating") : t("v2.createSchedule")}
             </button>
           </div>
         </form>
 
         <section className="v2-card">
           <div className="v2-card-header">
-            <h2 className="v2-card-title">Active schedules</h2>
+            <h2 className="v2-card-title">{t("v2.activeSchedules")}</h2>
           </div>
           <div>
             {visibleSchedules.length === 0 ? (
               <div className="v2-empty">
-                <p className="v2-empty-title">No schedules yet</p>
-                <p className="v2-empty-text">Recurring tasks run automatically on their cron schedule.</p>
+                <p className="v2-empty-title">{t("v2.noSchedulesYet")}</p>
+                <p className="v2-empty-text">{t("v2.recurringRunAutomatically")}</p>
               </div>
             ) : (
               visibleSchedules.map((schedule) => (
@@ -206,21 +208,21 @@ export function V2SchedulesPage() {
                   {editing?.id === schedule.id ? (
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                       <div className="v2-field">
-                        <label className="v2-field-label">Name</label>
+                        <label className="v2-field-label">{t("v2.name")}</label>
                         <input className="v2-input" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
                       </div>
                       <div className="v2-field">
-                        <label className="v2-field-label">Cron</label>
+                        <label className="v2-field-label">{t("v2.cronShort")}</label>
                         <input className="v2-input v2-mono" value={editing.cron_expression} onChange={(e) => setEditing({ ...editing, cron_expression: e.target.value })} />
                         {editingCronPreview ? <span className="v2-field-hint" style={{ color: "var(--v2-success)" }}>{editingCronPreview}</span> : null}
                       </div>
                       <div className="v2-field">
-                        <label className="v2-field-label">Prompt</label>
+                        <label className="v2-field-label">{t("v2.prompt")}</label>
                         <textarea className="v2-textarea" rows={4} value={editing.prompt} onChange={(e) => setEditing({ ...editing, prompt: e.target.value })} />
                       </div>
                       <div style={{ display: "flex", gap: 8 }}>
-                        <button className="v2-btn v2-btn-primary" onClick={() => void onSaveEdit()} disabled={updateScheduledTask.isPending}>Save</button>
-                        <button className="v2-btn v2-btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
+                        <button className="v2-btn v2-btn-primary" onClick={() => void onSaveEdit()} disabled={updateScheduledTask.isPending}>{t("v2.save")}</button>
+                        <button className="v2-btn v2-btn-secondary" onClick={() => setEditing(null)}>{t("v2.cancel")}</button>
                       </div>
                     </div>
                   ) : (
@@ -230,7 +232,7 @@ export function V2SchedulesPage() {
                           <span style={{ fontWeight: 620, fontSize: 14.5 }}>{schedule.name}</span>
                           <span className="v2-pill" data-tone={schedule.enabled ? "success" : "neutral"}>
                             <span className="v2-pill-dot" />
-                            {schedule.enabled ? "active" : "paused"}
+                            {schedule.enabled ? t("v2.active") : t("v2.paused")}
                           </span>
                         </div>
                         <div className="v2-mono" style={{ marginTop: 6, fontSize: 12, color: "var(--v2-text-secondary)" }}>
@@ -242,25 +244,25 @@ export function V2SchedulesPage() {
                         </p>
                         <div className="v2-mono" style={{ marginTop: 8, fontSize: 11, color: "var(--v2-text-muted)" }}>
                           {schedule.agent ? agentLabel(schedule.agent) : schedule.agent_id.slice(0, 8)}
-                          {schedule.next_run ? ` · next ${new Date(schedule.next_run).toLocaleString()}` : ""}
+                          {schedule.next_run ? ` · ${t("v2.next")} ${new Date(schedule.next_run).toLocaleString()}` : ""}
                         </div>
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
                         <button className="v2-btn v2-btn-secondary" style={{ padding: "5px 12px", fontSize: 12 }} onClick={() => void onRunNow(schedule)} disabled={runNow.isPending && runNow.variables === schedule.id}>
-                          {runNow.isPending && runNow.variables === schedule.id ? "Running…" : "Run now"}
+                          {runNow.isPending && runNow.variables === schedule.id ? t("v2.runningLoading") : t("v2.runNow")}
                         </button>
                         <button
                           className="v2-btn v2-btn-secondary"
                           style={{ padding: "5px 12px", fontSize: 12 }}
                           onClick={() => setEditing({ id: schedule.id, name: schedule.name, cron_expression: schedule.cron_expression, prompt: schedule.prompt })}
                         >
-                          Edit
+                          {t("v2.edit")}
                         </button>
                         <button className="v2-btn v2-btn-secondary" style={{ padding: "5px 12px", fontSize: 12 }} onClick={() => void onToggleEnabled(schedule)} disabled={updateScheduledTask.isPending}>
-                          {schedule.enabled ? "Disable" : "Enable"}
+                          {schedule.enabled ? t("v2.disable") : t("v2.enable")}
                         </button>
                         <button className="v2-btn v2-btn-danger" style={{ padding: "5px 12px", fontSize: 12 }} onClick={() => void onDelete(schedule)} disabled={deleteScheduledTask.isPending && deleteScheduledTask.variables === schedule.id}>
-                          Delete
+                          {t("v2.delete")}
                         </button>
                       </div>
                     </div>

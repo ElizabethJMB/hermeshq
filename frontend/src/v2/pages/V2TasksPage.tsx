@@ -4,18 +4,9 @@ import { useAgents } from "../../api/agents";
 import { useCancelTask, useDeleteTask, useTasks, useUpdateTaskBoard } from "../../api/tasks";
 import { useCreateTask } from "../../api/tasks";
 import { v2toast, extractErrorMessage } from "../toast";
+import { useI18n } from "../../lib/i18n";
 
 const COLUMNS = ["inbox", "assigned", "in_progress", "review", "done", "blocked", "archived"] as const;
-
-const COLUMN_LABELS: Record<string, string> = {
-  inbox: "Inbox",
-  assigned: "Assigned",
-  in_progress: "In progress",
-  review: "Review",
-  done: "Done",
-  blocked: "Blocked",
-  archived: "Archived",
-};
 
 function taskTone(status: string): "success" | "error" | "warn" | "info" | "neutral" {
   if (status === "completed") return "success";
@@ -31,12 +22,23 @@ function excerpt(text: string | null | undefined, max = 110): string {
 }
 
 export function V2TasksPage() {
+  const { t } = useI18n();
   const { data: agents } = useAgents();
   const { data: tasks } = useTasks();
   const createTask = useCreateTask();
   const cancelTask = useCancelTask();
   const deleteTask = useDeleteTask();
   const updateBoard = useUpdateTaskBoard();
+
+  const COLUMN_LABELS: Record<string, string> = {
+    inbox: t("v2.inbox"),
+    assigned: t("v2.assigned"),
+    in_progress: t("v2.inProgress"),
+    review: t("v2.review"),
+    done: t("v2.done"),
+    blocked: t("v2.blocked"),
+    archived: t("v2.archived"),
+  };
 
   const [agentFilter, setAgentFilter] = useState("");
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -61,27 +63,27 @@ export function V2TasksPage() {
   async function handleMove(taskId: string, column: string) {
     try {
       await updateBoard.mutateAsync({ taskId, payload: { board_column: column } });
-      v2toast.success(`Moved to ${COLUMN_LABELS[column]}`);
+      v2toast.success(t("v2.movedTo", { column: COLUMN_LABELS[column] ?? column }));
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, "Move failed"));
+      v2toast.error(extractErrorMessage(error, t("v2.moveFailed")));
     }
   }
 
   async function handleCancel(taskId: string) {
     try {
       await cancelTask.mutateAsync(taskId);
-      v2toast.success("Task cancelled");
+      v2toast.success(t("v2.taskCancelled"));
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, "Cancel failed"));
+      v2toast.error(extractErrorMessage(error, t("v2.cancelFailed")));
     }
   }
 
   async function handleDelete(taskId: string) {
     try {
       await deleteTask.mutateAsync(taskId);
-      v2toast.success("Task deleted");
+      v2toast.success(t("v2.taskDeleted"));
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, "Delete failed"));
+      v2toast.error(extractErrorMessage(error, t("v2.deleteFailed")));
     }
   }
 
@@ -91,9 +93,9 @@ export function V2TasksPage() {
     try {
       await createTask.mutateAsync({ agent_id: agentId, prompt: prompt.trim() });
       setPrompt("");
-      v2toast.success("Task dispatched");
+      v2toast.success(t("v2.taskDispatched"));
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, "Dispatch failed"));
+      v2toast.error(extractErrorMessage(error, t("v2.dispatchFailed")));
     }
   }
 
@@ -101,8 +103,8 @@ export function V2TasksPage() {
     <div>
       <div className="v2-page-header">
         <div>
-          <h1 className="v2-page-title">Task board</h1>
-          <p className="v2-page-subtitle">Drag cards between columns or dispatch a new task</p>
+          <h1 className="v2-page-title">{t("v2.taskBoard")}</h1>
+          <p className="v2-page-subtitle">{t("v2.dragCardsOrDispatch")}</p>
         </div>
         <select
           className="v2-select"
@@ -110,7 +112,7 @@ export function V2TasksPage() {
           value={agentFilter}
           onChange={(e) => setAgentFilter(e.target.value)}
         >
-          <option value="">All agents</option>
+          <option value="">{t("v2.allAgents")}</option>
           {(agents ?? []).map((agent) => (
             <option key={agent.id} value={agent.id}>
               {agent.friendly_name || agent.name}
@@ -127,7 +129,7 @@ export function V2TasksPage() {
           onChange={(e) => setAgentId(e.target.value)}
           required
         >
-          <option value="">Select agent…</option>
+          <option value="">{t("v2.selectAgent")}</option>
           {(agents ?? []).map((agent) => (
             <option key={agent.id} value={agent.id}>
               {agent.friendly_name || agent.name}
@@ -137,13 +139,13 @@ export function V2TasksPage() {
         <input
           className="v2-input"
           style={{ flex: 1 }}
-          placeholder="What should the agent do?"
+          placeholder={t("v2.whatShouldAgentDo")}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           required
         />
         <button type="submit" className="v2-btn v2-btn-primary" disabled={createTask.isPending || !prompt.trim() || !agentId}>
-          {createTask.isPending ? "Sending…" : "Dispatch"}
+          {createTask.isPending ? t("v2.sending") : t("v2.dispatch")}
         </button>
       </form>
 
@@ -169,7 +171,7 @@ export function V2TasksPage() {
               </div>
               <div className="v2-board-column-body">
                 {columnTasks.length === 0 ? (
-                  <p style={{ fontSize: 12, color: "var(--v2-text-muted)", textAlign: "center", padding: "16px 0" }}>No tasks</p>
+                  <p style={{ fontSize: 12, color: "var(--v2-text-muted)", textAlign: "center", padding: "16px 0" }}>{t("v2.noTasks")}</p>
                 ) : (
                   columnTasks.map((task) => {
                     const agent = agentsById.get(task.agent_id);
@@ -207,11 +209,11 @@ export function V2TasksPage() {
                           </select>
                           {task.status === "running" || task.status === "queued" ? (
                             <button className="v2-btn v2-btn-ghost" style={{ padding: "2px 8px", fontSize: 11.5 }} onClick={() => void handleCancel(task.id)}>
-                              Cancel
+                              {t("v2.cancel2")}
                             </button>
                           ) : (
                             <button className="v2-btn v2-btn-ghost" style={{ padding: "2px 8px", fontSize: 11.5, color: "var(--v2-danger)" }} onClick={() => void handleDelete(task.id)}>
-                              Delete
+                              {t("v2.delete")}
                             </button>
                           )}
                         </div>
