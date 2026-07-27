@@ -38,6 +38,7 @@ import {
 import { useTemplates } from "../../api/templates";
 import { useSessionStore } from "../../stores/sessionStore";
 import { v2toast, extractErrorMessage } from "../toast";
+import { useI18n } from "../../lib/i18n";
 
 const GeneralTab = lazy(() => import("../../components/settings/GeneralTab"));
 const RuntimeTab = lazy(() => import("../../components/settings/RuntimeTab").then((m) => ({ default: m.RuntimeTab })));
@@ -59,34 +60,34 @@ type SettingsTab =
   | "externalAccess" | "hermesVersions" | "secrets" | "templates"
   | "authentication" | "email" | "resources" | "m365" | "publicChatKeys";
 
-const TAB_GROUPS: Array<{ group: string; tabs: Array<{ id: SettingsTab; label: string }> }> = [
+const TAB_GROUPS: Array<{ groupKey: string; tabs: Array<{ id: SettingsTab; labelKey: string }> }> = [
   {
-    group: "Instance",
+    groupKey: "v2.instanceGroup",
     tabs: [
-      { id: "general", label: "General" },
-      { id: "runtime", label: "Runtime" },
-      { id: "resources", label: "Resources" },
-      { id: "hermesVersions", label: "Hermes Versions" },
+      { id: "general", labelKey: "v2.general" },
+      { id: "runtime", labelKey: "v2.runtimeTab" },
+      { id: "resources", labelKey: "v2.resourcesTab" },
+      { id: "hermesVersions", labelKey: "v2.hermesVersionsTab" },
     ],
   },
   {
-    group: "Agents",
+    groupKey: "v2.agents",
     tabs: [
-      { id: "providers", label: "Providers" },
-      { id: "integrations", label: "Integrations" },
-      { id: "factory", label: "Factory" },
-      { id: "templates", label: "Templates" },
+      { id: "providers", labelKey: "v2.providersTab" },
+      { id: "integrations", labelKey: "v2.integrations" },
+      { id: "factory", labelKey: "v2.factoryTab" },
+      { id: "templates", labelKey: "v2.templatesTab" },
     ],
   },
   {
-    group: "Access",
+    groupKey: "v2.accessGroup",
     tabs: [
-      { id: "authentication", label: "Authentication" },
-      { id: "email", label: "Email" },
-      { id: "secrets", label: "Secrets" },
-      { id: "externalAccess", label: "External access" },
-      { id: "m365", label: "Microsoft 365" },
-      { id: "publicChatKeys", label: "Public Chat" },
+      { id: "authentication", labelKey: "v2.authenticationTab" },
+      { id: "email", labelKey: "v2.emailTab" },
+      { id: "secrets", labelKey: "v2.secretsTab" },
+      { id: "externalAccess", labelKey: "v2.externalAccessTab" },
+      { id: "m365", labelKey: "v2.microsoft365Tab" },
+      { id: "publicChatKeys", labelKey: "v2.publicChatTab" },
     ],
   },
 ];
@@ -103,6 +104,7 @@ function TabFallback() {
 }
 
 export function V2SettingsPage() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const currentUser = useSessionStore((state) => state.user);
   const isAdmin = currentUser?.role === "admin";
@@ -152,8 +154,8 @@ export function V2SettingsPage() {
   if (!isAdmin) {
     return (
       <div className="v2-empty">
-        <p className="v2-empty-title">Admin access required</p>
-        <p className="v2-empty-text">Settings are only available to administrators.</p>
+        <p className="v2-empty-title">{t("v2.adminAccessRequired")}</p>
+        <p className="v2-empty-text">{t("v2.settingsAdminOnly")}</p>
       </div>
     );
   }
@@ -162,17 +164,17 @@ export function V2SettingsPage() {
     <div>
       <div className="v2-page-header">
         <div>
-          <h1 className="v2-page-title">Settings</h1>
-          <p className="v2-page-subtitle">Instance configuration</p>
+          <h1 className="v2-page-title">{t("v2.settings")}</h1>
+          <p className="v2-page-subtitle">{t("v2.instanceConfig")}</p>
         </div>
       </div>
 
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
         <nav style={{ width: 190, flexShrink: 0, position: "sticky", top: 80 }}>
           {TAB_GROUPS.map((group) => (
-            <div key={group.group} style={{ marginBottom: 20 }}>
+            <div key={group.groupKey} style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 11, fontWeight: 620, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--v2-text-muted)", padding: "0 10px", marginBottom: 6 }}>
-                {group.group}
+                {t(group.groupKey)}
               </div>
               {group.tabs.map((tab) => (
                 <button
@@ -194,7 +196,7 @@ export function V2SettingsPage() {
                     marginBottom: 1,
                   }}
                 >
-                  {tab.label}
+                  {t(tab.labelKey)}
                 </button>
               ))}
             </div>

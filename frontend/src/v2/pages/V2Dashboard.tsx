@@ -7,6 +7,7 @@ import { useTasks } from "../../api/tasks";
 import { v2toast, extractErrorMessage } from "../toast";
 import { AgentAvatar } from "../../components/AgentAvatar";
 import { AreaChart, DonutChart, HBarChart, Sparkline, formatDuration } from "../charts";
+import { useI18n } from "../../lib/i18n";
 
 function statusTone(status: string): "success" | "error" | "warn" | "neutral" {
   if (status === "running") return "success";
@@ -29,6 +30,7 @@ function shortDate(iso: string): string {
 }
 
 export function V2Dashboard() {
+  const { t } = useI18n();
   const { data: agents, isLoading: agentsLoading } = useAgents();
   const { data: overview } = useDashboardOverview();
   const { data: health } = useFleetHealth();
@@ -45,9 +47,9 @@ export function V2Dashboard() {
   const trendSeries = useMemo(() => {
     if (!analytics?.time_series) return [];
     const days = Object.keys(analytics.time_series).sort();
-    const completed = { name: "Completed", color: "var(--v2-success)", points: [] as { label: string; value: number }[] };
-    const failed = { name: "Failed", color: "var(--v2-danger)", points: [] as { label: string; value: number }[] };
-    const other = { name: "Other", color: "var(--v2-text-muted)", points: [] as { label: string; value: number }[] };
+    const completed = { name: t("v2.completed"), color: "var(--v2-success)", points: [] as { label: string; value: number }[] };
+    const failed = { name: t("v2.failed"), color: "var(--v2-danger)", points: [] as { label: string; value: number }[] };
+    const other = { name: t("v2.other"), color: "var(--v2-text-muted)", points: [] as { label: string; value: number }[] };
     for (const day of days) {
       const bucket = analytics.time_series[day] ?? {};
       const label = shortDate(day);
@@ -59,17 +61,17 @@ export function V2Dashboard() {
       other.points.push({ label, value: otherCount });
     }
     return [completed, failed, other];
-  }, [analytics]);
+  }, [analytics, t]);
 
   const agentStatusSegments = useMemo(() => {
     const breakdown = health?.status_breakdown ?? {};
     return [
-      { label: "Running", value: breakdown.running ?? 0, color: "var(--v2-success)" },
-      { label: "Stopped", value: breakdown.stopped ?? 0, color: "var(--v2-text-muted)" },
-      { label: "Error", value: breakdown.error ?? 0, color: "var(--v2-danger)" },
-      { label: "Starting", value: breakdown.starting ?? 0, color: "var(--v2-warning)" },
-    ].filter((s) => s.value > 0 || s.label === "Running");
-  }, [health]);
+      { label: t("v2.running"), value: breakdown.running ?? 0, color: "var(--v2-success)" },
+      { label: t("v2.stopped"), value: breakdown.stopped ?? 0, color: "var(--v2-text-muted)" },
+      { label: t("v2.errorLabel"), value: breakdown.error ?? 0, color: "var(--v2-danger)" },
+      { label: t("v2.starting"), value: breakdown.starting ?? 0, color: "var(--v2-warning)" },
+    ].filter((s) => s.value > 0 || s.label === t("v2.running"));
+  }, [health, t]);
 
   const topFailing = useMemo(
     () =>
@@ -86,18 +88,18 @@ export function V2Dashboard() {
   async function handleStart(agentId: string, name: string) {
     try {
       await startAgent.mutateAsync(agentId);
-      v2toast.success(`${name} started`);
+      v2toast.success(t("v2.agentStarted", { name }));
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, `Failed to start ${name}`));
+      v2toast.error(extractErrorMessage(error, t("v2.failedToStart", { name })));
     }
   }
 
   async function handleStop(agentId: string, name: string) {
     try {
       await stopAgent.mutateAsync(agentId);
-      v2toast.success(`${name} stopped`);
+      v2toast.success(t("v2.agentStopped", { name }));
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, `Failed to stop ${name}`));
+      v2toast.error(extractErrorMessage(error, t("v2.failedToStop", { name })));
     }
   }
 
@@ -105,34 +107,34 @@ export function V2Dashboard() {
     <div>
       <div className="v2-page-header">
         <div>
-          <h1 className="v2-page-title">Fleet overview</h1>
+          <h1 className="v2-page-title">{t("v2.fleetOverview")}</h1>
           <p className="v2-page-subtitle">
-            {(agents ?? []).length} agents configured · {running} running
+            {(agents ?? []).length} {t("v2.agentsConfigured")} · {running} {t("v2.running")}
           </p>
         </div>
         <Link to="/v2/agents" className="v2-btn v2-btn-primary">
-          New agent
+          {t("v2.newAgent")}
         </Link>
       </div>
 
       <div className="v2-kpi-strip">
         <div className="v2-kpi" data-tone={running > 0 ? "success" : undefined}>
-          <div className="v2-kpi-label">Running</div>
+          <div className="v2-kpi-label">{t("v2.running")}</div>
           <div className="v2-kpi-value">{running}</div>
-          <div className="v2-kpi-hint">agents active now</div>
+          <div className="v2-kpi-hint">{t("v2.activeNow")}</div>
         </div>
         <div className="v2-kpi" data-tone={errored > 0 ? "error" : undefined}>
-          <div className="v2-kpi-label">Errors</div>
+          <div className="v2-kpi-label">{t("v2.errors")}</div>
           <div className="v2-kpi-value">{errored}</div>
-          <div className="v2-kpi-hint">agents need attention</div>
+          <div className="v2-kpi-hint">{t("v2.needAttention")}</div>
         </div>
         <div className="v2-kpi" data-tone={successRate !== null && successRate < 0.9 ? "warn" : "success"}>
-          <div className="v2-kpi-label">Success rate</div>
+          <div className="v2-kpi-label">{t("v2.successRate")}</div>
           <div className="v2-kpi-value">{successRate !== null ? `${Math.round(successRate)}%` : "—"}</div>
-          <div className="v2-kpi-hint">last {analytics?.period_days ?? 14} days · {analytics?.totals?.total ?? 0} tasks</div>
+          <div className="v2-kpi-hint">{t("v2.lastNDays", { n: analytics?.period_days ?? 14 })} · {analytics?.totals?.total ?? 0} {t("v2.tasks")}</div>
         </div>
         <div className="v2-kpi">
-          <div className="v2-kpi-label">Avg completion</div>
+          <div className="v2-kpi-label">{t("v2.avgCompletion")}</div>
           <div className="v2-kpi-value" style={{ fontSize: 24 }}>
             {analytics?.completion_metrics ? formatDuration(analytics.completion_metrics.avg_seconds) : "—"}
           </div>
@@ -145,14 +147,14 @@ export function V2Dashboard() {
       <div className="v2-grid-2 v2-section" style={{ alignItems: "stretch" }}>
         <section className="v2-card">
           <div className="v2-card-header">
-            <h2 className="v2-card-title">Task volume · 14 days</h2>
+            <h2 className="v2-card-title">{t("v2.taskVolume")}</h2>
           </div>
           <div className="v2-card-body">
             {trendSeries.length > 0 && trendSeries[0].points.length > 0 ? (
               <AreaChart series={trendSeries} height={190} stacked />
             ) : (
               <div className="v2-empty">
-                <p className="v2-empty-text">No task data yet</p>
+                <p className="v2-empty-text">{t("v2.noTaskDataYet")}</p>
               </div>
             )}
           </div>
@@ -161,14 +163,14 @@ export function V2Dashboard() {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <section className="v2-card">
             <div className="v2-card-header">
-              <h2 className="v2-card-title">Fleet status</h2>
+              <h2 className="v2-card-title">{t("v2.fleetStatus")}</h2>
             </div>
             <div className="v2-card-body">
               <DonutChart
                 segments={agentStatusSegments}
                 size={130}
                 centerValue={(agents ?? []).length}
-                centerLabel="agents"
+                centerLabel={t("v2.agents")}
               />
             </div>
           </section>
@@ -176,10 +178,10 @@ export function V2Dashboard() {
           {topFailing.length > 0 ? (
             <section className="v2-card">
               <div className="v2-card-header">
-                <h2 className="v2-card-title">Top failing agents</h2>
+                <h2 className="v2-card-title">{t("v2.topFailingAgents")}</h2>
               </div>
               <div className="v2-card-body">
-                <HBarChart bars={topFailing} formatValue={(v) => `${v} fails`} />
+                <HBarChart bars={topFailing} formatValue={(v) => `${v} ${t("v2.fails")}`} />
               </div>
             </section>
           ) : null}
@@ -189,9 +191,9 @@ export function V2Dashboard() {
       <div className="v2-grid-2">
         <section className="v2-card">
           <div className="v2-card-header">
-            <h2 className="v2-card-title">Agents</h2>
+            <h2 className="v2-card-title">{t("v2.agents")}</h2>
             <Link to="/v2/agents" className="v2-btn v2-btn-ghost" style={{ fontSize: 12 }}>
-              View all →
+              {t("v2.viewAll")} →
             </Link>
           </div>
           <div>
@@ -203,10 +205,10 @@ export function V2Dashboard() {
               </div>
             ) : (agents ?? []).length === 0 ? (
               <div className="v2-empty">
-                <p className="v2-empty-title">No agents yet</p>
-                <p className="v2-empty-text">Create your first agent to start dispatching tasks.</p>
+                <p className="v2-empty-title">{t("v2.noAgentsYet")}</p>
+                <p className="v2-empty-text">{t("v2.createFirstAgent")}</p>
                 <div className="v2-empty-action">
-                  <Link to="/v2/agents" className="v2-btn v2-btn-primary">Create agent</Link>
+                  <Link to="/v2/agents" className="v2-btn v2-btn-primary">{t("v2.createAgent")}</Link>
                 </div>
               </div>
             ) : (
@@ -233,7 +235,7 @@ export function V2Dashboard() {
                         disabled={stopAgent.isPending}
                         onClick={() => void handleStop(agent.id, name)}
                       >
-                        Stop
+                        {t("v2.stop")}
                       </button>
                     ) : (
                       <button
@@ -242,7 +244,7 @@ export function V2Dashboard() {
                         disabled={startAgent.isPending}
                         onClick={() => void handleStart(agent.id, name)}
                       >
-                        Start
+                        {t("v2.start")}
                       </button>
                     )}
                   </div>
@@ -254,16 +256,16 @@ export function V2Dashboard() {
 
         <section className="v2-card">
           <div className="v2-card-header">
-            <h2 className="v2-card-title">Recent tasks</h2>
+            <h2 className="v2-card-title">{t("v2.recentTasks")}</h2>
             <Link to="/v2/tasks" className="v2-btn v2-btn-ghost" style={{ fontSize: 12 }}>
-              Board →
+              {t("v2.board")} →
             </Link>
           </div>
           <div>
             {recentTasks.length === 0 ? (
               <div className="v2-empty">
-                <p className="v2-empty-title">No tasks yet</p>
-                <p className="v2-empty-text">Tasks dispatched to your agents will appear here.</p>
+                <p className="v2-empty-title">{t("v2.noTasksYet")}</p>
+                <p className="v2-empty-text">{t("v2.noTasksDispatched")}</p>
               </div>
             ) : (
               recentTasks.map((task) => (
@@ -290,19 +292,19 @@ export function V2Dashboard() {
       {(health?.recent_errors?.length ?? 0) > 0 ? (
         <section className="v2-card v2-section" style={{ marginTop: 16 }}>
           <div className="v2-card-header">
-            <h2 className="v2-card-title" style={{ color: "var(--v2-danger)" }}>Needs attention</h2>
+            <h2 className="v2-card-title" style={{ color: "var(--v2-danger)" }}>{t("v2.needsAttention")}</h2>
           </div>
           <div>
             {health!.recent_errors.slice(0, 5).map((error, i) => (
               <div key={i} className="v2-agent-row">
                 <span className="v2-pill" data-tone="error">
                   <span className="v2-pill-dot" />
-                  error
+                  {t("v2.error")}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="v2-agent-name" style={{ fontSize: 13 }}>{error.agent_name}</div>
                   <div className="v2-agent-meta" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {error.message ?? "Unknown error"}
+                    {error.message ?? t("v2.unknownError")}
                   </div>
                 </div>
               </div>

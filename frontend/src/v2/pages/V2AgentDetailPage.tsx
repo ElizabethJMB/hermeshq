@@ -19,6 +19,7 @@ import { useSessionStore } from "../../stores/sessionStore";
 import { v2toast, extractErrorMessage } from "../toast";
 import { V2AgentIntegrationsTab } from "./V2AgentIntegrationsTab";
 import { V2AgentConfigTab } from "./V2AgentConfigTab";
+import { useI18n } from "../../lib/i18n";
 
 type DetailTab = "conversation" | "config" | "channels" | "integrations" | "terminal" | "skills" | "workspace" | "ledger" | "activity";
 
@@ -45,6 +46,7 @@ function severityTone(severity: string): "error" | "warn" | "info" | "neutral" {
 }
 
 export function V2AgentDetailPage() {
+  const { t } = useI18n();
   const { agentId = "" } = useParams();
   const navigate = useNavigate();
   const { data: agent, isLoading } = useAgent(agentId);
@@ -93,9 +95,9 @@ export function V2AgentDetailPage() {
     const name = agent.friendly_name || agent.name;
     try {
       await startAgent.mutateAsync(agent.id);
-      v2toast.success(`${name} started`);
+      v2toast.success(t("v2.agentStarted", { name }));
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, `Failed to start ${name}`));
+      v2toast.error(extractErrorMessage(error, t("v2.failedToStart", { name })));
     }
   }
 
@@ -104,9 +106,9 @@ export function V2AgentDetailPage() {
     const name = agent.friendly_name || agent.name;
     try {
       await stopAgent.mutateAsync(agent.id);
-      v2toast.success(`${name} stopped`);
+      v2toast.success(t("v2.agentStopped", { name }));
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, `Failed to stop ${name}`));
+      v2toast.error(extractErrorMessage(error, t("v2.failedToStop", { name })));
     }
   }
 
@@ -125,10 +127,10 @@ export function V2AgentDetailPage() {
         metadata: { conversation: true, thread_id: `console_${agent.id}` },
       });
       nearBottomRef.current = true;
-      v2toast.success("Message sent");
+      v2toast.success(t("v2.messageSent"));
     } catch (error) {
       setPrompt(text);
-      v2toast.error(extractErrorMessage(error, "Send failed"));
+      v2toast.error(extractErrorMessage(error, t("v2.sendFailed")));
     }
   }
 
@@ -138,16 +140,16 @@ export function V2AgentDetailPage() {
     const isArchived = agent.is_archived;
     const confirmed = window.confirm(
       isArchived
-        ? `Permanently delete "${name}"? This cannot be undone.`
-        : `Archive "${name}"? You can restore it later. Delete again to remove permanently.`,
+        ? t("v2.permanentlyDeleteConfirm", { name })
+        : t("v2.archiveConfirm", { name }),
     );
     if (!confirmed) return;
     try {
       await deleteAgent.mutateAsync(agent.id);
-      v2toast.success(isArchived ? `${name} permanently deleted` : `${name} archived`);
+      v2toast.success(isArchived ? t("v2.agentPermanentlyDeleted", { name }) : t("v2.agentArchivedToast", { name }));
       navigate("/v2/agents");
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, "Delete failed"));
+      v2toast.error(extractErrorMessage(error, t("v2.deleteFailed")));
     }
   }
 
@@ -155,9 +157,9 @@ export function V2AgentDetailPage() {
     if (!agent) return;
     try {
       await updateAgent.mutateAsync({ agentId: agent.id, payload: { is_archived: false } });
-      v2toast.success(`${name} restored`);
+      v2toast.success(t("v2.agentRestored", { name }));
     } catch (error) {
-      v2toast.error(extractErrorMessage(error, "Restore failed"));
+      v2toast.error(extractErrorMessage(error, t("v2.restoreFailed")));
     }
   }
 
@@ -173,9 +175,9 @@ export function V2AgentDetailPage() {
   if (!agent) {
     return (
       <div className="v2-empty">
-        <p className="v2-empty-title">Agent not found</p>
+        <p className="v2-empty-title">{t("v2.agentNotFound")}</p>
         <div className="v2-empty-action">
-          <Link to="/v2/agents" className="v2-btn v2-btn-secondary">← Back to agents</Link>
+          <Link to="/v2/agents" className="v2-btn v2-btn-secondary">{t("v2.backToAgentsBtn")}</Link>
         </div>
       </div>
     );
@@ -185,22 +187,22 @@ export function V2AgentDetailPage() {
   const isRunning = agent.status === "running";
 
   const TABS: Array<{ id: DetailTab; label: string }> = [
-    { id: "conversation", label: "Conversation" },
-    { id: "config", label: "Config" },
-    { id: "channels", label: "Channels" },
-    { id: "integrations", label: "Integrations" },
-    { id: "terminal", label: "Terminal" },
-    { id: "skills", label: "Skills" },
-    { id: "workspace", label: "Workspace" },
-    { id: "ledger", label: "Ledger" },
-    { id: "activity", label: "Activity" },
+    { id: "conversation", label: t("v2.conversation") },
+    { id: "config", label: t("v2.config") },
+    { id: "channels", label: t("v2.channels") },
+    { id: "integrations", label: t("v2.integrations") },
+    { id: "terminal", label: t("v2.terminal") },
+    { id: "skills", label: t("v2.skills") },
+    { id: "workspace", label: t("v2.workspace") },
+    { id: "ledger", label: t("v2.ledger") },
+    { id: "activity", label: t("v2.activity") },
   ];
 
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
         <Link to="/v2/agents" style={{ fontSize: 13, color: "var(--v2-text-secondary)", textDecoration: "none" }}>
-          ← Agents
+          {t("v2.backToAgentsShort")}
         </Link>
       </div>
 
@@ -223,20 +225,20 @@ export function V2AgentDetailPage() {
         <div style={{ display: "flex", gap: 8 }}>
           {agent.is_archived ? (
             <button className="v2-btn v2-btn-secondary" onClick={() => void handleRestore()} disabled={updateAgent.isPending}>
-              Restore
+              {t("v2.restore")}
             </button>
           ) : isRunning ? (
             <button className="v2-btn v2-btn-secondary" onClick={() => void handleStop()} disabled={stopAgent.isPending}>
-              Stop
+              {t("v2.stop")}
             </button>
           ) : (
             <button className="v2-btn v2-btn-primary" onClick={() => void handleStart()} disabled={startAgent.isPending}>
-              Start
+              {t("v2.start")}
             </button>
           )}
           {isAdmin ? (
             <button className="v2-btn v2-btn-danger" onClick={() => void handleDelete()} disabled={deleteAgent.isPending}>
-              {agent.is_archived ? "Delete permanently" : "Archive"}
+              {agent.is_archived ? t("v2.deletePermanently") : t("v2.archive")}
             </button>
           ) : null}
         </div>
@@ -245,7 +247,7 @@ export function V2AgentDetailPage() {
       {agent.is_archived ? (
         <div className="v2-card" style={{ padding: "12px 16px", marginBottom: 16, borderColor: "var(--v2-warning)", background: "var(--v2-warning-subtle)" }}>
           <p style={{ fontSize: 13, color: "var(--v2-warning)", fontWeight: 550 }}>
-            This agent is archived — runtime, channels and schedules are disabled.
+            {t("v2.archivedWarning")}
           </p>
         </div>
       ) : null}
@@ -277,9 +279,9 @@ export function V2AgentDetailPage() {
       {tab === "conversation" ? (
         <section className="v2-card" style={{ display: "flex", flexDirection: "column", height: "62vh" }}>
           <div className="v2-card-header">
-            <h2 className="v2-card-title">Conversation</h2>
+            <h2 className="v2-card-title">{t("v2.conversation")}</h2>
             <span className="v2-mono" style={{ fontSize: 11, color: "var(--v2-text-muted)" }}>
-              {sortedTasks.length} messages
+              {sortedTasks.length} {t("v2.messages")}
             </span>
           </div>
           <div
@@ -290,8 +292,8 @@ export function V2AgentDetailPage() {
           >
             {sortedTasks.length === 0 ? (
               <div className="v2-empty" style={{ margin: "auto" }}>
-                <p className="v2-empty-title">No messages yet</p>
-                <p className="v2-empty-text">Send the first message to start working with {name}.</p>
+                <p className="v2-empty-title">{t("v2.noMessagesYet")}</p>
+                <p className="v2-empty-text">{t("v2.sendFirstMessage")} {name}.</p>
               </div>
             ) : (
               sortedTasks.flatMap((task) => {
@@ -303,7 +305,7 @@ export function V2AgentDetailPage() {
                     </div>
                   </div>,
                 ];
-                const response = task.response || task.error_message || (task.status === "running" ? "Running…" : task.status === "queued" ? "Queued…" : "");
+                const response = task.response || task.error_message || (task.status === "running" ? t("v2.runningLoading") : task.status === "queued" ? t("v2.queued") : "");
                 if (response) {
                   items.push(
                     <div key={`${task.id}-a`} className="v2-chat-msg" data-role={task.status === "failed" ? "system" : "assistant"}>
@@ -319,7 +321,7 @@ export function V2AgentDetailPage() {
                                 nearBottomRef.current = true;
                               }}
                             >
-                              Retry ↻
+                              {t("v2.retry")} ↻
                             </button>
                           </div>
                         </>
@@ -344,12 +346,12 @@ export function V2AgentDetailPage() {
             <input
               className="v2-input"
               style={{ flex: 1 }}
-              placeholder={`Message ${name}…`}
+              placeholder={t("v2.messageNamePlaceholder", { name })}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
             />
             <button type="submit" className="v2-btn v2-btn-primary" disabled={createTask.isPending || !prompt.trim()}>
-              Send
+              {t("v2.send")}
             </button>
           </form>
         </section>
@@ -415,19 +417,19 @@ export function V2AgentDetailPage() {
       {tab === "ledger" ? (
         <section className="v2-card">
           <div className="v2-card-header">
-            <h2 className="v2-card-title">Runtime ledger</h2>
+            <h2 className="v2-card-title">{t("v2.runtimeLedger")}</h2>
             <span className="v2-mono" style={{ fontSize: 11, color: "var(--v2-text-muted)" }}>
-              {(runtimeLedger ?? []).length} entries
+              {(runtimeLedger ?? []).length} {t("v2.entries")}
             </span>
           </div>
           <table className="v2-table">
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Channel</th>
-                <th>Direction</th>
-                <th>Type</th>
-                <th>Content</th>
+                <th>{t("v2.time")}</th>
+                <th>{t("v2.channel")}</th>
+                <th>{t("v2.direction")}</th>
+                <th>{t("v2.type")}</th>
+                <th>{t("v2.content")}</th>
               </tr>
             </thead>
             <tbody>
@@ -435,7 +437,7 @@ export function V2AgentDetailPage() {
                 <tr>
                   <td colSpan={5}>
                     <div className="v2-empty">
-                      <p className="v2-empty-title">No ledger entries</p>
+                      <p className="v2-empty-title">{t("v2.noLedgerEntries")}</p>
                     </div>
                   </td>
                 </tr>
@@ -472,15 +474,15 @@ export function V2AgentDetailPage() {
       {tab === "activity" ? (
         <section className="v2-card">
           <div className="v2-card-header">
-            <h2 className="v2-card-title">Activity log</h2>
+            <h2 className="v2-card-title">{t("v2.activityLogTitle")}</h2>
           </div>
           <table className="v2-table">
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Event</th>
-                <th>Message</th>
-                <th>Severity</th>
+                <th>{t("v2.time")}</th>
+                <th>{t("v2.event")}</th>
+                <th>{t("v2.message")}</th>
+                <th>{t("v2.severity")}</th>
               </tr>
             </thead>
             <tbody>
@@ -488,7 +490,7 @@ export function V2AgentDetailPage() {
                 <tr>
                   <td colSpan={4}>
                     <div className="v2-empty">
-                      <p className="v2-empty-title">No activity</p>
+                      <p className="v2-empty-title">{t("v2.noActivity")}</p>
                     </div>
                   </td>
                 </tr>
