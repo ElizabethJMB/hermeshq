@@ -34,12 +34,14 @@ export function V2AgentConfigTab({
   updateAgent: UseMutationResult<Agent, Error, { agentId: string; payload: Record<string, unknown> }>;
 }) {
   const agentProvider =
+    providers.find((p) => p.runtime_provider === provider && (p.available_models ?? []).length > 0) ??
     providers.find((p) => p.runtime_provider === agent.provider && (p.available_models ?? []).length > 0) ??
     providers.find((p) => p.slug === agent.provider);
   const availableModels = agentProvider?.available_models ?? [];
 
   const [useProviderDefault, setUseProviderDefault] = useState(agent.use_provider_default);
   const [customModel, setCustomModel] = useState(agent.model ?? "");
+  const [provider, setProvider] = useState(agent.provider ?? "");
   const [apiKeyRef, setApiKeyRef] = useState(agent.api_key_ref ?? "");
   const [baseUrl, setBaseUrl] = useState(agent.base_url ?? "");
   const [systemPrompt, setSystemPrompt] = useState(agent.system_prompt ?? "");
@@ -67,6 +69,7 @@ export function V2AgentConfigTab({
   function saveRuntimeConfig() {
     const payload: Record<string, unknown> = {
       friendly_name: friendlyName,
+      provider: provider || agent.provider,
       use_provider_default: useProviderDefault,
       api_key_ref: apiKeyRef || null,
       base_url: baseUrl || null,
@@ -115,9 +118,27 @@ export function V2AgentConfigTab({
         <div className="v2-card-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div className="v2-field">
             <label className="v2-field-label">Provider</label>
-            <div className="v2-mono" style={{ fontSize: 13, padding: "8px 0" }}>
-              {agentProvider?.name ?? agent.provider} <span style={{ color: "var(--v2-text-muted)" }}>({agent.provider})</span>
-            </div>
+            <select
+              className="v2-select"
+              value={provider}
+              onChange={(e) => {
+                const newProvider = e.target.value;
+                setProvider(newProvider);
+                const p = providers.find((pr) => pr.runtime_provider === newProvider);
+                if (p) {
+                  if (p.default_model) setCustomModel(p.default_model);
+                  if (p.base_url) setBaseUrl(p.base_url);
+                }
+              }}
+              disabled={!isAdmin}
+            >
+              <option value="">{agent.provider} (current)</option>
+              {providers.filter((p) => p.enabled).map((p) => (
+                <option key={p.slug} value={p.runtime_provider}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="v2-field">
             <label className="v2-field-label">Use provider default model</label>
