@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useAgents } from "../../api/agents";
 import { useCancelTask, useDeleteTask, useTasks, useUpdateTaskBoard } from "../../api/tasks";
 import { useCreateTask } from "../../api/tasks";
+import { useRealtimeStore } from "../../stores/realtimeStore";
 import { v2toast, extractErrorMessage } from "../toast";
 import { useI18n } from "../../lib/i18n";
 
@@ -23,12 +25,22 @@ function excerpt(text: string | null | undefined, max = 110): string {
 
 export function V2TasksPage() {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
   const { data: agents } = useAgents();
   const { data: tasks } = useTasks();
   const createTask = useCreateTask();
   const cancelTask = useCancelTask();
   const deleteTask = useDeleteTask();
   const updateBoard = useUpdateTaskBoard();
+  const events = useRealtimeStore((state) => state.events);
+
+  useEffect(() => {
+    const latest = events[0];
+    if (!latest) return;
+    if (latest.type?.startsWith("task.")) {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    }
+  }, [events, queryClient]);
 
   const COLUMN_LABELS: Record<string, string> = {
     inbox: t("v2.inbox"),
