@@ -1095,3 +1095,25 @@
   max-width: 100%;
   border-radius: 8px;
 }
+
+/* ── AiAgentBuilder CSS bridge ────────────────────────────── */
+/* The builder component uses V1-style CSS vars that need mapping */
+.v2-root {
+  --bg: var(--v2-bg);
+  --bg-hover: var(--v2-bg-sunken);
+  --text: var(--v2-text);
+  --text-muted: var(--v2-text-muted);
+}
+
+.v2-root .panel-frame {
+  background: var(--v2-bg-raised);
+  border: 1px solid var(--v2-border);
+  border-radius: 10px;
+}
+
+.v2-root .line-clamp-4 {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

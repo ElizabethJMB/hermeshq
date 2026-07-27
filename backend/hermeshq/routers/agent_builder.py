@@ -90,6 +90,7 @@ async def send_message(
 async def finalize_agent(
     session_id: str,
     request: Request,
+    overrides: dict | None = None,
     db: AsyncSession = Depends(get_db_session),
     user: User = Depends(require_admin),
 ):
@@ -97,6 +98,17 @@ async def finalize_agent(
     session = get_builder_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Builder session not found or expired")
+
+    if overrides:
+        if "friendly_name" in overrides and overrides["friendly_name"]:
+            session.draft.friendly_name = overrides["friendly_name"]
+            session.draft.name = overrides["friendly_name"]
+        if "description" in overrides:
+            session.draft.description = overrides["description"]
+        if "system_prompt" in overrides and overrides["system_prompt"]:
+            session.draft.system_prompt = overrides["system_prompt"]
+        if "runtime_profile" in overrides and overrides["runtime_profile"]:
+            session.draft.runtime_profile = overrides["runtime_profile"]
 
     if not session.draft.friendly_name or not session.draft.system_prompt:
         raise HTTPException(
