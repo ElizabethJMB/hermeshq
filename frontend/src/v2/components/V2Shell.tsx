@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useFleetHealth } from "../../api/dashboard";
 import { useAgents } from "../../api/agents";
 import { usePublicBranding, resolveAssetUrl } from "../../api/settings";
+import { useI18n } from "../../lib/i18n";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useV2ToastStore } from "../toast";
 
@@ -20,6 +21,7 @@ export function V2Shell() {
   const [theme, setTheme] = useState<V2Theme>(() => {
     return (localStorage.getItem("v2.theme") as V2Theme) || "enterprise";
   });
+  const { t } = useI18n();
   const { data: branding } = usePublicBranding();
   const appName = branding?.app_name || "HermesHQ";
   const logoUrl = resolveAssetUrl(branding?.logo_url);
@@ -44,15 +46,15 @@ export function V2Shell() {
       : "All systems OK";
 
   const navItems = [
-    { to: "/v2", label: "Overview", end: true },
-    { to: "/v2/agents", label: "Agents" },
+    { to: "/v2", label: t("nav.overview"), end: true },
+    { to: "/v2/agents", label: t("nav.agents") },
     { to: "/v2/builder", label: "✨ Builder" },
-    { to: "/v2/tasks", label: "Tasks" },
-    { to: "/v2/schedules", label: "Schedules" },
-    { to: "/v2/comms", label: "Comms" },
-    { to: "/v2/audit", label: "Audit" },
-    { to: "/v2/users", label: "Users" },
-    { to: "/v2/settings", label: "Settings" },
+    { to: "/v2/tasks", label: t("nav.tasks") },
+    { to: "/v2/schedules", label: t("nav.schedules") },
+    { to: "/v2/comms", label: t("nav.comms") },
+    { to: "/v2/audit", label: t("nav.audit") },
+    { to: "/v2/users", label: t("nav.users") },
+    { to: "/v2/settings", label: t("nav.settings") },
   ];
 
   return (
@@ -108,10 +110,10 @@ export function V2Shell() {
       </main>
 
       <footer style={{ borderTop: "1px solid var(--v2-border)", padding: "14px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 1440, margin: "0 auto" }}>
-        <span style={{ fontSize: 12, color: "var(--v2-text-muted)" }}>{appName} · v2 preview</span>
+        <span style={{ fontSize: 12, color: "var(--v2-text-muted)" }}>{appName}</span>
         <div style={{ display: "flex", gap: 16 }}>
-          <Link to="/manual" style={{ fontSize: 12, color: "var(--v2-text-secondary)", textDecoration: "none" }}>Manual</Link>
-          <Link to="/" style={{ fontSize: 12, color: "var(--v2-text-secondary)", textDecoration: "none" }}>Classic view</Link>
+          <Link to="/manual" style={{ fontSize: 12, color: "var(--v2-text-secondary)", textDecoration: "none" }}>{t("nav.manual")}</Link>
+          <Link to="/" style={{ fontSize: 12, color: "var(--v2-text-secondary)", textDecoration: "none" }}>V1</Link>
         </div>
       </footer>
 
