@@ -154,9 +154,35 @@ export async function refreshToken() {
   return data;
 }
 
+// Exchange the httpOnly OIDC cookie for an access token after an OIDC login
+// redirect (the JWT is never exposed in the URL).
+export async function exchangeOidcCookie(): Promise<string | null> {
+  try {
+    const { access_token } = await refreshToken();
+    return access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function forgotPassword(email: string) {
   const { data } = await apiClient.post<{ message: string }>("/auth/forgot-password", { email });
   return data;
+}
+
+// Full logout: invalidates the httpOnly cookie server-side, clears local
+// session state and empties the react-query cache so no data from the
+// previous user leaks into the next session.
+export async function performLogout(): Promise<void> {
+  try {
+    await apiClient.post("/auth/logout");
+  } catch {
+    // Best-effort: clear local state even if the request fails
+  }
+  const { useSessionStore } = await import("../stores/sessionStore");
+  useSessionStore.getState().logout();
+  const { queryClient } = await import("../lib/queryClient");
+  queryClient.clear();
 }
 
 export async function resetPassword(token: string, new_password: string) {

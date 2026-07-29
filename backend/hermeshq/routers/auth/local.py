@@ -41,6 +41,8 @@ from hermeshq.schemas.auth import (
 )
 from hermeshq.services.avatar import (
     delete_avatar_files as _delete_avatar_files_shared,
+)
+from hermeshq.services.avatar import (
     resolve_media_type,
     validate_and_save_avatar,
 )
@@ -77,6 +79,7 @@ async def auth_providers(db: AsyncSession = Depends(get_db_session)) -> AuthProv
     db_provider_slugs: set[str] = set()
     try:
         from hermeshq.models.oidc_provider import OidcProvider
+
         result = await db.execute(select(OidcProvider).where(OidcProvider.enabled.is_(True)))
         for p in result.scalars().all():
             db_provider_slugs.add(p.slug)
@@ -117,7 +120,9 @@ async def auth_providers(db: AsyncSession = Depends(get_db_session)) -> AuthProv
 
 
 @router.post("/login")
-async def login(payload: LoginRequest, response: Response, request: Request, db: AsyncSession = Depends(get_db_session)):
+async def login(
+    payload: LoginRequest, response: Response, request: Request, db: AsyncSession = Depends(get_db_session)
+):
     client_ip = request.client.host if request.client else "unknown"
     _check_login_rate(client_ip)
     result = await db.execute(select(User).where(User.username == payload.username))
@@ -171,6 +176,7 @@ async def refresh_token(
 # Password Reset (Resend email)
 # ---------------------------------------------------------------------------
 
+
 @router.post("/forgot-password", response_model=PasswordResetResponse)
 async def forgot_password(
     payload: ForgotPasswordRequest,
@@ -190,9 +196,7 @@ async def forgot_password(
 
     if not user or not user.email:
         # Always return success to prevent enumeration
-        return PasswordResetResponse(
-            message="If that email is registered, a reset link has been sent."
-        )
+        return PasswordResetResponse(message="If that email is registered, a reset link has been sent.")
 
     # Rate limit: max 3 reset requests per user per hour
     one_hour_ago = datetime.now(UTC) - timedelta(hours=1)
@@ -204,9 +208,7 @@ async def forgot_password(
     )
     recent_count = recent_result.scalar() or 0
     if recent_count >= 3:
-        return PasswordResetResponse(
-            message="If that email is registered, a reset link has been sent."
-        )
+        return PasswordResetResponse(message="If that email is registered, a reset link has been sent.")
 
     # Generate a secure token
     raw_token = secrets.token_urlsafe(48)
@@ -241,9 +243,7 @@ async def forgot_password(
         logger.warning("Failed to send password reset email to %s: %s", user.email, exc)
         # Don't reveal the error to the client
 
-    return PasswordResetResponse(
-        message="If that email is registered, a reset link has been sent."
-    )
+    return PasswordResetResponse(message="If that email is registered, a reset link has been sent.")
 
 
 @router.post("/reset-password", response_model=PasswordResetResponse)
@@ -308,9 +308,7 @@ async def reset_password(
 
     logger.info("Password reset successful for user %s", user.username)
 
-    return PasswordResetResponse(
-        message="Password has been reset successfully."
-    )
+    return PasswordResetResponse(message="Password has been reset successfully.")
 
 
 @router.get("/email-config", response_model=EmailConfigStatus)
@@ -348,7 +346,15 @@ async def update_preferences(
     db: AsyncSession = Depends(get_db_session),
 ) -> UserRead:
     if payload.theme_preference is not None:
-        if payload.theme_preference not in {"default", "dark", "light", "system", "enterprise", "sixmanager", "sixmanager-light"}:
+        if payload.theme_preference not in {
+            "default",
+            "dark",
+            "light",
+            "system",
+            "enterprise",
+            "sixmanager",
+            "sixmanager-light",
+        }:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid theme preference")
         current_user.theme_preference = payload.theme_preference
     if payload.locale_preference is not None:

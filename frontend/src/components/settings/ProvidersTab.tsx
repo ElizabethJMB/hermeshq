@@ -1,14 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { useProviders, useUpdateProvider } from "../../api/providers";
+import { useProviders, useUpdateProvider, useRefreshProviderModels } from "../../api/providers";
+import { useSecrets } from "../../api/secrets";
 import { useI18n } from "../../lib/i18n";
 import { useSessionStore } from "../../stores/sessionStore";
+
+const NON_FETCHABLE = new Set(["bedrock"]);
+
+function canFetchModels(provider: { auth_type: string; base_url: string | null; runtime_provider: string }): boolean {
+  return provider.auth_type === "api_key" && Boolean(provider.base_url) && !NON_FETCHABLE.has(provider.runtime_provider);
+}
 
 export function ProvidersTab() {
   const currentUser = useSessionStore((state) => state.user);
   const { t } = useI18n();
   const { data: providers } = useProviders(Boolean(currentUser));
   const updateProvider = useUpdateProvider();
+  const refreshModels = useRefreshProviderModels();
+  const { data: secrets } = useSecrets(Boolean(currentUser));
+  const [refreshStatus, setRefreshStatus] = useState<Record<string, { ok: boolean; msg: string } | null>>({});
 
   const [providerDrafts, setProviderDrafts] = useState<Record<string, {
     name: string;
@@ -16,6 +26,7 @@ export function ProvidersTab() {
     default_model: string;
     available_models: string;
     enabled: boolean;
+    api_key_ref: string;
   }>>({});
 
   useEffect(() => {
@@ -29,6 +40,7 @@ export function ProvidersTab() {
             default_model: provider.default_model ?? "",
             available_models: (provider.available_models ?? []).join("\n"),
             enabled: provider.enabled,
+            api_key_ref: provider.api_key_ref ?? "",
           },
         ]),
       ),
@@ -51,6 +63,7 @@ export function ProvidersTab() {
           .map((s) => s.trim())
           .filter(Boolean),
         enabled: draft.enabled,
+        api_key_ref: draft.api_key_ref || null,
       },
     });
   }
@@ -68,7 +81,23 @@ export function ProvidersTab() {
         {(providers ?? []).map((provider) => {
           const draft = providerDrafts[provider.slug];
           if (!draft) return null;
-          return (
+  async function refreshProviderModels(providerSlug: string) {
+    setRefreshStatus((prev) => ({ ...prev, [providerSlug]: null }));
+    try {
+      const result = await refreshModels.mutateAsync(providerSlug);
+      setRefreshStatus((prev) => ({
+        ...prev,
+        [providerSlug]: { ok: true, msg: `${result.count} models fetched` },
+      }));
+    } catch (error) {
+      const msg = error && typeof error === "object" && "response" in error
+        ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? "Refresh failed"
+        : "Refresh failed";
+      setRefreshStatus((prev) => ({ ...prev, [providerSlug]: { ok: false, msg } }));
+    }
+  }
+
+  return (
             <article key={provider.slug} className="border border-[var(--border)] bg-[var(--surface-raised)] p-5">
               <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-4">
                 <div>
@@ -126,15 +155,33 @@ export function ProvidersTab() {
                 </label>
                 <label className="panel-field">
                   <span className="panel-label">{t("providers.defaultModel")}</span>
-                  <input
-                    value={draft.default_model}
-                    onChange={(event) =>
-                      setProviderDrafts((current) => ({
-                        ...current,
-                        [provider.slug]: { ...current[provider.slug], default_model: event.target.value },
-                      }))
-                    }
-                  />
+                  {(provider.available_models ?? []).length > 0 ? (
+                    <select
+                      value={draft.default_model}
+                      onChange={(event) =>
+                        setProviderDrafts((current) => ({
+                          ...current,
+                          [provider.slug]: { ...current[provider.slug], default_model: event.target.value },
+                        }))
+                      }
+                    >
+                      <option value="">— Select model —</option>
+                      {(provider.available_models ?? []).map((model) => (
+                        <option key={model} value={model}>{model}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={draft.default_model}
+                      onChange={(event) =>
+                        setProviderDrafts((current) => ({
+                          ...current,
+                          [provider.slug]: { ...current[provider.slug], default_model: event.target.value },
+                        }))
+                      }
+                      placeholder="Refresh models first or type manually"
+                    />
+                  )}
                 </label>
                 <label className="panel-field">
                   <span className="panel-label">{t("providers.availableModels")}</span>
@@ -150,6 +197,52 @@ export function ProvidersTab() {
                     }
                   />
                 </label>
+                {canFetchModels(provider) ? (
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="panel-button-secondary text-sm"
+                      onClick={() => void refreshProviderModels(provider.slug)}
+                      disabled={refreshModels.isPending && refreshModels.variables === provider.slug}
+                    >
+                      {refreshModels.isPending && refreshModels.variables === provider.slug
+                        ? "Fetching…"
+                        : "↻ Refresh from API"}
+                    </button>
+                    {refreshStatus[provider.slug] ? (
+                      <span
+                        className="text-sm"
+                        style={{ color: refreshStatus[provider.slug]!.ok ? "var(--success)" : "var(--danger)" }}
+                      >
+                        {refreshStatus[provider.slug]!.ok ? "✓ " : "✗ "}
+                        {refreshStatus[provider.slug]!.msg}
+                      </span>
+                    ) : provider.models_refreshed_at ? (
+                      <span className="text-xs text-[var(--text-disabled)]">
+                        Last: {new Date(provider.models_refreshed_at).toLocaleString()}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+                {provider.supports_secret_ref && (secrets ?? []).length > 0 ? (
+                  <label className="panel-field">
+                    <span className="panel-label">API key (secret for model refresh)</span>
+                    <select
+                      value={draft.api_key_ref}
+                      onChange={(event) =>
+                        setProviderDrafts((current) => ({
+                          ...current,
+                          [provider.slug]: { ...current[provider.slug], api_key_ref: event.target.value },
+                        }))
+                      }
+                    >
+                      <option value="">None</option>
+                      {(secrets ?? []).map((s) => (
+                        <option key={s.name} value={s.name}>{s.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 <div className="grid gap-2 text-sm text-[var(--text-secondary)]">
                   <p>{t("providers.authType")}: {provider.auth_type}</p>
                   <p>{t("providers.secretUsage")}: {provider.supports_secret_ref ? t("providers.secretSupported") : t("providers.secretNotSupported")}</p>

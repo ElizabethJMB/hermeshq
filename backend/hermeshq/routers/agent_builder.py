@@ -58,9 +58,7 @@ async def send_message(
 
     async def event_stream():
         try:
-            turn: AgentBuilderTurn = await process_builder_message(
-                session, payload.text, db
-            )
+            turn: AgentBuilderTurn = await process_builder_message(session, payload.text, db)
 
             if turn.assistant_text:
                 chunks = _chunk_text(turn.assistant_text, 80)
@@ -92,6 +90,7 @@ async def send_message(
 async def finalize_agent(
     session_id: str,
     request: Request,
+    overrides: dict | None = None,
     db: AsyncSession = Depends(get_db_session),
     user: User = Depends(require_admin),
 ):
@@ -99,6 +98,17 @@ async def finalize_agent(
     session = get_builder_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Builder session not found or expired")
+
+    if overrides:
+        if "friendly_name" in overrides and overrides["friendly_name"]:
+            session.draft.friendly_name = overrides["friendly_name"]
+            session.draft.name = overrides["friendly_name"]
+        if "description" in overrides:
+            session.draft.description = overrides["description"]
+        if "system_prompt" in overrides and overrides["system_prompt"]:
+            session.draft.system_prompt = overrides["system_prompt"]
+        if "runtime_profile" in overrides and overrides["runtime_profile"]:
+            session.draft.runtime_profile = overrides["runtime_profile"]
 
     if not session.draft.friendly_name or not session.draft.system_prompt:
         raise HTTPException(
@@ -127,7 +137,6 @@ async def finalize_agent(
         )
 
     from hermeshq.models.app_settings import AppSettings
-    from hermeshq.services.managed_capabilities import list_available_integration_packages
 
     settings = await db.get(AppSettings, "default")
     enabled = settings.enabled_integration_packages if settings else []

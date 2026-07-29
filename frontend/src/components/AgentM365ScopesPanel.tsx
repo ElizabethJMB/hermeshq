@@ -166,7 +166,7 @@ export function AgentM365ScopesPanel({ agentId }: { agentId: string }) {
           Guardar permisos
         </button>
         {saved && <p className="text-sm text-[var(--success)]">Guardado</p>}
-        {update.isError && <p className="text-sm text-[var(--accent)]">Error al guardar</p>}
+        {update.isError && <p className="text-sm text-[var(--danger)]">Error al guardar</p>}
       </div>
     </div>
   );

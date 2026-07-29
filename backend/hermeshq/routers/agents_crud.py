@@ -38,29 +38,15 @@ from hermeshq.routers.agents_shared import (
     _validate_hermes_version,
     _validate_supervisor,
 )
-from hermeshq.schemas.agent import AgentCreate, AgentRead, AgentUpdate, auxiliary_models_to_db
+from hermeshq.schemas.agent import AgentCreate, AgentRead, AgentUpdate
 from hermeshq.services.agent_identity import derive_agent_identity, ensure_unique_agent_slug, slugify_agent_value
-from hermeshq.services.audit import extract_ip, record_audit
+from hermeshq.services.audit import extract_ip, record_audit, redact_sensitive
+from hermeshq.services.auxiliary_models import encrypt_auxiliary_models
 from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agents", tags=["agents"])
-
-
-def _aux_to_plain_dict(value: dict) -> dict | None:
-    """Convert auxiliary_models entries (Pydantic models or dicts) to plain dicts."""
-    if not value:
-        return None
-    result: dict = {}
-    for task_name, entry in value.items():
-        if hasattr(entry, "to_dict"):
-            result[task_name] = entry.to_dict()
-        elif isinstance(entry, dict):
-            result[task_name] = {k: v for k, v in entry.items() if v is not None}
-        else:
-            result[task_name] = entry
-    return result or None
 
 
 # ------------------------------------------------------------------
@@ -104,6 +90,7 @@ async def create_agent(
     db: AsyncSession = Depends(get_db_session),
 ) -> AgentRead:
     from hermeshq.models.node import Node
+
     node = await db.get(Node, payload.node_id)
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
@@ -115,7 +102,9 @@ async def create_agent(
         slug=payload.slug,
     )
     unique_slug = await ensure_unique_agent_slug(db, slug)
-    hermes_version = await _validate_hermes_version(request, payload.hermes_version or runtime_defaults.get("hermes_version"))
+    hermes_version = await _validate_hermes_version(
+        request, payload.hermes_version or runtime_defaults.get("hermes_version")
+    )
     agent = Agent(
         node_id=payload.node_id,
         name=name,
@@ -142,7 +131,10 @@ async def create_agent(
         team_tags=payload.team_tags,
         supervisor_agent_id=payload.supervisor_agent_id,
         workspace_path="pending",
-        auxiliary_models=auxiliary_models_to_db(payload.auxiliary_models),
+        auxiliary_models=encrypt_auxiliary_models(
+            payload.auxiliary_models,
+            request.app.state.secret_vault,
+        ),
     )
     _apply_runtime_profile_defaults(
         agent,
@@ -273,7 +265,11 @@ async def update_agent(
         if field == "integration_configs":
             continue
         if field == "auxiliary_models" and isinstance(value, dict):
-            setattr(agent, field, _aux_to_plain_dict(value))
+            setattr(
+                agent,
+                field,
+                encrypt_auxiliary_models(value, request.app.state.secret_vault, existing=agent.auxiliary_models),
+            )
             continue
         setattr(agent, field, value)
     if "integration_configs" in update_data:
@@ -316,13 +312,12 @@ async def update_agent(
         "fallback_base_url",
     }
     should_restart_gateways = bool(set(update_data).intersection(restart_gateway_fields))
-    should_reset_session = runtime_profile_changed or hermes_version_changed or bool(
-        {"approval_mode", "tool_progress_mode", "gateway_notifications_mode"}.intersection(update_data)
+    should_reset_session = (
+        runtime_profile_changed
+        or hermes_version_changed
+        or bool({"approval_mode", "tool_progress_mode", "gateway_notifications_mode"}.intersection(update_data))
     )
-    if any(
-        field in update_data
-        for field in ("name", "friendly_name", "slug", "system_prompt", "soul_md")
-    ):
+    if any(field in update_data for field in ("name", "friendly_name", "slug", "system_prompt", "soul_md")):
         request.app.state.workspace_manager.sync_config(
             agent.id,
             agent.name,
@@ -339,8 +334,8 @@ async def update_agent(
         actor_username=current_user.username,
         actor_role=current_user.role,
         ip_address=extract_ip(request),
-        old_value=old_snapshot,
-        new_value=update_data if update_data else None,
+        old_value=redact_sensitive(old_snapshot),
+        new_value=redact_sensitive(update_data) if update_data else None,
     )
     # Pre-fetch channels before commit so the background task doesn't need the request session
     channels_to_restart: list[tuple[str, bool]] = []
@@ -358,6 +353,7 @@ async def update_agent(
 
     async def _post_save_background() -> None:
         from hermeshq.services.hermes_installation import _invalidate_install_cached
+
         _invalidate_install_cached(agent.id)
         await installation_manager.sync_agent_installation(agent)
         if should_reset_session:
@@ -368,9 +364,7 @@ async def update_agent(
 
     background_tasks.add_task(_post_save_background)
 
-    result = await db.execute(
-        select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id)
-    )
+    result = await db.execute(select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id))
     return _serialize_agent(request, result.scalar_one())
 
 
@@ -426,21 +420,13 @@ async def delete_agent(
     for task_id in active_task_ids:
         await supervisor.cancel_task(task_id)
     channel_platforms = list(
-        (
-            await db.execute(
-                select(MessagingChannel.platform).where(MessagingChannel.agent_id == agent_id)
-            )
-        ).scalars()
+        (await db.execute(select(MessagingChannel.platform).where(MessagingChannel.agent_id == agent_id))).scalars()
     )
     for platform in channel_platforms:
         with contextlib.suppress(Exception):
             await request.app.state.gateway_supervisor.stop_channel(agent_id, platform)
 
-    await db.execute(
-        update(Agent)
-        .where(Agent.supervisor_agent_id == agent_id)
-        .values(supervisor_agent_id=None)
-    )
+    await db.execute(update(Agent).where(Agent.supervisor_agent_id == agent_id).values(supervisor_agent_id=None))
     await db.execute(
         update(Task)
         .where(Task.agent_id == agent_id, Task.status == "queued")
@@ -452,15 +438,9 @@ async def delete_agent(
         .values(status="cancelled", error_message="Agent archived", completed_at=func.now())
     )
     await db.execute(
-        update(MessagingChannel)
-        .where(MessagingChannel.agent_id == agent_id)
-        .values(enabled=False, status="stopped")
+        update(MessagingChannel).where(MessagingChannel.agent_id == agent_id).values(enabled=False, status="stopped")
     )
-    await db.execute(
-        update(ScheduledTask)
-        .where(ScheduledTask.agent_id == agent_id)
-        .values(enabled=False)
-    )
+    await db.execute(update(ScheduledTask).where(ScheduledTask.agent_id == agent_id).values(enabled=False))
 
     was_already_archived = agent.is_archived
     agent.status = "stopped"

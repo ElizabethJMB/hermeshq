@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
 import type { UseMutationResult } from "@tanstack/react-query";
-import { useI18n } from "../../lib/i18n";
 import type { Agent, McpAccessToken, McpAccessTokenCreateResult } from "../../types/api";
 
 interface ExternalAccessTabProps {
@@ -18,7 +17,6 @@ export default function ExternalAccessTab({
   updateMcpAccessToken,
   revokeMcpAccessToken,
 }: ExternalAccessTabProps) {
-  const { t } = useI18n();
 
   const [mcpTokenName, setMcpTokenName] = useState("");
   const [mcpTokenDescription, setMcpTokenDescription] = useState("");

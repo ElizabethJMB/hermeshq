@@ -11,17 +11,10 @@ import infoIcon from "../assets/icon/info.png";
 
 const kanbanColumns = ["inbox", "planned", "running", "blocked", "review", "done", "failed"] as const;
 
-function statusTone(status: string) {
-  if (status === "completed") return "text-[var(--success)]";
-  if (status === "running" || status === "queued") return "text-[var(--warning)]";
-  if (status === "failed") return "text-[var(--accent)]";
-  return "text-[var(--text-secondary)]";
-}
-
 function statusBadgeTone(status: string) {
   if (status === "completed") return "border-[color-mix(in_srgb,var(--success)_45%,transparent)] bg-[color-mix(in_srgb,var(--success)_14%,transparent)] text-[var(--success)]";
   if (status === "running" || status === "queued") return "border-[color-mix(in_srgb,var(--warning)_45%,transparent)] bg-[color-mix(in_srgb,var(--warning)_14%,transparent)] text-[var(--warning)]";
-  if (status === "failed" || status === "cancelled") return "border-[color-mix(in_srgb,var(--accent)_45%,transparent)] bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]";
+  if (status === "failed" || status === "cancelled") return "border-[color-mix(in_srgb,var(--danger)_45%,transparent)] bg-[color-mix(in_srgb,var(--danger)_14%,transparent)] text-[var(--danger)]";
   return "border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_76%,transparent)] text-[var(--text-secondary)]";
 }
 
@@ -50,6 +43,7 @@ export function TasksPage() {
   const [boardAgentId, setBoardAgentId] = useState("");
   const [datePeriod, setDatePeriod] = useState<"today" | "week" | "month" | "all">("week");
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const draggedTaskColumn = draggedTaskId ? (tasks ?? []).find((t) => t.id === draggedTaskId)?.board_column : null;
   const [infoHovered, setInfoHovered] = useState(false);
 
   const agentsById = useMemo(
@@ -195,7 +189,7 @@ export function TasksPage() {
       </div>
 
       {/* Board */}
-      <section className="tasks-board panel-frame p-6  pb-[32rem]">
+      <section className="tasks-board panel-frame p-6">
         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[var(--border)] pb-4">
           <div>
             <p className="panel-label">{t("tasks.kanban")}</p>
@@ -225,11 +219,15 @@ export function TasksPage() {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 grid-cols-1">
+        <div className="mt-6 grid gap-4 grid-cols-1 xl:grid-flow-col xl:auto-cols-[minmax(260px,1fr)] xl:overflow-x-auto xl:pb-4">
           {kanbanColumns.map((column) => (
             <section
               key={column}
-              className="tasks-column rounded-[1.25rem] border border-[var(--border)] bg-[var(--surface-raised)] p-4"
+              className={`tasks-column rounded-[1.25rem] border bg-[var(--surface-raised)] p-4 transition-colors ${
+                draggedTaskId && draggedTaskColumn !== column
+                  ? "border-[var(--accent)] border-dashed"
+                  : "border-[var(--border)]"
+              }`}
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => {
                 event.preventDefault();
@@ -245,7 +243,7 @@ export function TasksPage() {
                   {grouped.get(column)?.length ?? 0}
                 </p>
               </div>
-              <div className="mt-3 space-y-3">
+              <div className="mt-3 space-y-3 xl:max-h-[70vh] xl:overflow-y-auto">
                 {(grouped.get(column) ?? []).map((task) => {
                   const agent = agentsById.get(task.agent_id);
                   return (
@@ -259,11 +257,8 @@ export function TasksPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="tasks-card-badge panel-label rounded-full border border-[var(--border)] px-2.5 py-1">
-                              {t("tasks.boardState")}: {t(`tasks.column.${task.board_column}`)}
-                            </span>
                             <span className={`tasks-card-badge panel-label rounded-full border px-2.5 py-1 ${statusBadgeTone(task.status)}`}>
-                              {t("tasks.runtimeState")}: {task.status}
+                              {task.status}
                             </span>
                           </div>
                           <h3 className="mt-2 text-sm text-[var(--text-display)]">

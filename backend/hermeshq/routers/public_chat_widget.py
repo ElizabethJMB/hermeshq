@@ -1,4 +1,5 @@
 """Embeddable public chat widget served as a self-contained JS file."""
+
 from fastapi import APIRouter
 from fastapi.responses import Response
 

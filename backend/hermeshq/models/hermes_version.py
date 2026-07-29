@@ -10,4 +10,3 @@ class HermesVersion(TimestampMixin, Base):
     version: Mapped[str] = mapped_column(String(32), primary_key=True)
     release_tag: Mapped[str | None] = mapped_column(String(64), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-

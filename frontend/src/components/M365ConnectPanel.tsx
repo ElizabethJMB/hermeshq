@@ -172,7 +172,7 @@ export function M365ConnectPanel() {
               Cancelar
             </button>
           </p>
-          {pollError && <p className="text-sm text-[var(--accent)]">{pollError}</p>}
+          {pollError && <p className="text-sm text-[var(--danger)]">{pollError}</p>}
         </div>
       ) : (
         <div className="mt-4 space-y-3">
@@ -180,7 +180,7 @@ export function M365ConnectPanel() {
             No hay cuenta Microsoft 365 conectada. Conecta tu cuenta para que los agentes puedan
             acceder a tu correo, calendario y SharePoint en tu nombre.
           </p>
-          {pollError && <p className="text-sm text-[var(--accent)]">{pollError}</p>}
+          {pollError && <p className="text-sm text-[var(--danger)]">{pollError}</p>}
           <button
             className="panel-button-primary"
             onClick={handleStartConnect}

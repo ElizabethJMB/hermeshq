@@ -61,7 +61,9 @@ async def _sync_agents_for_package(
                 agent.enabled_toolsets = [toolset for toolset in enabled_toolsets if toolset != plugin_slug]
                 changed = True
             if not installing and plugin_slug in (agent.disabled_toolsets or []):
-                agent.disabled_toolsets = [toolset for toolset in (agent.disabled_toolsets or []) if toolset != plugin_slug]
+                agent.disabled_toolsets = [
+                    toolset for toolset in (agent.disabled_toolsets or []) if toolset != plugin_slug
+                ]
                 changed = True
         if not installing:
             configs = dict(agent.integration_configs or {})
@@ -153,7 +155,9 @@ async def uninstall_integration_package(
 
     settings = await db.get(AppSettings, "default")
     if settings:
-        settings.enabled_integration_packages = [value for value in (settings.enabled_integration_packages or []) if value != slug]
+        settings.enabled_integration_packages = [
+            value for value in (settings.enabled_integration_packages or []) if value != slug
+        ]
 
     await _sync_agents_for_package(request, db, package, installing=False)
 

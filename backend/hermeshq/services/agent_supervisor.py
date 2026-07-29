@@ -5,10 +5,8 @@ import contextlib
 import logging
 import traceback
 
-import httpx
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from telegram import Bot
 
 logger = logging.getLogger(__name__)
 
@@ -84,9 +82,7 @@ class _StreamBuffer:
 
         async with self._session_factory() as session:
             task_row = await session.get(Task, self._task_id)
-            agent_row = (
-                await session.get(Agent, task_row.agent_id) if task_row else None
-            )
+            agent_row = await session.get(Agent, task_row.agent_id) if task_row else None
             if not task_row or not agent_row:
                 return
 
@@ -128,6 +124,7 @@ class _StreamBuffer:
         except asyncio.CancelledError:
             return
 
+
 from hermeshq.config import get_settings
 from hermeshq.core.events import EventBroker
 from hermeshq.models.activity import ActivityLog
@@ -140,7 +137,7 @@ from hermeshq.models.secret import Secret
 from hermeshq.models.task import Task
 from hermeshq.services.hermes_runtime import HermesRuntime
 from hermeshq.services.secret_vault import SecretVault
-from hermeshq.services.task_board import runtime_status_to_board_column, sync_board_with_runtime
+from hermeshq.services.task_board import sync_board_with_runtime
 
 
 class AgentSupervisor:
@@ -157,7 +154,6 @@ class AgentSupervisor:
         self.secret_vault = secret_vault
         self.running_agents: set[str] = set()
         self.active_tasks: dict[str, asyncio.Task] = {}
-        self._pending_callbacks: list = []
         settings = get_settings()
         self._concurrency_semaphore = asyncio.Semaphore(settings.concurrency_semaphore)
         self._semaphore_value = settings.concurrency_semaphore
@@ -193,10 +189,7 @@ class AgentSupervisor:
         thread_id = str(metadata.get("thread_id") or "").strip()
 
         result = await session.execute(
-            select(Task)
-            .where(Task.agent_id == task.agent_id)
-            .order_by(desc(Task.queued_at))
-            .limit(24)
+            select(Task).where(Task.agent_id == task.agent_id).order_by(desc(Task.queued_at)).limit(24)
         )
         candidates = list(result.scalars().all())
         prior_turns = [
@@ -204,10 +197,7 @@ class AgentSupervisor:
             for item in reversed(candidates)
             if item.id != task.id
             and (item.metadata_json or {}).get("conversation")
-            and (
-                not thread_id
-                or str((item.metadata_json or {}).get("thread_id") or "").strip() == thread_id
-            )
+            and (not thread_id or str((item.metadata_json or {}).get("thread_id") or "").strip() == thread_id)
         ]
         history: list[dict] = []
         for prior in prior_turns[-6:]:
@@ -246,10 +236,7 @@ class AgentSupervisor:
             for task in zombies:
                 prev_status = task.status
                 task.status = "failed"
-                task.error_message = (
-                    f"Task was {prev_status} when the server restarted "
-                    "and could not be resumed."
-                )
+                task.error_message = f"Task was {prev_status} when the server restarted and could not be resumed."
                 task.completed_at = now
                 if not task.board_manual:
                     task.board_column = "failed"
@@ -326,15 +313,14 @@ class AgentSupervisor:
     async def _start_pending_tasks(self, agent_id: str) -> None:
         async with self.session_factory() as session:
             result = await session.execute(
-                select(Task)
-                .where(Task.agent_id == agent_id, Task.status == "queued")
-                .order_by(Task.queued_at.asc())
+                select(Task).where(Task.agent_id == agent_id, Task.status == "queued").order_by(Task.queued_at.asc())
             )
             queued_tasks = result.scalars().all()
         for task in queued_tasks:
             await self.submit_task(task.id)
 
     async def _run_task(self, task_id: str) -> None:
+        callbacks: list = []
         try:
             conversation_history: list[dict] = []
             session_id: str | None = None
@@ -435,8 +421,7 @@ class AgentSupervisor:
                     metadata = dict(task.metadata_json or {})
                     # Strip source_path (internal only, never sent to client)
                     metadata["response_attachments"] = [
-                        {k: v for k, v in att.items() if k != "source_path"}
-                        for att in response_attachments
+                        {k: v for k, v in att.items() if k != "source_path"} for att in response_attachments
                     ]
                     task.metadata_json = metadata
 
@@ -449,7 +434,7 @@ class AgentSupervisor:
                     agent=agent,
                     task=task,
                     message=task.title or "Task completed",
-                        details={"tokens_used": task.tokens_used, "engine": execution.engine},
+                    details={"tokens_used": task.tokens_used, "engine": execution.engine},
                 )
                 await self._queue_delegate_result_callback(
                     session,
@@ -457,6 +442,7 @@ class AgentSupervisor:
                     agent=agent,
                     success=True,
                     summary=execution.final_response,
+                    callbacks=callbacks,
                 )
                 await self._queue_external_callback_delivery(
                     session,
@@ -464,9 +450,10 @@ class AgentSupervisor:
                     agent=agent,
                     success=True,
                     summary=execution.final_response,
+                    callbacks=callbacks,
                 )
                 await session.commit()
-                await self._drain_pending_callbacks()
+                await self._drain_callbacks(callbacks)
 
             completed_event = {
                 "type": "task.completed",
@@ -533,6 +520,7 @@ class AgentSupervisor:
                         agent=agent,
                         success=False,
                         summary=str(exc),
+                        callbacks=callbacks,
                     )
                     await self._queue_external_callback_delivery(
                         session,
@@ -540,9 +528,10 @@ class AgentSupervisor:
                         agent=agent,
                         success=False,
                         summary=str(exc),
+                        callbacks=callbacks,
                     )
                 await session.commit()
-                await self._drain_pending_callbacks()
+                await self._drain_callbacks(callbacks)
             failed_event = {
                 "type": "task.failed",
                 "task_id": task_id,
@@ -586,6 +575,7 @@ class AgentSupervisor:
         agent: Agent,
         success: bool,
         summary: str,
+        callbacks: list,
     ) -> None:
         if not task.source_agent_id:
             return
@@ -674,13 +664,10 @@ class AgentSupervisor:
             )
             pty_manager = getattr(self, "pty_manager", None)
             if pty_manager is not None:
-                notice = (
-                    f"\r\n[HermesHQ] Delegation result from {child_name}: {status_label}. "
-                    f"Task {task.id}\r\n"
-                )
+                notice = f"\r\n[HermesHQ] Delegation result from {child_name}: {status_label}. Task {task.id}\r\n"
                 await pty_manager.broadcast_notice(source_agent.id, notice)
 
-        self._pending_callbacks.append(_after_commit)
+        callbacks.append(_after_commit)
 
     async def _queue_external_callback_delivery(
         self,
@@ -690,6 +677,7 @@ class AgentSupervisor:
         agent: Agent,
         success: bool,
         summary: str,
+        callbacks: list,
     ) -> None:
         metadata = task.metadata_json or {}
 
@@ -732,27 +720,28 @@ class AgentSupervisor:
 
         async def _after_commit() -> None:
             try:
+                from telegram import Bot
+
                 bot = Bot(token=token)
                 await bot.send_message(chat_id=chat_id, text=message_text, message_thread_id=thread_value)
                 await bot.shutdown()
-            except (httpx.HTTPError, RuntimeError):
+            except Exception:  # noqa: BLE001  # telegram errors must never affect task state
                 logger.warning("Failed to send Telegram notification to chat %s", chat_id, exc_info=True)
 
-        self._pending_callbacks.append(_after_commit)
+        callbacks.append(_after_commit)
 
-    async def _drain_pending_callbacks(self) -> None:
-        if not self._pending_callbacks:
-            return
-        callbacks = list(self._pending_callbacks)
-        self._pending_callbacks.clear()
+    async def _drain_callbacks(self, callbacks: list) -> None:
+        """Run post-commit callbacks one by one; a failing callback never
+        aborts the rest nor propagates into task state handling."""
         for callback in callbacks:
-            await callback()
+            try:
+                await callback()
+            except Exception:  # noqa: BLE001  # post-commit side effect — log and continue
+                logger.exception("Post-commit task callback failed")
 
     async def get_recent_activity(self, limit: int = 20) -> list[ActivityLog]:
         async with self.session_factory() as session:
-            result = await session.execute(
-                select(ActivityLog).order_by(desc(ActivityLog.created_at)).limit(limit)
-            )
+            result = await session.execute(select(ActivityLog).order_by(desc(ActivityLog.created_at)).limit(limit))
             return list(result.scalars().all())
 
     # ------------------------------------------------------------------
@@ -775,6 +764,7 @@ class AgentSupervisor:
                         await self._apply_avatar_generation(session, task, target_agent_id)
         except Exception as exc:  # noqa: BLE001  # post-task hook best-effort
             import logging
+
             logging.getLogger(__name__).warning("Post-task hook failed for %s: %s", task_id, exc)
 
     async def _apply_avatar_generation(
@@ -791,7 +781,7 @@ class AgentSupervisor:
         from pathlib import Path
 
         from hermeshq.config import get_settings
-        from hermeshq.services.avatar import save_avatar_bytes, AVATAR_MEDIA_TYPES, delete_avatar_files
+        from hermeshq.services.avatar import AVATAR_MEDIA_TYPES, delete_avatar_files, save_avatar_bytes
 
         settings = get_settings()
 
@@ -820,7 +810,11 @@ class AgentSupervisor:
         content_type = AVATAR_MEDIA_TYPES.get(ext, "image/png")
 
         # Use the avatar service layer to save
-        avatar_base = Path(settings.agent_assets_root) if settings.agent_assets_root else Path(settings.workspaces_root) / "_agent_assets"
+        avatar_base = (
+            Path(settings.agent_assets_root)
+            if settings.agent_assets_root
+            else Path(settings.workspaces_root) / "_agent_assets"
+        )
         content = source.read_bytes()
         filename = save_avatar_bytes(avatar_base, target_agent_id, content, content_type)
 
@@ -833,7 +827,6 @@ class AgentSupervisor:
             except Exception:
                 delete_avatar_files(avatar_base, target_agent_id)
                 raise
-
 
             await self._log(
                 session,
@@ -850,9 +843,11 @@ class AgentSupervisor:
                 }
             )
 
+
 # ---------------------------------------------------------------------------
 # Module-level helper to get the running supervisor from the FastAPI app.
 # ---------------------------------------------------------------------------
+
 
 def get_supervisor() -> AgentSupervisor:
     """Return the AgentSupervisor attached to the running FastAPI app state."""

@@ -183,6 +183,7 @@ async def rotate_mcp_access_token(
     # Extend expiration if applicable
     if access.expires_at:
         from datetime import timedelta
+
         remaining = access.expires_at - datetime.now(UTC)
         if remaining.total_seconds() > 0:
             access.expires_at = datetime.now(UTC) + remaining

@@ -267,6 +267,7 @@ export interface AuxiliaryModelEntry {
   model: string | null;
   api_key_ref: string | null;
   base_url: string | null;
+  has_api_key?: boolean;
 }
 
 export interface ProviderDefinition {
@@ -283,8 +284,10 @@ export interface ProviderDefinition {
   supports_secret_ref: boolean;
   supports_custom_base_url: boolean;
   enabled: boolean;
-  sort_order: number;
-  created_at: string;
+    sort_order: number;
+    api_key_ref: string | null;
+    models_refreshed_at: string | null;
+    created_at: string;
   updated_at: string;
 }
 

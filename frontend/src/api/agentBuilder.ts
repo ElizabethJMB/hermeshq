@@ -110,7 +110,10 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-export async function finalizeAgent(sessionId: string): Promise<FinalizeResult> {
-  const { data } = await apiClient.post(`/agent-builder/sessions/${sessionId}/finalize`);
+export async function finalizeAgent(
+  sessionId: string,
+  overrides?: { friendly_name?: string; description?: string; system_prompt?: string; runtime_profile?: string },
+): Promise<FinalizeResult> {
+  const { data } = await apiClient.post(`/agent-builder/sessions/${sessionId}/finalize`, overrides ?? {});
   return data;
 }

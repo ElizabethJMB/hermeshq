@@ -14,16 +14,14 @@ Three attack steps were patched:
             Fixed: agent mutation is gated behind is_admin().
 """
 
-import asyncio
-import types
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_user(user_id: str = "user-A", role: str = "user") -> SimpleNamespace:
     return SimpleNamespace(id=user_id, role=role, is_active=True)
@@ -47,6 +45,7 @@ def _make_db(scalar=None):
 # ---------------------------------------------------------------------------
 # Step 2 regression: thread_user_id is pinned to the authenticated user
 # ---------------------------------------------------------------------------
+
 
 class TestTaskCreateIdentityPinning(unittest.IsolatedAsyncioTestCase):
     """POST /api/tasks must not honour client-supplied identity fields."""
@@ -83,9 +82,7 @@ class TestTaskCreateIdentityPinning(unittest.IsolatedAsyncioTestCase):
             )
             return task
 
-        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(
-            supervisor=AsyncMock()
-        )))
+        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(supervisor=AsyncMock())))
 
         payload = TaskCreate(
             agent_id="agent-1",
@@ -93,12 +90,15 @@ class TestTaskCreateIdentityPinning(unittest.IsolatedAsyncioTestCase):
             metadata=payload_metadata,
         )
 
-        with patch("hermeshq.routers.tasks.ensure_agent_access", AsyncMock(return_value=agent)), \
-             patch("hermeshq.routers.tasks.Task", side_effect=_capture_task), \
-             patch("hermeshq.routers.tasks.runtime_status_to_board_column", return_value="queue"), \
-             patch("hermeshq.routers.tasks.next_board_order", return_value=1), \
-             patch("hermeshq.routers.tasks.TaskRead.model_validate", lambda t: t):
+        with (
+            patch("hermeshq.routers.tasks.ensure_agent_access", AsyncMock(return_value=agent)),
+            patch("hermeshq.routers.tasks.Task", side_effect=_capture_task),
+            patch("hermeshq.routers.tasks.runtime_status_to_board_column", return_value="queue"),
+            patch("hermeshq.routers.tasks.next_board_order", return_value=1),
+            patch("hermeshq.routers.tasks.TaskRead.model_validate", lambda t: t),
+        ):
             from hermeshq.routers.tasks import create_task
+
             await create_task(
                 payload=payload,
                 request=request,
@@ -150,6 +150,7 @@ class TestTaskCreateIdentityPinning(unittest.IsolatedAsyncioTestCase):
 # Step 1 regression: GET /scopes requires existing assignment
 # ---------------------------------------------------------------------------
 
+
 class TestGetAgentScopesRequiresAssignment(unittest.IsolatedAsyncioTestCase):
     """GET /m365/me/agents/{id}/scopes must not auto-create an AgentAssignment."""
 
@@ -162,6 +163,7 @@ class TestGetAgentScopesRequiresAssignment(unittest.IsolatedAsyncioTestCase):
 
         with patch("hermeshq.core.security.ensure_agent_access", AsyncMock(side_effect=HTTPException(status_code=403))):
             from hermeshq.routers.m365 import get_agent_m365_scopes
+
             with self.assertRaises(HTTPException) as ctx:
                 await get_agent_m365_scopes(
                     agent_id="agent-1",
@@ -179,6 +181,7 @@ class TestGetAgentScopesRequiresAssignment(unittest.IsolatedAsyncioTestCase):
 
         with patch("hermeshq.core.security.ensure_agent_access", AsyncMock(side_effect=HTTPException(status_code=403))):
             from hermeshq.routers.m365 import get_agent_m365_scopes
+
             try:
                 await get_agent_m365_scopes(agent_id="agent-1", current_user=user, db=db)
             except Exception:
@@ -190,6 +193,7 @@ class TestGetAgentScopesRequiresAssignment(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 # Step 3 regression: non-admin cannot mutate shared agent properties
 # ---------------------------------------------------------------------------
+
 
 class TestPutScopesAgentMutationGating(unittest.IsolatedAsyncioTestCase):
     """PUT /m365/me/agents/{id}/scopes must gate agent mutations behind is_admin."""
@@ -218,9 +222,7 @@ class TestPutScopesAgentMutationGating(unittest.IsolatedAsyncioTestCase):
         db.get.return_value = agent
         db.commit = AsyncMock()
 
-        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(
-            installation_manager=AsyncMock()
-        )))
+        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(installation_manager=AsyncMock())))
 
         payload = AgentScopesUpdate(
             allowed_scopes=["Files.Read.All"],
@@ -262,9 +264,7 @@ class TestPutScopesAgentMutationGating(unittest.IsolatedAsyncioTestCase):
         db.get.return_value = agent
         db.commit = AsyncMock()
 
-        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(
-            installation_manager=AsyncMock()
-        )))
+        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(installation_manager=AsyncMock())))
 
         payload = AgentScopesUpdate(allowed_scopes=["Files.Read.All"])
 

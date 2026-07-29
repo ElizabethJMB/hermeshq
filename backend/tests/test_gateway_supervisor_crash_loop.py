@@ -13,10 +13,9 @@ Root causes fixed:
 Reference: HermesHQ v2026.5.19.2 crash loop incident (2026-05-26)
 """
 
-import asyncio
 import os
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 from hermeshq.services.gateway_supervisor import (
@@ -25,10 +24,10 @@ from hermeshq.services.gateway_supervisor import (
     GatewaySupervisor,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_agent(
     agent_id: str = "agent-001",
@@ -136,6 +135,7 @@ class SessionSequence:
 # Test: Fix B — Global try/except in bootstrap_gateways()
 # ---------------------------------------------------------------------------
 
+
 class TestBootstrapGlobalSafetyNet(unittest.IsolatedAsyncioTestCase):
     """
     Verify that bootstrap_gateways() NEVER propagates exceptions to the caller.
@@ -184,6 +184,7 @@ class TestBootstrapGlobalSafetyNet(unittest.IsolatedAsyncioTestCase):
 # Test: Fix C — Agent status filtering
 # ---------------------------------------------------------------------------
 
+
 class TestBootstrapAgentStatusFilter(unittest.IsolatedAsyncioTestCase):
     """
     Verify that stopped and archived agents are excluded from bootstrap targets.
@@ -196,8 +197,8 @@ class TestBootstrapAgentStatusFilter(unittest.IsolatedAsyncioTestCase):
         ch_run = _make_channel(agent_id="run-1")
 
         sf.side_effect = SessionSequence(
-            _make_session(rows=[running]),        # bootstrap query: agents
-            _make_session(rows=[ch_run]),          # _bootstrap_one: channels
+            _make_session(rows=[running]),  # bootstrap query: agents
+            _make_session(rows=[ch_run]),  # _bootstrap_one: channels
         )
 
         await supervisor._do_bootstrap_gateways()
@@ -226,9 +227,9 @@ class TestBootstrapAgentStatusFilter(unittest.IsolatedAsyncioTestCase):
         c2 = _make_channel(agent_id="r2")
 
         sf.side_effect = SessionSequence(
-            _make_session(rows=[a1, a2]),        # bootstrap query: agents
-            _make_session(rows=[c1]),             # _bootstrap_one for a1: channels
-            _make_session(rows=[c2]),             # _bootstrap_one for a2: channels
+            _make_session(rows=[a1, a2]),  # bootstrap query: agents
+            _make_session(rows=[c1]),  # _bootstrap_one for a1: channels
+            _make_session(rows=[c2]),  # _bootstrap_one for a2: channels
         )
 
         await supervisor._do_bootstrap_gateways()
@@ -260,6 +261,7 @@ class TestBootstrapAgentStatusFilter(unittest.IsolatedAsyncioTestCase):
 # Test: Fix A — Generic Exception handler uses transient=True
 # ---------------------------------------------------------------------------
 
+
 class TestBootstrapTransientHandling(unittest.IsolatedAsyncioTestCase):
     """
     Verify that unexpected exceptions are treated as transient and retried.
@@ -288,8 +290,8 @@ class TestBootstrapTransientHandling(unittest.IsolatedAsyncioTestCase):
         supervisor, sf, _, _ = _make_supervisor()
         bad = _make_agent(agent_id="bad-1", name="Bad")
         good = _make_agent(agent_id="good-1", name="Good")
-        ch_bad = _make_channel(agent_id="bad-1")
-        ch_good = _make_channel(agent_id="good-1")
+        _make_channel(agent_id="bad-1")
+        _make_channel(agent_id="good-1")
 
         started: list[str] = []
 
@@ -302,8 +304,6 @@ class TestBootstrapTransientHandling(unittest.IsolatedAsyncioTestCase):
 
         # Patch _bootstrap_one to test gather isolation directly
         call_count = 0
-
-        original_bootstrap = supervisor._bootstrap_one
 
         async def patched_bootstrap(agent):
             nonlocal call_count
@@ -348,6 +348,7 @@ class TestBootstrapTransientHandling(unittest.IsolatedAsyncioTestCase):
 # Test: Fix D — Configurable timeout and retries
 # ---------------------------------------------------------------------------
 
+
 class TestConfigurableBootstrapParameters(unittest.TestCase):
     def test_default_timeout_reasonable(self) -> None:
         self.assertLessEqual(BOOTSTRAP_CHANNEL_TIMEOUT_SECONDS, 120)
@@ -364,8 +365,7 @@ class TestConfigurableBootstrapParameters(unittest.TestCase):
             self.assertEqual(int(os.getenv("HQ_BOOTSTRAP_RETRIES", "2")), 1)
 
     def test_defaults_without_env(self) -> None:
-        env = {k: v for k, v in os.environ.items()
-               if k not in ("HQ_BOOTSTRAP_TIMEOUT", "HQ_BOOTSTRAP_RETRIES")}
+        env = {k: v for k, v in os.environ.items() if k not in ("HQ_BOOTSTRAP_TIMEOUT", "HQ_BOOTSTRAP_RETRIES")}
         with patch.dict(os.environ, env, clear=True):
             self.assertEqual(int(os.getenv("HQ_BOOTSTRAP_TIMEOUT", "30")), 30)
             self.assertEqual(int(os.getenv("HQ_BOOTSTRAP_RETRIES", "2")), 2)
@@ -374,6 +374,7 @@ class TestConfigurableBootstrapParameters(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Test: _is_transient_bootstrap_error helper
 # ---------------------------------------------------------------------------
+
 
 class TestIsTransientBootstrapError(unittest.TestCase):
     def setUp(self) -> None:
@@ -404,6 +405,7 @@ class TestIsTransientBootstrapError(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Test: Enterprise platform exclusion
 # ---------------------------------------------------------------------------
+
 
 class TestEnterprisePlatformExclusion(unittest.IsolatedAsyncioTestCase):
     async def test_google_chat_skipped(self) -> None:
@@ -437,6 +439,7 @@ class TestEnterprisePlatformExclusion(unittest.IsolatedAsyncioTestCase):
 # Test: No-target scenarios
 # ---------------------------------------------------------------------------
 
+
 class TestBootstrapNoTargets(unittest.IsolatedAsyncioTestCase):
     async def test_empty_channels(self) -> None:
         supervisor, sf, _, _ = _make_supervisor()
@@ -459,13 +462,14 @@ class TestBootstrapNoTargets(unittest.IsolatedAsyncioTestCase):
 # Test: Bootstrap state tracking
 # ---------------------------------------------------------------------------
 
+
 class TestBootstrapStateTracking(unittest.TestCase):
     def setUp(self) -> None:
         self.supervisor, _, _, _ = _make_supervisor()
 
     def test_success_state(self) -> None:
         ch = _make_channel()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         self.supervisor._mark_bootstrap_state(ch, status="success", attempted_at=now, duration_ms=1500, attempts=1)
         b = ch.metadata_json["bootstrap"]
         self.assertEqual(b["last_status"], "success")
@@ -475,7 +479,7 @@ class TestBootstrapStateTracking(unittest.TestCase):
 
     def test_failure_state(self) -> None:
         ch = _make_channel()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         self.supervisor._mark_bootstrap_state(ch, status="failed", attempted_at=now, error="InvalidToken", attempts=3)
         b = ch.metadata_json["bootstrap"]
         self.assertEqual(b["last_status"], "failed")
@@ -484,9 +488,9 @@ class TestBootstrapStateTracking(unittest.TestCase):
 
     def test_preserves_previous_success(self) -> None:
         ch = _make_channel()
-        t1 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        t1 = datetime(2026, 1, 1, tzinfo=UTC)
         self.supervisor._mark_bootstrap_state(ch, status="success", attempted_at=t1, duration_ms=500, attempts=1)
-        t2 = datetime(2026, 5, 26, tzinfo=timezone.utc)
+        t2 = datetime(2026, 5, 26, tzinfo=UTC)
         self.supervisor._mark_bootstrap_state(ch, status="failed", attempted_at=t2, error="timeout", attempts=2)
         b = ch.metadata_json["bootstrap"]
         self.assertEqual(b["last_status"], "failed")
@@ -497,11 +501,13 @@ class TestBootstrapStateTracking(unittest.TestCase):
 # Test: _channel_runtime_enabled helper
 # ---------------------------------------------------------------------------
 
+
 class TestChannelRuntimeEnabled(unittest.TestCase):
     def setUp(self) -> None:
         self.supervisor, _, _, _ = _make_supervisor()
         # Restore real method for these unit tests
         from hermeshq.services.gateway_process_manager import GatewayProcessManager
+
         self.real_check = GatewayProcessManager._channel_runtime_enabled
 
     def test_enabled(self) -> None:
@@ -523,6 +529,7 @@ class TestChannelRuntimeEnabled(unittest.TestCase):
 # Test: Timeout behavior
 # ---------------------------------------------------------------------------
 
+
 class TestBootstrapTimeoutBehavior(unittest.IsolatedAsyncioTestCase):
     async def test_timeout_retried(self) -> None:
         supervisor, sf, _, _ = _make_supervisor()
@@ -536,6 +543,7 @@ class TestBootstrapTimeoutBehavior(unittest.IsolatedAsyncioTestCase):
         )
 
         attempts = 0
+
         async def timeout_fn(agent_id, platform, log_mgr):
             nonlocal attempts
             attempts += 1
@@ -556,7 +564,7 @@ class TestBootstrapTimeoutBehavior(unittest.IsolatedAsyncioTestCase):
             _make_session(rows=[channel]),
             _make_session(rows=[]),  # persist
         )
-        supervisor._process_mgr.start_channel_locked = AsyncMock(side_effect=asyncio.TimeoutError())
+        supervisor._process_mgr.start_channel_locked = AsyncMock(side_effect=TimeoutError())
 
         # Outer method must not raise
         await supervisor.bootstrap_gateways()
@@ -565,6 +573,7 @@ class TestBootstrapTimeoutBehavior(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 # Test: End-to-end scenario from the bug report
 # ---------------------------------------------------------------------------
+
 
 class TestCrashLoopScenario(unittest.IsolatedAsyncioTestCase):
     """
@@ -623,6 +632,7 @@ class TestCrashLoopScenario(unittest.IsolatedAsyncioTestCase):
         )
 
         calls = 0
+
         async def start_fn(agent_id, platform, log_mgr):
             nonlocal calls
             calls += 1

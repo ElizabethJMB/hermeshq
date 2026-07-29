@@ -19,6 +19,7 @@ _STALE_TOKEN_SECONDS = 86400  # 24 hours
 @dataclass
 class _Bucket:
     """Sliding-window bucket for one token × method."""
+
     total: int = 0
     errors: int = 0
     latency_sum: float = 0.0
@@ -51,7 +52,8 @@ class McpAnalytics:
         """Remove tokens not seen in the last 24 hours."""
         now = time.monotonic()
         stale = [
-            tid for tid, methods in self._buckets.items()
+            tid
+            for tid, methods in self._buckets.items()
             if all(now - b.last_ts > _STALE_TOKEN_SECONDS for b in methods.values())
         ]
         for tid in stale:
@@ -118,15 +120,9 @@ class McpAnalytics:
         }
 
     def top_tokens(self, limit: int = 10) -> list[dict[str, Any]]:
-        token_totals = [
-            (tid, sum(b.total for b in methods.values()))
-            for tid, methods in self._buckets.items()
-        ]
+        token_totals = [(tid, sum(b.total for b in methods.values())) for tid, methods in self._buckets.items()]
         token_totals.sort(key=lambda x: x[1], reverse=True)
-        return [
-            {"token_id": tid, "total_requests": cnt}
-            for tid, cnt in token_totals[:limit]
-        ]
+        return [{"token_id": tid, "total_requests": cnt} for tid, cnt in token_totals[:limit]]
 
     # ── Persistent stats from ActivityLog ────────────────────────────────
 

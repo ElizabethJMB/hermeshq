@@ -22,4 +22,3 @@ class SecretRead(ORMModel):
     provider: str | None
     created_at: datetime
     updated_at: datetime
-

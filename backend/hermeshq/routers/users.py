@@ -7,7 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.config import get_settings
-from hermeshq.core.security import hash_password, require_admin
+from hermeshq.core.security import get_current_user, hash_password, require_admin
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
 from hermeshq.models.agent_assignment import AgentAssignment
@@ -189,7 +189,11 @@ async def delete_user(
 
 
 @router.get("/{user_id}/avatar", include_in_schema=False)
-async def get_user_avatar(user_id: str, db: AsyncSession = Depends(get_db_session)):
+async def get_user_avatar(
+    user_id: str,
+    _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
     user = await db.get(User, user_id)
     if not user or not user.avatar_filename:
         raise HTTPException(status_code=404, detail="Avatar not found")

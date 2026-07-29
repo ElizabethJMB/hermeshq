@@ -15,8 +15,6 @@ from hermeshq.core.security import (
     verify_password,
 )
 
-
-
 # ---------------------------------------------------------------------------
 # Password hashing
 # ---------------------------------------------------------------------------
@@ -82,25 +80,28 @@ class TestAccessToken(unittest.TestCase):
         mock_settings.jwt_secret = "test-secret-for-expiry"
         mock_settings.jwt_algorithm = "HS256"
         mock_settings.access_token_minutes = -1
-        from jose import jwt as jose_jwt
-
         import datetime as _dt
 
-        expires_at = _dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(minutes=-1)
+        from jose import jwt as jose_jwt
+
+        expires_at = _dt.datetime.now(_dt.UTC) + _dt.timedelta(minutes=-1)
         token = jose_jwt.encode(
             {"sub": "expired-user", "sub_kind": "id", "exp": expires_at},
             mock_settings.jwt_secret,
             algorithm=mock_settings.jwt_algorithm,
         )
         # Use the real settings for decode (jwt_secret must match)
-        with patch.object(
-            __import__("hermeshq.core.security", fromlist=["settings"]).settings,
-            "jwt_secret",
-            mock_settings.jwt_secret,
-        ), patch.object(
-            __import__("hermeshq.core.security", fromlist=["settings"]).settings,
-            "jwt_algorithm",
-            mock_settings.jwt_algorithm,
+        with (
+            patch.object(
+                __import__("hermeshq.core.security", fromlist=["settings"]).settings,
+                "jwt_secret",
+                mock_settings.jwt_secret,
+            ),
+            patch.object(
+                __import__("hermeshq.core.security", fromlist=["settings"]).settings,
+                "jwt_algorithm",
+                mock_settings.jwt_algorithm,
+            ),
         ):
             result = decode_access_token(token)
         self.assertIsNone(result)

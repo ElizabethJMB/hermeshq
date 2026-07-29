@@ -35,8 +35,20 @@ def _ensure_runner(workspaces_root: Path) -> tuple[Path, str]:
     if not executable.exists():
         builder = venv.EnvBuilder(with_pip=True, clear=False)
         builder.create(tool_root)
-        subprocess.run([str(python_path), "-m", "pip", "install", "--upgrade", "pip"], check=True, capture_output=True, text=True, timeout=180)
-        subprocess.run([str(python_path), "-m", "pip", "install", PACKAGE_SPEC], check=True, capture_output=True, text=True, timeout=300)
+        subprocess.run(
+            [str(python_path), "-m", "pip", "install", "--upgrade", "pip"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        subprocess.run(
+            [str(python_path), "-m", "pip", "install", PACKAGE_SPEC],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
     probe = subprocess.run([str(executable), "help"], check=True, capture_output=True, text=True, timeout=30)
     version = PACKAGE_SPEC
     if "Snyk Agent Scan v" in probe.stdout:

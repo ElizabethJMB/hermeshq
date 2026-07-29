@@ -24,4 +24,3 @@ class TemplateRead(ORMModel):
     config: dict
     created_at: datetime
     updated_at: datetime
-

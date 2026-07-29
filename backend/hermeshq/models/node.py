@@ -23,4 +23,3 @@ class Node(TimestampMixin, Base):
     system_info: Mapped[dict] = mapped_column(JSON, default=dict)
 
     agents = relationship("Agent", back_populates="node", cascade="all, delete-orphan")
-

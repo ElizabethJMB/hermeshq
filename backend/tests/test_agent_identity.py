@@ -22,10 +22,14 @@ _SRC_PATH = os.path.join(_BACKEND_DIR, "hermeshq", "services", "agent_identity.p
 def _load_module():
     """Load agent_identity.py with future annotations enabled."""
     # Stub out the heavy model dependency so we don't need SQLAlchemy models.
-    _stub_agent = type("Agent", (), {
-        "id": property(lambda self: None),
-        "slug": property(lambda self: None),
-    })
+    _stub_agent = type(
+        "Agent",
+        (),
+        {
+            "id": property(lambda self: None),
+            "slug": property(lambda self: None),
+        },
+    )
     _mock_agent_mod = types.ModuleType("hermeshq.models.agent")
     _mock_agent_mod.Agent = _stub_agent
 
@@ -35,7 +39,7 @@ def _load_module():
     _original_agent_mod = sys.modules.get("hermeshq.models.agent")
     sys.modules["hermeshq.models.agent"] = _mock_agent_mod
     try:
-        with open(_SRC_PATH, "r") as f:
+        with open(_SRC_PATH) as f:
             source = f.read()
 
         # Inject future annotations so ``str | None`` works on Python 3.9.
@@ -280,7 +284,7 @@ class TestEnsureUniqueAgentSlug(unittest.IsolatedAsyncioTestCase):
         db = AsyncMock()
         db.execute.side_effect = [
             self._make_db_result("some-agent-id"),  # collision
-            self._make_db_result(None),              # free
+            self._make_db_result(None),  # free
         ]
 
         with patch.object(_mod, "select", _build_select_mock()):
@@ -296,7 +300,7 @@ class TestEnsureUniqueAgentSlug(unittest.IsolatedAsyncioTestCase):
             self._make_db_result("id1"),  # my-agent taken
             self._make_db_result("id2"),  # my-agent-2 taken
             self._make_db_result("id3"),  # my-agent-3 taken
-            self._make_db_result(None),   # my-agent-4 free
+            self._make_db_result(None),  # my-agent-4 free
         ]
 
         with patch.object(_mod, "select", _build_select_mock()):
@@ -312,9 +316,7 @@ class TestEnsureUniqueAgentSlug(unittest.IsolatedAsyncioTestCase):
 
         select_mock = _build_select_mock()
         with patch.object(_mod, "select", select_mock):
-            result = await ensure_unique_agent_slug(
-                db, "my-agent", exclude_agent_id="exclude-me"
-            )
+            result = await ensure_unique_agent_slug(db, "my-agent", exclude_agent_id="exclude-me")
 
         self.assertEqual(result, "my-agent")
         # .where() should have been called twice: once for slug, once for exclude
@@ -327,9 +329,7 @@ class TestEnsureUniqueAgentSlug(unittest.IsolatedAsyncioTestCase):
         db.execute.return_value = self._make_db_result(None)
 
         with patch.object(_mod, "select", _build_select_mock()):
-            result = await ensure_unique_agent_slug(
-                db, "taken-slug", exclude_agent_id="the-excluded-id"
-            )
+            result = await ensure_unique_agent_slug(db, "taken-slug", exclude_agent_id="the-excluded-id")
 
         self.assertEqual(result, "taken-slug")
 

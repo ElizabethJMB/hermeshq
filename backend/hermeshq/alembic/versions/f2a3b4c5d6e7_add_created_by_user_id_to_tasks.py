@@ -5,6 +5,7 @@ Revises: e1f2a3b4c5d6
 Create Date: 2026-05-28 00:00:00.000000
 
 """
+
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy import inspect
@@ -33,7 +34,9 @@ def upgrade() -> None:
     if not _column_exists("tasks", "created_by_user_id"):
         op.add_column(
             "tasks",
-            sa.Column("created_by_user_id", sa.String(36), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+            sa.Column(
+                "created_by_user_id", sa.String(36), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+            ),
         )
     if not _index_exists("ix_tasks_created_by_user_id", "tasks"):
         op.create_index("ix_tasks_created_by_user_id", "tasks", ["created_by_user_id"])

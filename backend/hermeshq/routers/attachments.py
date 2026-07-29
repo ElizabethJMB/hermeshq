@@ -20,23 +20,61 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents", tags=["attachments"])
 
 ALLOWED_EXTENSIONS = {
-    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg",
-    ".mp3", ".aac", ".ogg", ".wav", ".m4a", ".flac",
-    ".mp4", ".webm", ".mov", ".avi", ".mkv",
-    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
-    ".txt", ".csv", ".json", ".md", ".xml", ".html", ".zip",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".webp",
+    ".bmp",
+    ".svg",
+    ".mp3",
+    ".aac",
+    ".ogg",
+    ".wav",
+    ".m4a",
+    ".flac",
+    ".mp4",
+    ".webm",
+    ".mov",
+    ".avi",
+    ".mkv",
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".ppt",
+    ".pptx",
+    ".txt",
+    ".csv",
+    ".json",
+    ".md",
+    ".xml",
+    ".html",
+    ".zip",
 }
 
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
 
 MIME_MAP = {
-    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
-    ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
     ".svg": "image/svg+xml",
-    ".mp3": "audio/mpeg", ".aac": "audio/aac", ".ogg": "audio/ogg",
-    ".wav": "audio/wav", ".m4a": "audio/mp4", ".flac": "audio/flac",
-    ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime",
-    ".avi": "video/x-msvideo", ".mkv": "video/x-matroska",
+    ".mp3": "audio/mpeg",
+    ".aac": "audio/aac",
+    ".ogg": "audio/ogg",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+    ".flac": "audio/flac",
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo",
+    ".mkv": "video/x-matroska",
     ".pdf": "application/pdf",
     ".doc": "application/msword",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -44,8 +82,12 @@ MIME_MAP = {
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ".ppt": "application/vnd.ms-powerpoint",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ".txt": "text/plain", ".csv": "text/csv", ".json": "application/json",
-    ".md": "text/markdown", ".xml": "application/xml", ".html": "text/html",
+    ".txt": "text/plain",
+    ".csv": "text/csv",
+    ".json": "application/json",
+    ".md": "text/markdown",
+    ".xml": "application/xml",
+    ".html": "text/html",
     ".zip": "application/zip",
 }
 
@@ -105,7 +147,7 @@ async def upload_attachment(
 
     if total_size > MAX_FILE_SIZE:
         file_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=413, detail=f"File too large. Max {MAX_FILE_SIZE // (1024*1024)}MB")
+        raise HTTPException(status_code=413, detail=f"File too large. Max {MAX_FILE_SIZE // (1024 * 1024)}MB")
 
     media_type = _resolve_media_type(file.filename)
     relative_path = f"uploads/{safe_filename}"

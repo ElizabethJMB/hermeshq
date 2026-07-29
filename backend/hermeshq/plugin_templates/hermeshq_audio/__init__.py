@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import json
 import os
-import platform
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
-
 
 SUPPORTED_EXTS = {".m4a", ".ogg", ".mp3", ".wav", ".webm", ".flac", ".aac", ".opus", ".wma"}
 MAX_AUDIO_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
@@ -47,10 +44,12 @@ def _handle_transcribe_audio(args, **_kwargs):
 
     ext = Path(file_path).suffix.lower()
     if ext not in SUPPORTED_EXTS:
-        return json.dumps({
-            "success": False,
-            "error": f"Unsupported audio format: '{ext}'. Supported: {', '.join(sorted(SUPPORTED_EXTS))}",
-        })
+        return json.dumps(
+            {
+                "success": False,
+                "error": f"Unsupported audio format: '{ext}'. Supported: {', '.join(sorted(SUPPORTED_EXTS))}",
+            }
+        )
 
     if not os.path.isabs(file_path):
         cwd = os.environ.get("HERMES_SESSION_CWD", os.getcwd())
@@ -61,7 +60,12 @@ def _handle_transcribe_audio(args, **_kwargs):
 
     file_size = os.path.getsize(file_path)
     if file_size > MAX_AUDIO_FILE_SIZE:
-        return json.dumps({"success": False, "error": f"Audio file too large ({file_size // 1024 // 1024}MB). Max {MAX_AUDIO_FILE_SIZE // 1024 // 1024}MB."})
+        return json.dumps(
+            {
+                "success": False,
+                "error": f"Audio file too large ({file_size // 1024 // 1024}MB). Max {MAX_AUDIO_FILE_SIZE // 1024 // 1024}MB.",
+            }
+        )
     if file_size < 100:
         return json.dumps({"success": False, "error": "Audio file is empty or too small"})
 
@@ -94,12 +98,14 @@ def _handle_transcribe_audio(args, **_kwargs):
     if not text:
         return json.dumps({"success": False, "error": "No speech detected in audio file"})
 
-    return json.dumps({
-        "success": True,
-        "text": text,
-        "language": detected_lang,
-        "file": file_path,
-    })
+    return json.dumps(
+        {
+            "success": True,
+            "text": text,
+            "language": detected_lang,
+            "file": file_path,
+        }
+    )
 
 
 def register(ctx):

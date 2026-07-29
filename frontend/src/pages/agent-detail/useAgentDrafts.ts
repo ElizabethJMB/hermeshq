@@ -5,7 +5,6 @@ import type {
   HermesVersion,
   ManagedIntegrationDefinition,
   RuntimeCapabilityOverview,
-  RuntimeProfileCapabilityDefinition,
   RuntimeProfileDefinition,
   Secret,
 } from "../../types/api";

@@ -5,6 +5,7 @@ Revises: a3b4c5d6e7f8
 Create Date: 2026-06-02 14:47:00.000000
 
 """
+
 from alembic import op
 from sqlalchemy import inspect
 

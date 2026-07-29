@@ -141,7 +141,7 @@ export function HeroSection({
         </Link>
         {isAdmin ? (
           <button
-            className={`panel-button-secondary ${archived ? "border-red-500 text-red-500" : "border-[var(--accent)] text-[var(--accent)]"}`}
+            className={`panel-button-secondary ${archived ? "border-red-500 text-red-500" : "border-[var(--danger)] text-[var(--danger)]"}`}
             onClick={onDelete}
             disabled={deletePending}
           >

@@ -21,6 +21,7 @@ ignore = [
     "SIM105", # contextlib.suppress — readability preference
     "SIM108", # ternary instead of if-else — readability preference
     "SIM115", # context manager for file handles — too many false positives
+    "UP042",  # str+Enum is the deliberate FastAPI/Pydantic pattern (StrEnum changes repr)
 ]
 
 [tool.ruff.lint.per-file-ignores]

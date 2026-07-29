@@ -60,7 +60,7 @@ export function EmailTab() {
     setMessage(null);
     try {
       const { apiClient } = await import("../../api/client");
-      const me = await queryClient.getQueryData<any>(["me"]);
+      const me = await queryClient.getQueryData<{ email?: string | null }>(["me"]);
       if (!me?.email) {
         setMessage({ kind: "err", text: t("emailTab.noEmailConfigured") });
         return;

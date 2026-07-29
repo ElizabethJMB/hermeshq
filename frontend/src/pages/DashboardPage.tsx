@@ -9,17 +9,10 @@ import { UserAvatar } from "../components/UserAvatar";
 import { useRealtimeStore } from "../stores/realtimeStore";
 import { useSessionStore } from "../stores/sessionStore";
 
-function statusTone(status: string) {
-  if (status === "running") return "text-[var(--success)]";
-  if (status === "queued" || status === "starting") return "text-[var(--warning)]";
-  if (status === "error") return "text-[var(--accent)]";
-  return "text-[var(--text-secondary)]";
-}
-
 function statusBadgeTone(status: string) {
   if (status === "running") return "border-[color-mix(in_srgb,var(--success)_45%,transparent)] bg-[color-mix(in_srgb,var(--success)_16%,transparent)] text-[var(--success)]";
   if (status === "queued" || status === "starting") return "border-[color-mix(in_srgb,var(--warning)_45%,transparent)] bg-[color-mix(in_srgb,var(--warning)_14%,transparent)] text-[var(--warning)]";
-  if (status === "error" || status === "failed") return "border-[color-mix(in_srgb,var(--accent)_45%,transparent)] bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]";
+  if (status === "error" || status === "failed") return "border-[color-mix(in_srgb,var(--danger)_45%,transparent)] bg-[color-mix(in_srgb,var(--danger)_14%,transparent)] text-[var(--danger)]";
   return "border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_76%,transparent)] text-[var(--text-secondary)]";
 }
 
@@ -27,19 +20,19 @@ function FleetHealthPanel() {
   const { data: health, isError: healthError } = useFleetHealth();
   const { t } = useI18n();
 
-  if (healthError) return <div className="panel-frame p-5 text-sm text-[var(--accent)]">{t("dashboard.metricsError")}</div>;
+  if (healthError) return <div className="panel-frame p-5 text-sm text-[var(--danger)]">{t("dashboard.metricsError")}</div>;
   if (!health) return null;
 
   const statusColors: Record<string, string> = {
     running: "text-[var(--success)]",
     stopped: "text-[var(--text-secondary)]",
-    error: "text-[var(--accent)]",
+    error: "text-[var(--danger)]",
     crashed: "text-[var(--accent)]",
   };
 
   const taskColors: Record<string, string> = {
     completed: "text-[var(--success)]",
-    failed: "text-[var(--accent)]",
+    failed: "text-[var(--danger)]",
     queued: "text-[var(--warning)]",
     running: "text-[var(--info)]",
   };
@@ -131,7 +124,7 @@ function TaskAnalyticsPanel() {
   const { data: analytics, isError: analyticsError } = useTaskAnalytics(14);
   const { t } = useI18n();
 
-  if (analyticsError) return <div className="panel-frame p-5 text-sm text-[var(--accent)]">{t("dashboard.metricsError")}</div>;
+  if (analyticsError) return <div className="panel-frame p-5 text-sm text-[var(--danger)]">{t("dashboard.metricsError")}</div>;
   if (!analytics) return null;
 
   const days = Object.keys(analytics.time_series).sort();
@@ -168,7 +161,7 @@ function TaskAnalyticsPanel() {
                     style={{ height: total > 0 ? `${(completed / total) * 100}%` : "100%" }}
                   />
                   {failed > 0 && (
-                    <div className="w-full bg-[var(--accent)]" style={{ height: `${(failed / total) * 100}%` }} />
+                    <div className="w-full bg-[var(--danger)]" style={{ height: `${(failed / total) * 100}%` }} />
                   )}
                 </div>
               </div>
@@ -177,7 +170,7 @@ function TaskAnalyticsPanel() {
         </div>
         <div className="mt-1 flex gap-4 text-xs text-[var(--text-disabled)]">
           <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded bg-[var(--success)]" /> {t("dashboard.completedTasks")}</span>
-          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded bg-[var(--accent)]" /> {t("dashboard.failedTasks")}</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded bg-[var(--danger)]" /> {t("dashboard.failedTasks")}</span>
         </div>
       </div>
 
@@ -220,12 +213,12 @@ function TaskAnalyticsPanel() {
       {/* Top Failing Agents */}
       {analytics.top_failing_agents.length > 0 && (
         <div className="mt-3 border-t border-[var(--border)] pt-3">
-          <p className="panel-label text-[var(--accent)]">{t("dashboard.topFailingAgents")}</p>
+          <p className="panel-label text-[var(--danger)]">{t("dashboard.topFailingAgents")}</p>
           <div className="mt-2 space-y-1">
             {analytics.top_failing_agents.map((agent) => (
               <div key={agent.agent_id} className="flex items-center justify-between text-sm">
                 <span className="text-[var(--text-primary)]">{agent.agent_name}</span>
-                <span className="text-[var(--accent)]">{agent.fail_count} {t("dashboard.failCount")}</span>
+                <span className="text-[var(--danger)]">{agent.fail_count} {t("dashboard.failCount")}</span>
               </div>
             ))}
           </div>

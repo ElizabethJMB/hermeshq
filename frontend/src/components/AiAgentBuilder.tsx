@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { getVoiceConfig, transcribeAudio, synthesizeText, type VoiceConfig } from "../api/voice";
+import { getVoiceConfig, transcribeAudio, synthesizeText } from "../api/voice";
 import {
   createBuilderSession,
   sendBuilderMessage,
@@ -23,20 +23,59 @@ interface Props {
   onCreated?: (agentId: string) => void;
 }
 
+interface EditableDraft extends AgentDraft {
+  _friendly_name?: string;
+  _description?: string;
+  _system_prompt?: string;
+  _runtime_profile?: string;
+}
+
+const TEMPLATES = [
+  {
+    name: "Agente de Soporte",
+    prompt: "Crea un agente de soporte al cliente que pueda responder preguntas sobre nuestro producto, escalar problemas a agentes humanos y mantener un tono amable.",
+  },
+  {
+    name: "Resumidor de Noticias",
+    prompt: "Crea un agente que busque noticias sobre un tema específico, las resuma en un digest diario y lo envíe por correo o Telegram.",
+  },
+  {
+    name: "Asistente Administrativo",
+    prompt: "Crea un asistente administrativo que pueda gestionar eventos de calendario, redactar correos y organizar documentos en SharePoint.",
+  },
+  {
+    name: "Analista de Datos",
+    prompt: "Crea un analista de datos que pueda leer archivos CSV/Excel, generar reportes con gráficos y responder preguntas sobre los datos.",
+  },
+  {
+    name: "Monitor de Redes",
+    prompt: "Crea un agente técnico que monitore equipos de red, ejecute diagnósticos (ping, traceroute) y reporte el estado de la infraestructura.",
+  },
+  {
+    name: "Gestor de Tareas",
+    prompt: "Crea un agente supervisor que pueda delegar tareas a otros agentes, hacer seguimiento del estado y reportar resultados consolidados.",
+  },
+];
+
+const SESSION_KEY = "hermeshq.builder.session";
+
 export function AiAgentBuilder({ onClose, onCreated }: Props) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<AgentDraft | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(
+    () => localStorage.getItem(SESSION_KEY),
+  );
+  const [draft, setDraft] = useState<EditableDraft | null>(null);
   const [connectors, setConnectors] = useState<RequiredConnector[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -52,19 +91,19 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
   const micAvailable = voiceConfig?.stt && isHttps;
 
   const initSession = useCallback(async () => {
+    if (sessionId) return;
     try {
       const session = await createBuilderSession();
       setSessionId(session.session_id);
+      localStorage.setItem(SESSION_KEY, session.session_id);
     } catch {
       setError("Failed to initialize builder session");
     }
-  }, []);
+  }, [sessionId]);
 
   useEffect(() => {
-    if (!sessionId) {
-      initSession();
-    }
-  }, [sessionId, initSession]);
+    initSession();
+  }, [initSession]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -77,12 +116,14 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
       setError(null);
       setInput("");
       setStreaming(true);
+      setShowTemplates(false);
       const userMsg: ChatMessage = { role: "user", content: text };
-      setMessages((prev) => [...prev, userMsg]);
+      setMessages((prev) => {
+        const withUser = [...prev, userMsg];
+        return [...withUser, { role: "assistant", content: "" }];
+      });
 
       const assistantIdx = messages.length + 1;
-      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
       let fullText = "";
 
       try {
@@ -95,7 +136,13 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
           });
         });
 
-        setDraft(turn.draft);
+        setDraft({
+          ...turn.draft,
+          _friendly_name: turn.draft.friendly_name,
+          _description: turn.draft.description,
+          _system_prompt: turn.draft.system_prompt,
+          _runtime_profile: turn.draft.runtime_profile,
+        });
         setConnectors(turn.required_connectors);
 
         if (ttsEnabled && voiceConfig?.tts && fullText) {
@@ -121,10 +168,18 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
   );
 
   const handleFinalize = useMutation({
-    mutationFn: () => finalizeAgent(sessionId!),
+    mutationFn: () => {
+      const overrides: Record<string, string> = {};
+      if (draft?._friendly_name) overrides.friendly_name = draft._friendly_name;
+      if (draft?._description) overrides.description = draft._description;
+      if (draft?._system_prompt) overrides.system_prompt = draft._system_prompt;
+      if (draft?._runtime_profile) overrides.runtime_profile = draft._runtime_profile;
+      return finalizeAgent(sessionId!, overrides);
+    },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      localStorage.removeItem(SESSION_KEY);
       onCreated?.(result.agent_id);
     },
     onError: (err: unknown) => {
@@ -190,7 +245,17 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
     }
   }, [recording, sendMessage]);
 
-  const ready = draft?.friendly_name && draft?.system_prompt;
+  function handleClearSession() {
+    localStorage.removeItem(SESSION_KEY);
+    setSessionId(null);
+    setMessages([]);
+    setDraft(null);
+    setConnectors([]);
+    setError(null);
+    initSession();
+  }
+
+  const ready = draft?._friendly_name && draft?._system_prompt;
 
   return (
     <div className="grid gap-6">
@@ -210,10 +275,19 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
               🔊 TTS
             </button>
           )}
+          {messages.length > 0 && (
+            <button
+              onClick={handleClearSession}
+              className="rounded-lg px-3 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
+              title="Start over"
+            >
+              ↻ New session
+            </button>
+          )}
         </div>
         {onClose && (
           <Link
-            to="/agents"
+            to="/v2/agents"
             className="rounded-lg px-4 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
           >
             ← {t("agents.title")}
@@ -226,11 +300,23 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
         <section className="panel-frame flex flex-col" style={{ minHeight: "70vh" }}>
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-6 py-4">
-            {messages.length === 0 && (
+            {messages.length === 0 && !streaming && (
               <div className="flex h-full flex-col items-center justify-center text-center text-[var(--text-muted)]">
                 <div className="mb-4 text-5xl">🤖</div>
                 <p className="text-lg font-medium text-[var(--text)]">{t("agentBuilder.welcome")}</p>
                 <p className="mt-2 max-w-md text-sm">{t("agentBuilder.placeholder")}</p>
+                <div className="mt-6 grid gap-2 sm:grid-cols-2">
+                  {TEMPLATES.map((tpl) => (
+                    <button
+                      key={tpl.name}
+                      onClick={() => sendMessage(tpl.prompt)}
+                      className="rounded-xl border border-[var(--border)] bg-[var(--bg-hover)] px-4 py-3 text-left text-sm transition hover:border-[var(--accent)] hover:bg-[var(--bg-hover)]"
+                    >
+                      <span className="font-medium text-[var(--text)]">{tpl.name}</span>
+                      <span className="mt-1 block text-xs text-[var(--text-muted)] line-clamp-2">{tpl.prompt.slice(0, 80)}…</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {messages.map((msg, idx) => (
@@ -246,7 +332,15 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
                   }`}
                 >
                   {msg.role === "assistant" ? (
-                    <MarkdownText>{msg.content || "…"}</MarkdownText>
+                    msg.content === "" && streaming && idx === messages.length - 1 ? (
+                      <div className="flex items-center gap-1 py-1">
+                        <span className="h-2 w-2 animate-bounce rounded-full bg-current opacity-60" style={{ animationDelay: "0ms" }} />
+                        <span className="h-2 w-2 animate-bounce rounded-full bg-current opacity-60" style={{ animationDelay: "150ms" }} />
+                        <span className="h-2 w-2 animate-bounce rounded-full bg-current opacity-60" style={{ animationDelay: "300ms" }} />
+                      </div>
+                    ) : (
+                      <MarkdownText>{msg.content || "…"}</MarkdownText>
+                    )
                   ) : (
                     msg.content || "…"
                   )}
@@ -326,30 +420,51 @@ export function AiAgentBuilder({ onClose, onCreated }: Props) {
                   {t("agentBuilder.draftTitle")}
                 </h3>
                 <dl className="space-y-3 text-sm">
-                  {draft.friendly_name && (
-                    <div>
-                      <dt className="text-xs text-[var(--text-muted)]">Name</dt>
-                      <dd className="font-medium text-[var(--text)]">{draft.friendly_name}</dd>
-                    </div>
-                  )}
-                  {draft.runtime_profile && (
-                    <div>
-                      <dt className="text-xs text-[var(--text-muted)]">Profile</dt>
-                      <dd className="text-[var(--text)]">{draft.runtime_profile}</dd>
-                    </div>
-                  )}
-                  {draft.description && (
-                    <div>
-                      <dt className="text-xs text-[var(--text-muted)]">Description</dt>
-                      <dd className="text-[var(--text)]">{draft.description}</dd>
-                    </div>
-                  )}
-                  {draft.system_prompt && (
-                    <div>
-                      <dt className="text-xs text-[var(--text-muted)]">System Prompt</dt>
-                      <dd className="line-clamp-4 text-[var(--text)]">{draft.system_prompt}</dd>
-                    </div>
-                  )}
+                  <div>
+                    <dt className="text-xs text-[var(--text-muted)]">Name</dt>
+                    <dd>
+                      <input
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[var(--text)] focus:border-[var(--accent)] focus:outline-none"
+                        value={draft._friendly_name ?? ""}
+                        onChange={(e) => setDraft({ ...draft, _friendly_name: e.target.value })}
+                      />
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-[var(--text-muted)]">Profile</dt>
+                    <dd>
+                      <select
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[var(--text)] focus:border-[var(--accent)] focus:outline-none"
+                        value={draft._runtime_profile ?? "standard"}
+                        onChange={(e) => setDraft({ ...draft, _runtime_profile: e.target.value })}
+                      >
+                        <option value="standard">Standard</option>
+                        <option value="technical">Technical</option>
+                      </select>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-[var(--text-muted)]">Description</dt>
+                    <dd>
+                      <textarea
+                        rows={2}
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[var(--text)] focus:border-[var(--accent)] focus:outline-none"
+                        value={draft._description ?? ""}
+                        onChange={(e) => setDraft({ ...draft, _description: e.target.value })}
+                      />
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-[var(--text-muted)]">System Prompt</dt>
+                    <dd>
+                      <textarea
+                        rows={6}
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[var(--text)] focus:border-[var(--accent)] focus:outline-none"
+                        value={draft._system_prompt ?? ""}
+                        onChange={(e) => setDraft({ ...draft, _system_prompt: e.target.value })}
+                      />
+                    </dd>
+                  </div>
                 </dl>
               </>
             )}

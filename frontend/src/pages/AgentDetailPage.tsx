@@ -40,7 +40,7 @@ export function AgentDetailPage() {
   const isAdmin = currentUser?.role === "admin";
   const { t } = useI18n();
   const { data: agent, isLoading } = useAgent(agentId);
-  const { data: tasks } = useTasks();
+  const { data: tasks } = useTasks(agentId);
   const [activityQuery, setActivityQuery] = useState("");
   const {
     data: logs,
@@ -79,10 +79,7 @@ export function AgentDetailPage() {
     secrets,
   );
 
-  const agentTasks = useMemo(
-    () => (tasks ?? []).filter((task) => task.agent_id === agentId),
-    [tasks, agentId],
-  );
+  const agentTasks = useMemo(() => tasks ?? [], [tasks]);
   const filteredLedgerEntries = useMemo(() => {
     const query = ledgerQuery.trim().toLowerCase();
     if (!query) {
@@ -136,14 +133,16 @@ export function AgentDetailPage() {
     }
   }, [agentId]);
 
-  const realtimeEvents = useRealtimeStore((state) => state.events);
+  // Subscribe without re-rendering the page (the terminal remounts on render)
   useEffect(() => {
     if (!agentId) return;
-    const latest = realtimeEvents[0];
-    if (latest?.type === "avatar.updated" && latest.agent_id === agentId) {
-      queryClient.refetchQueries({ queryKey: ["agents", agentId] });
-    }
-  }, [realtimeEvents, agentId]);
+    return useRealtimeStore.subscribe((state) => {
+      const latest = state.events[0];
+      if (latest?.type === "avatar.updated" && latest.agent_id === agentId) {
+        void queryClient.refetchQueries({ queryKey: ["agents", agentId] });
+      }
+    });
+  }, [agentId, queryClient]);
 
   function toggleSection(section: SectionKey) {
     setSectionState((current) => {
@@ -440,7 +439,6 @@ export function AgentDetailPage() {
         integrationTestResults={drafts.integrationTestResults}
         integrationActionResults={drafts.integrationActionResults}
         integrationPending={integrationPending}
-        secrets={secrets}
         secretsByProvider={drafts.secretsByProvider}
         runtimeCapabilityOverview={runtimeCapabilityOverview}
         currentRuntimeCapabilityProfile={drafts.currentRuntimeCapabilityProfile}

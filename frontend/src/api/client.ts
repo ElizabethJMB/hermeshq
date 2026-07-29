@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { AxiosError, InternalAxiosRequestConfig } from "axios";
+import type { AxiosError } from "axios";
 
 import { resolveApiBase } from "../lib/apiBase";
 import { useSessionStore } from "../stores/sessionStore";

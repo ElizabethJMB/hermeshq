@@ -98,6 +98,7 @@ def create_oidc_state(provider_slug: str, jwt_secret: str) -> str:
     """Create a signed state token that includes the provider slug."""
     import base64
     import json
+
     payload = {
         "provider": provider_slug,
         "nonce": secrets.token_urlsafe(16),
@@ -118,6 +119,7 @@ def verify_oidc_state(state: str, jwt_secret: str) -> dict | None:
         decoded = jwt.decode(state, jwt_secret, algorithms=["HS256"])
         import base64
         import json
+
         raw = base64.b64decode(decoded["data"])
         return json.loads(raw)
     except (jwt.JWTError, KeyError, ValueError, TypeError):
@@ -138,13 +140,15 @@ async def build_authorization_url(
     auth_endpoint = discovery.get("authorization_endpoint")
     if not auth_endpoint:
         raise HTTPException(status_code=502, detail="OIDC discovery missing authorization_endpoint")
-    params = urlencode({
-        "client_id": provider.client_id,
-        "redirect_uri": redirect_uri,
-        "response_type": "code",
-        "scope": provider.scopes,
-        "state": state,
-    })
+    params = urlencode(
+        {
+            "client_id": provider.client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": provider.scopes,
+            "state": state,
+        }
+    )
     return f"{auth_endpoint}?{params}"
 
 
@@ -286,9 +290,7 @@ async def resolve_or_create_user(
     # Find by OIDC subject
     user: User | None = None
     if subject:
-        result = await db.execute(
-            select(User).where(User.oidc_subject == f"{provider.slug}:{subject}")
-        )
+        result = await db.execute(select(User).where(User.oidc_subject == f"{provider.slug}:{subject}"))
         user = result.scalar_one_or_none()
 
     # Find by email
@@ -305,6 +307,7 @@ async def resolve_or_create_user(
 
     if not user:
         import re
+
         base = re.sub(r"[^a-z0-9_.-]", "", display_name.lower().replace(" ", "_"))[:32] or "user"
         username = base
         counter = 1

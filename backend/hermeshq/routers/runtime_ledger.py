@@ -198,12 +198,7 @@ async def list_runtime_ledger(
     task_filter = [Task.agent_id == agent_id]
     if not is_admin(current_user):
         task_filter.append(Task.created_by_user_id == current_user.id)
-    task_result = await db.execute(
-        select(Task)
-        .where(*task_filter)
-        .order_by(desc(Task.queued_at))
-        .limit(limit)
-    )
+    task_result = await db.execute(select(Task).where(*task_filter).order_by(desc(Task.queued_at)).limit(limit))
     tasks = task_result.scalars().all()
 
     message_result = await db.execute(
@@ -256,14 +251,8 @@ async def list_runtime_ledger(
             *(message.from_agent_id for message in messages),
             *(message.to_agent_id for message in messages),
             *(log.agent_id for log in activity_logs),
-            *(
-                str((log.details or {}).get("system_agent_id") or "").strip() or None
-                for log in activity_logs
-            ),
-            *(
-                str((log.details or {}).get("delegated_agent_id") or "").strip() or None
-                for log in activity_logs
-            ),
+            *(str((log.details or {}).get("system_agent_id") or "").strip() or None for log in activity_logs),
+            *(str((log.details or {}).get("delegated_agent_id") or "").strip() or None for log in activity_logs),
         )
         if related_id
     }

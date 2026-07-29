@@ -51,6 +51,7 @@ _analytics = McpAnalytics()
 # JSON-RPC 2.0 helpers
 # ---------------------------------------------------------------------------
 
+
 def _jsonrpc_result(request_id: Any, result: dict) -> dict:
     return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
@@ -72,9 +73,11 @@ def _tool_text_result(text: str, structured: dict | None = None) -> dict:
 def _agent_label(agent: Agent) -> str:
     return agent.friendly_name or agent.name or agent.slug or agent.id
 
+
 # ---------------------------------------------------------------------------
 # Audit logging
 # ---------------------------------------------------------------------------
+
 
 async def _log_mcp_event(
     db: AsyncSession,
@@ -103,9 +106,11 @@ async def _log_mcp_event(
         )
     )
 
+
 # ---------------------------------------------------------------------------
 # Tool definitions
 # ---------------------------------------------------------------------------
+
 
 def _tools_definition() -> list[dict]:
     return [
@@ -116,7 +121,13 @@ def _tools_definition() -> list[dict]:
                 "type": "object",
                 "properties": {
                     "page": {"type": "integer", "minimum": 1, "default": 1, "description": "Page number."},
-                    "page_size": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50, "description": "Results per page."},
+                    "page_size": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "default": 50,
+                        "description": "Results per page.",
+                    },
                 },
                 "additionalProperties": False,
             },
@@ -160,12 +171,17 @@ def _tools_definition() -> list[dict]:
         },
     ]
 
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 async def _list_allowed_agents(
-    db: AsyncSession, access: McpAccessToken, page: int = 1, page_size: int = 50,
+    db: AsyncSession,
+    access: McpAccessToken,
+    page: int = 1,
+    page_size: int = 50,
 ) -> tuple[list[Agent], int]:
     """Return (paginated_agents, total_count) respecting the token's allowed list."""
     allowed_agent_ids = [aid for aid in (access.allowed_agent_ids or []) if isinstance(aid, str)]
@@ -174,7 +190,8 @@ async def _list_allowed_agents(
 
     # Total count
     count_q = select(func.count(Agent.id)).where(
-        Agent.id.in_(allowed_agent_ids), Agent.is_archived.is_(False),
+        Agent.id.in_(allowed_agent_ids),
+        Agent.is_archived.is_(False),
     )
     total = (await db.execute(count_q)).scalar_one()
 
@@ -200,14 +217,15 @@ async def _fresh_task_read(db: AsyncSession, task_id: str) -> Task | None:
     ``MissingGreenlet`` in async context.  The safe approach is a fresh
     ``select()`` with ``populate_existing=True``.
     """
-    result = await db.execute(
-        select(Task).where(Task.id == task_id).execution_options(populate_existing=True)
-    )
+    result = await db.execute(select(Task).where(Task.id == task_id).execution_options(populate_existing=True))
     return result.scalar_one_or_none()
 
 
 async def _wait_for_task_completion(
-    db: AsyncSession, task_id: str, max_wait: float = 60.0, poll_interval: float = 1.0,
+    db: AsyncSession,
+    task_id: str,
+    max_wait: float = 60.0,
+    poll_interval: float = 1.0,
 ) -> Task | None:
     """Poll the task until it reaches a terminal state or *max_wait* expires.
 
@@ -231,9 +249,11 @@ async def _wait_for_task_completion(
     # One final read
     return await _fresh_task_read(db, task_id)
 
+
 # ---------------------------------------------------------------------------
 # Tool dispatch
 # ---------------------------------------------------------------------------
+
 
 async def _call_tool(
     *,
@@ -289,7 +309,9 @@ async def _handle_list_agents(db: AsyncSession, access: McpAccessToken, argument
     rich_text = "\n".join(lines)
 
     await _log_mcp_event(
-        db, access, "mcp.tool.list_agents",
+        db,
+        access,
+        "mcp.tool.list_agents",
         message=f"MCP listed {len(agents)} authorized agents (page {page})",
         details={"count": len(agents), "total": total},
     )
@@ -298,7 +320,10 @@ async def _handle_list_agents(db: AsyncSession, access: McpAccessToken, argument
 
 
 async def _handle_invoke_agent(
-    request: Request, db: AsyncSession, access: McpAccessToken, arguments: dict,
+    request: Request,
+    db: AsyncSession,
+    access: McpAccessToken,
+    arguments: dict,
 ) -> dict:
     ensure_mcp_scope(access, "agents:invoke")
     agent_id = str(arguments.get("agent_id") or "").strip()
@@ -306,7 +331,9 @@ async def _handle_invoke_agent(
     title = str(arguments.get("title") or "").strip() or "MCP request"
     priority = int(arguments.get("priority") or 5)
     auto_start_stopped = bool(arguments.get("auto_start_stopped") or False)
-    wait_seconds = max(0, min(120, int(arguments.get("wait_seconds") if arguments.get("wait_seconds") is not None else 60)))
+    wait_seconds = max(
+        0, min(120, int(arguments.get("wait_seconds") if arguments.get("wait_seconds") is not None else 60))
+    )
 
     if not agent_id or not prompt:
         return _tool_text_result("agent_id and prompt are required.", {"error": "agent_id and prompt are required"})
@@ -341,7 +368,11 @@ async def _handle_invoke_agent(
     await db.flush()
 
     await _log_mcp_event(
-        db, access, "mcp.tool.invoke_agent", agent=agent, task=task,
+        db,
+        access,
+        "mcp.tool.invoke_agent",
+        agent=agent,
+        task=task,
         message=f"MCP submitted task to {_agent_label(agent)}",
         details={"auto_start_stopped": auto_start_stopped, "wait_seconds": wait_seconds},
     )
@@ -368,10 +399,7 @@ async def _handle_invoke_agent(
 
             # Build rich text for LLM clients that only read "text"
             if final_task.status == "completed" and final_task.response:
-                summary = (
-                    f"Agent {_agent_label(agent)} completed the task.\n\n"
-                    f"Response:\n{final_task.response}"
-                )
+                summary = f"Agent {_agent_label(agent)} completed the task.\n\nResponse:\n{final_task.response}"
             elif final_task.status == "failed":
                 summary = (
                     f"Agent {_agent_label(agent)} failed the task.\n\n"
@@ -404,7 +432,11 @@ async def _handle_get_agent_task(db: AsyncSession, access: McpAccessToken, argum
     ensure_mcp_agent_allowed(access, task.agent_id)
     agent = await db.get(Agent, task.agent_id)
     await _log_mcp_event(
-        db, access, "mcp.tool.get_agent_task", agent=agent, task=task,
+        db,
+        access,
+        "mcp.tool.get_agent_task",
+        agent=agent,
+        task=task,
         message=f"MCP read task {task.id}",
     )
     await db.commit()
@@ -430,9 +462,11 @@ async def _handle_get_agent_task(db: AsyncSession, access: McpAccessToken, argum
 
     return _tool_text_result("\n".join(lines), payload)
 
+
 # ---------------------------------------------------------------------------
 # Resources
 # ---------------------------------------------------------------------------
+
 
 async def _list_resources(db: AsyncSession, access: McpAccessToken) -> list[dict]:
     """Return static resources available to this token."""
@@ -440,18 +474,22 @@ async def _list_resources(db: AsyncSession, access: McpAccessToken) -> list[dict
     resources: list[dict] = []
     for agent in agents:
         label = _agent_label(agent)
-        resources.append({
-            "uri": f"agent://{agent.id}/config",
-            "name": f"{label} — Configuration",
-            "description": f"Runtime configuration for agent {label}.",
-            "mimeType": "application/json",
-        })
-        resources.append({
-            "uri": f"agent://{agent.id}/tasks/recent",
-            "name": f"{label} — Recent Tasks",
-            "description": f"Last 20 tasks for agent {label}.",
-            "mimeType": "application/json",
-        })
+        resources.append(
+            {
+                "uri": f"agent://{agent.id}/config",
+                "name": f"{label} — Configuration",
+                "description": f"Runtime configuration for agent {label}.",
+                "mimeType": "application/json",
+            }
+        )
+        resources.append(
+            {
+                "uri": f"agent://{agent.id}/tasks/recent",
+                "name": f"{label} — Recent Tasks",
+                "description": f"Last 20 tasks for agent {label}.",
+                "mimeType": "application/json",
+            }
+        )
     return resources
 
 
@@ -506,27 +544,53 @@ async def _read_agent_config(db: AsyncSession, access: McpAccessToken, agent_id:
     if not agent or agent.is_archived:
         return {"contents": [{"uri": f"agent://{agent_id}/config", "text": "Agent not found."}]}
     config = {
-        "id": agent.id, "slug": agent.slug, "name": _agent_label(agent),
-        "description": agent.description, "status": agent.status,
+        "id": agent.id,
+        "slug": agent.slug,
+        "name": _agent_label(agent),
+        "description": agent.description,
+        "status": agent.status,
         "runtime_profile": agent.runtime_profile,
         "can_receive_tasks": agent.can_receive_tasks,
         "mcp_servers": agent.mcp_servers or [],
     }
-    return {"contents": [{"uri": f"agent://{agent_id}/config", "mimeType": "application/json", "text": json.dumps(config, default=str)}]}
+    return {
+        "contents": [
+            {
+                "uri": f"agent://{agent_id}/config",
+                "mimeType": "application/json",
+                "text": json.dumps(config, default=str),
+            }
+        ]
+    }
 
 
 async def _read_agent_recent_tasks(db: AsyncSession, access: McpAccessToken, agent_id: str) -> dict:
     ensure_mcp_agent_allowed(access, agent_id)
-    rows = (await db.execute(
-        select(Task).where(Task.agent_id == agent_id).order_by(Task.queued_at.desc()).limit(20)
-    )).scalars().all()
+    rows = (
+        (await db.execute(select(Task).where(Task.agent_id == agent_id).order_by(Task.queued_at.desc()).limit(20)))
+        .scalars()
+        .all()
+    )
     tasks = [
-        {"id": t.id, "title": t.title, "status": t.status, "response": t.response,
-         "queued_at": t.queued_at.isoformat() if t.queued_at else None,
-         "completed_at": t.completed_at.isoformat() if t.completed_at else None}
+        {
+            "id": t.id,
+            "title": t.title,
+            "status": t.status,
+            "response": t.response,
+            "queued_at": t.queued_at.isoformat() if t.queued_at else None,
+            "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+        }
         for t in rows
     ]
-    return {"contents": [{"uri": f"agent://{agent_id}/tasks/recent", "mimeType": "application/json", "text": json.dumps(tasks, default=str)}]}
+    return {
+        "contents": [
+            {
+                "uri": f"agent://{agent_id}/tasks/recent",
+                "mimeType": "application/json",
+                "text": json.dumps(tasks, default=str),
+            }
+        ]
+    }
 
 
 async def _read_task_resource(db: AsyncSession, access: McpAccessToken, task_id: str) -> dict:
@@ -535,28 +599,61 @@ async def _read_task_resource(db: AsyncSession, access: McpAccessToken, task_id:
         return {"contents": [{"uri": f"task://{task_id}", "text": "Task not found."}]}
     ensure_mcp_agent_allowed(access, task.agent_id)
     data = {
-        "id": task.id, "agent_id": task.agent_id, "title": task.title,
-        "status": task.status, "prompt": task.prompt, "response": task.response,
-        "error_message": task.error_message, "priority": task.priority,
-        "iterations": task.iterations, "tokens_used": task.tokens_used,
+        "id": task.id,
+        "agent_id": task.agent_id,
+        "title": task.title,
+        "status": task.status,
+        "prompt": task.prompt,
+        "response": task.response,
+        "error_message": task.error_message,
+        "priority": task.priority,
+        "iterations": task.iterations,
+        "tokens_used": task.tokens_used,
         "queued_at": task.queued_at.isoformat() if task.queued_at else None,
         "started_at": task.started_at.isoformat() if task.started_at else None,
         "completed_at": task.completed_at.isoformat() if task.completed_at else None,
     }
-    return {"contents": [{"uri": f"task://{task_id}", "mimeType": "application/json", "text": json.dumps(data, default=str)}]}
+    return {
+        "contents": [
+            {"uri": f"task://{task_id}", "mimeType": "application/json", "text": json.dumps(data, default=str)}
+        ]
+    }
 
 
 async def _read_agent_activity(db: AsyncSession, access: McpAccessToken, agent_id: str) -> dict:
     ensure_mcp_agent_allowed(access, agent_id)
-    rows = (await db.execute(
-        select(ActivityLog).where(ActivityLog.agent_id == agent_id).order_by(ActivityLog.created_at.desc()).limit(50)
-    )).scalars().all()
+    rows = (
+        (
+            await db.execute(
+                select(ActivityLog)
+                .where(ActivityLog.agent_id == agent_id)
+                .order_by(ActivityLog.created_at.desc())
+                .limit(50)
+            )
+        )
+        .scalars()
+        .all()
+    )
     logs = [
-        {"event_type": r.event_type, "severity": r.severity, "message": r.message,
-         "created_at": r.created_at.isoformat() if r.created_at else None, "details": r.details}
+        {
+            "event_type": r.event_type,
+            "severity": r.severity,
+            "message": r.message,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "details": r.details,
+        }
         for r in rows
     ]
-    return {"contents": [{"uri": f"agent://{agent_id}/activity", "mimeType": "application/json", "text": json.dumps(logs, default=str)}]}
+    return {
+        "contents": [
+            {
+                "uri": f"agent://{agent_id}/activity",
+                "mimeType": "application/json",
+                "text": json.dumps(logs, default=str),
+            }
+        ]
+    }
+
 
 # ---------------------------------------------------------------------------
 # Prompts
@@ -593,13 +690,15 @@ async def _list_prompts(db: AsyncSession, access: McpAccessToken) -> list[dict]:
     prompts = list(_BUILTIN_PROMPTS)
     for agent in agents:
         label = _agent_label(agent)
-        prompts.append({
-            "name": f"chat_{agent.slug or agent.id[:8]}",
-            "description": f"Start a focused conversation with {label}.",
-            "arguments": [
-                {"name": "message", "description": "The message to send.", "required": True},
-            ],
-        })
+        prompts.append(
+            {
+                "name": f"chat_{agent.slug or agent.id[:8]}",
+                "description": f"Start a focused conversation with {label}.",
+                "arguments": [
+                    {"name": "message", "description": "The message to send.", "required": True},
+                ],
+            }
+        )
     return prompts
 
 
@@ -609,72 +708,112 @@ async def _get_prompt(db: AsyncSession, access: McpAccessToken, name: str, argum
         ensure_mcp_agent_allowed(access, agent_id)
         agent = await db.get(Agent, agent_id)
         label = _agent_label(agent) if agent else agent_id
-        return {"description": f"Summary of {label}", "messages": [
-            {"role": "user", "content": {"type": "text", "text": (
-                f"Please summarize the current state of the HermesHQ agent '{label}' (id: {agent_id}). "
-                f"Include its status, runtime profile, and any recent task outcomes. "
-                f"Use the list_agents and get_agent_task tools to gather information."
-            )}},
-        ]}
+        return {
+            "description": f"Summary of {label}",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "type": "text",
+                        "text": (
+                            f"Please summarize the current state of the HermesHQ agent '{label}' (id: {agent_id}). "
+                            f"Include its status, runtime profile, and any recent task outcomes. "
+                            f"Use the list_agents and get_agent_task tools to gather information."
+                        ),
+                    },
+                },
+            ],
+        }
 
     if name == "debug_task_failure":
         task_id = str(arguments.get("task_id") or "")
-        return {"description": f"Debug task {task_id}", "messages": [
-            {"role": "user", "content": {"type": "text", "text": (
-                f"Analyze the failed HermesHQ task {task_id}. "
-                f"1) Read the task details with get_agent_task. "
-                f"2) Identify the error and root cause. "
-                f"3) Suggest specific remediation steps."
-            )}},
-        ]}
+        return {
+            "description": f"Debug task {task_id}",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "type": "text",
+                        "text": (
+                            f"Analyze the failed HermesHQ task {task_id}. "
+                            f"1) Read the task details with get_agent_task. "
+                            f"2) Identify the error and root cause. "
+                            f"3) Suggest specific remediation steps."
+                        ),
+                    },
+                },
+            ],
+        }
 
     if name == "invoke_with_context":
         agent_id = str(arguments.get("agent_id") or "")
         prompt = str(arguments.get("prompt") or "")
         ensure_mcp_agent_allowed(access, agent_id)
-        return {"description": "Invoke with context", "messages": [
-            {"role": "user", "content": {"type": "text", "text": (
-                f"Gather context about HermesHQ agent {agent_id} using the available resources and tools, "
-                f"then invoke the agent with the following instruction:\n\n{prompt}"
-            )}},
-        ]}
+        return {
+            "description": "Invoke with context",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "type": "text",
+                        "text": (
+                            f"Gather context about HermesHQ agent {agent_id} using the available resources and tools, "
+                            f"then invoke the agent with the following instruction:\n\n{prompt}"
+                        ),
+                    },
+                },
+            ],
+        }
 
     # Dynamic per-agent chat prompt
     if name.startswith("chat_"):
         message = str(arguments.get("message") or "")
-        return {"description": "Chat prompt", "messages": [
-            {"role": "user", "content": {"type": "text", "text": message}},
-        ]}
+        return {
+            "description": "Chat prompt",
+            "messages": [
+                {"role": "user", "content": {"type": "text", "text": message}},
+            ],
+        }
 
-    return {"description": "Unknown prompt", "messages": [
-        {"role": "user", "content": {"type": "text", "text": f"Unknown prompt: {name}"}},
-    ]}
+    return {
+        "description": "Unknown prompt",
+        "messages": [
+            {"role": "user", "content": {"type": "text", "text": f"Unknown prompt: {name}"}},
+        ],
+    }
+
 
 # ---------------------------------------------------------------------------
 # Per-Agent MCP — dynamic tools from agent.mcp_servers
 # ---------------------------------------------------------------------------
+
 
 async def _per_agent_tools(db: AsyncSession, access: McpAccessToken) -> list[dict]:
     """Generate MCP tool definitions from each agent's ``mcp_servers`` config."""
     agents, _ = await _list_allowed_agents(db, access, page_size=max(50, len(access.allowed_agent_ids or [])))
     tools: list[dict] = []
     for agent in agents:
-        for srv in (agent.mcp_servers or []):
+        for srv in agent.mcp_servers or []:
             srv_name = srv.get("name") or srv.get("url", "unknown")
             for tool_def in srv.get("tools", []):
-                tools.append({
-                    "name": f"agent__{agent.slug or agent.id[:8]}__{tool_def.get('name', srv_name)}",
-                    "description": tool_def.get("description", f"Tool from {srv_name} via {_agent_label(agent)}"),
-                    "inputSchema": tool_def.get("inputSchema", {"type": "object", "properties": {}}),
-                })
+                tools.append(
+                    {
+                        "name": f"agent__{agent.slug or agent.id[:8]}__{tool_def.get('name', srv_name)}",
+                        "description": tool_def.get("description", f"Tool from {srv_name} via {_agent_label(agent)}"),
+                        "inputSchema": tool_def.get("inputSchema", {"type": "object", "properties": {}}),
+                    }
+                )
     return tools
+
 
 # ---------------------------------------------------------------------------
 # POST /mcp  — JSON-RPC 2.0 handler
 # ---------------------------------------------------------------------------
 
 
-async def _handle_per_agent_tool(request: Request, db: AsyncSession, access: McpAccessToken, name: str, arguments: dict) -> dict:
+async def _handle_per_agent_tool(
+    request: Request, db: AsyncSession, access: McpAccessToken, name: str, arguments: dict
+) -> dict:
     """Dispatch a per-agent MCP tool call. Pattern: ``agent__{slug}__{tool}``"""
     parts = name.split("__", 2)
     if len(parts) < 3:
@@ -696,7 +835,7 @@ async def _handle_per_agent_tool(request: Request, db: AsyncSession, access: Mcp
     ensure_mcp_scope(access, "agents:invoke")
 
     # Find the tool definition in the agent's mcp_servers
-    for srv in (matched.mcp_servers or []):
+    for srv in matched.mcp_servers or []:
         for tdef in srv.get("tools", []):
             if tdef.get("name") == tool_name:
                 # Build a prompt that instructs the agent to use this tool
@@ -723,13 +862,11 @@ async def _handle_per_agent_tool(request: Request, db: AsyncSession, access: Mcp
                 return _tool_text_result(
                     f"Tool '{tool_name}' dispatched to agent {_agent_label(matched)}.\n\n"
                     f"Task ID: {task.id}\nStatus: queued\n\n"
-                    f"Use get_agent_task with task_id \"{task.id}\" to check the result.",
+                    f'Use get_agent_task with task_id "{task.id}" to check the result.',
                     {"task_id": task.id, "agent_id": matched.id, "status": "queued", "completed": False},
                 )
 
     return _tool_text_result(f"Tool '{tool_name}' not found in agent's MCP servers.", {"error": "tool_not_found"})
-
-
 
 
 @router.post("/mcp")
@@ -844,9 +981,11 @@ async def mcp_http_endpoint(
         _analytics.record(token_id=access.id, method=method, latency_ms=(time.monotonic() - t0) * 1000, error=True)
         return JSONResponse(_jsonrpc_error(request_id, -32000, str(exc)), status_code=200)
 
+
 # ---------------------------------------------------------------------------
 # GET /mcp  — SSE transport
 # ---------------------------------------------------------------------------
+
 
 @router.get("/mcp")
 async def mcp_sse_endpoint(
@@ -891,6 +1030,7 @@ async def mcp_sse_endpoint(
 # GET /mcp/health  — Health check + live analytics
 # ---------------------------------------------------------------------------
 
+
 @router.get("/mcp/health")
 async def mcp_health() -> dict:
     """MCP server health check with live analytics."""
@@ -909,6 +1049,7 @@ async def mcp_health() -> dict:
 # GET /mcp/analytics  — Detailed usage analytics
 # ---------------------------------------------------------------------------
 
+
 @router.get("/mcp/analytics")
 async def mcp_analytics_endpoint(
     request: Request,
@@ -919,6 +1060,7 @@ async def mcp_analytics_endpoint(
 ) -> JSONResponse:
     """Detailed MCP usage analytics. Requires admin JWT or MCP bearer token."""
     from hermeshq.core.security import decode_access_token_subject, get_user_by_subject
+
     # Try JWT auth first, then MCP token
     try:
         auth_header = authorization or ""

@@ -8,6 +8,9 @@ from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
 
+_WS_SEND_TIMEOUT = 5.0
+_INTERNAL_SUBSCRIBER_TIMEOUT = 10.0
+
 
 @dataclass
 class EventSubscription:
@@ -30,6 +33,16 @@ class EventBroker:
         user_id: str | None = None,
     ) -> None:
         await websocket.accept()
+        self.register(websocket, is_admin=is_admin, agent_ids=agent_ids, user_id=user_id)
+
+    def register(
+        self,
+        websocket: WebSocket,
+        is_admin: bool,
+        agent_ids: set[str],
+        user_id: str | None = None,
+    ) -> None:
+        """Register an already-accepted WebSocket connection."""
         self._connections[websocket] = EventSubscription(
             websocket=websocket,
             is_admin=is_admin,
@@ -54,7 +67,10 @@ class EventBroker:
         # Notify internal subscribers first (gateways, services, etc.)
         snapshot = list(self._internal_subscribers)
         internal_tasks = [callback(event) for callback in snapshot]
-        results = await asyncio.gather(*internal_tasks, return_exceptions=True)
+        results = await asyncio.gather(
+            *[asyncio.wait_for(t, timeout=_INTERNAL_SUBSCRIBER_TIMEOUT) for t in internal_tasks],
+            return_exceptions=True,
+        )
         for callback, result in zip(snapshot, results, strict=False):
             if isinstance(result, Exception):
                 logger.exception("Internal subscriber %s failed", getattr(callback, "__qualname__", callback))
@@ -67,16 +83,20 @@ class EventBroker:
         for connection, subscription in list(self._connections.items()):
             if subscription.is_admin:
                 pass  # admins receive everything
-            elif event_agent_id and event_agent_id not in subscription.agent_ids:
-                continue
-            elif event_user_id and subscription.user_id and event_user_id != subscription.user_id:
+            elif (
+                event_agent_id
+                and event_agent_id not in subscription.agent_ids
+                or event_user_id
+                and subscription.user_id
+                and event_user_id != subscription.user_id
+            ):
                 continue
             send_tasks.append((connection, asyncio.ensure_future(connection.send_json(event))))
 
         for connection, task in send_tasks:
             try:
-                await task
-            except Exception:  # noqa: BLE001  # WebSocket send — connection is stale
+                await asyncio.wait_for(task, timeout=_WS_SEND_TIMEOUT)
+            except Exception:  # noqa: BLE001  # WebSocket send — connection is stale/slow
                 stale_connections.append(connection)
         for connection in stale_connections:
             self.disconnect(connection)

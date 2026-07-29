@@ -141,7 +141,7 @@ export function ResetPasswordPage() {
               </form>
             )}
 
-            {error ? <p className="panel-inline-status text-[var(--accent)]">[ERROR] {error}</p> : null}
+            {error ? <p className="panel-inline-status text-[var(--danger)]">[ERROR] {error}</p> : null}
           </div>
         </section>
       </div>

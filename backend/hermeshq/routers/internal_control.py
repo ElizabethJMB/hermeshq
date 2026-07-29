@@ -10,8 +10,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-import hmac as _hmac
-
 from hermeshq.core.security import create_agent_service_token
 from hermeshq.database import get_db_session
 from hermeshq.models.activity import ActivityLog
@@ -119,9 +117,7 @@ async def _require_admin_scope(current_agent: Agent = Depends(_get_control_agent
 
 async def _load_admin_proxy(db: AsyncSession) -> User:
     result = await db.execute(
-        select(User)
-        .where(User.role == "admin", User.is_active.is_(True))
-        .order_by(User.created_at.asc())
+        select(User).where(User.role == "admin", User.is_active.is_(True)).order_by(User.created_at.asc())
     )
     admin_user = result.scalars().first()
     if not admin_user:
@@ -835,6 +831,7 @@ async def control_delete_scheduled_task(
 
 # ─── M365 delegated token for plugins ──────────────────────────────────────
 
+
 @router.get("/m365/agent-token", include_in_schema=False)
 async def internal_get_m365_agent_token(
     request: Request,
@@ -844,10 +841,12 @@ async def internal_get_m365_agent_token(
     """Called by M365 managed integration plugins to get a delegated access token.
     Uses its own hmac-based agent validation (does not require system agent)."""
     from hermeshq.routers.m365 import get_agent_m365_token
+
     return await get_agent_m365_token(request, user_id, db)
 
 
 # ─── Channel user resolver for gateway hooks ────────────────────────────────
+
 
 @router.get("/resolve-channel-user", include_in_schema=False)
 async def resolve_channel_user_endpoint(

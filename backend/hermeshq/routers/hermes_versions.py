@@ -105,9 +105,7 @@ async def uninstall_hermes_version(
     if default_version == version:
         raise HTTPException(status_code=400, detail="Cannot uninstall the current default Hermes version")
     pinned_count = int(
-        (
-            await db.execute(select(func.count()).select_from(Agent).where(Agent.hermes_version == version))
-        ).scalar_one()
+        (await db.execute(select(func.count()).select_from(Agent).where(Agent.hermes_version == version))).scalar_one()
         or 0
     )
     if pinned_count:

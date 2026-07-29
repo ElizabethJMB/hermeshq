@@ -94,13 +94,16 @@ def _graph(method: str, path: str, access_token: str, payload: dict | None = Non
 
 
 def _auth_error(detail: str) -> str:
-    return json.dumps({
-        "success": False,
-        "error": f"No se pudo obtener token M365: {detail}. Verifica que el usuario haya conectado su cuenta Microsoft 365 en Mi cuenta.",
-    })
+    return json.dumps(
+        {
+            "success": False,
+            "error": f"No se pudo obtener token M365: {detail}. Verifica que el usuario haya conectado su cuenta Microsoft 365 en Mi cuenta.",
+        }
+    )
 
 
 # ── Tool handlers ─────────────────────────────────────────────────────────────
+
 
 def _list_emails_tool(args: dict, **_kwargs) -> str:
     user_id = _task_user_id()
@@ -174,7 +177,7 @@ def _search_emails_tool(args: dict, **_kwargs) -> str:
     if not query:
         return json.dumps({"success": False, "error": "Se requiere query."})
     fields = "id,subject,from,receivedDateTime,isRead,bodyPreview"
-    path = f'/me/messages?$search=%22{query}%22&$top={count}&$select={fields}'
+    path = f"/me/messages?$search=%22{query}%22&$top={count}&$select={fields}"
     result = _graph("GET", path, token)
     if "error" in result:
         return json.dumps({"success": False, "error": result["error"]})
@@ -183,6 +186,7 @@ def _search_emails_tool(args: dict, **_kwargs) -> str:
 
 
 # ── Plugin registration ───────────────────────────────────────────────────────
+
 
 def register(ctx):
     ctx.register_tool(
@@ -195,7 +199,10 @@ def register(ctx):
                 "type": "object",
                 "properties": {
                     "count": {"type": "integer", "description": "Número de correos a obtener (máx 50, default 10)"},
-                    "folder": {"type": "string", "description": "Carpeta: inbox (default), sentitems, drafts, deleteditems"},
+                    "folder": {
+                        "type": "string",
+                        "description": "Carpeta: inbox (default), sentitems, drafts, deleteditems",
+                    },
                 },
             },
         },

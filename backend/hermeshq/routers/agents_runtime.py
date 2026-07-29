@@ -5,11 +5,9 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
-from sqlalchemy import func
 
 from hermeshq.core.security import ensure_agent_access, get_current_user
 from hermeshq.database import get_db_session
@@ -51,9 +49,7 @@ async def start_agent(
         await supervisor.start_agent(agent_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    result = await db.execute(
-        select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id)
-    )
+    result = await db.execute(select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id))
     return _serialize_agent(request, result.scalar_one())
 
 
@@ -67,9 +63,7 @@ async def stop_agent(
     await ensure_agent_access(db, current_user, agent_id)
     supervisor = request.app.state.supervisor
     await supervisor.stop_agent(agent_id)
-    result = await db.execute(
-        select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id)
-    )
+    result = await db.execute(select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id))
     return _serialize_agent(request, result.scalar_one())
 
 
@@ -86,9 +80,7 @@ async def restart_agent(
         await supervisor.restart_agent(agent_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    result = await db.execute(
-        select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id)
-    )
+    result = await db.execute(select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id))
     return _serialize_agent(request, result.scalar_one())
 
 
@@ -106,7 +98,5 @@ async def set_agent_mode(
         raise HTTPException(status_code=400, detail="Invalid mode")
     agent.run_mode = mode
     await db.commit()
-    result = await db.execute(
-        select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id)
-    )
+    result = await db.execute(select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id))
     return _serialize_agent(request, result.scalar_one())

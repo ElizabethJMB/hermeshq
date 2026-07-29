@@ -27,6 +27,10 @@ async def list_terminal_sessions(
         statement = statement.where(TerminalSession.agent_id == agent_id)
     elif not is_admin(current_user):
         accessible_ids = await get_accessible_agent_ids(db, current_user)
-        statement = statement.where(TerminalSession.agent_id.in_(accessible_ids)) if accessible_ids else statement.where(false())
+        statement = (
+            statement.where(TerminalSession.agent_id.in_(accessible_ids))
+            if accessible_ids
+            else statement.where(false())
+        )
     result = await db.execute(statement.order_by(desc(TerminalSession.started_at)).limit(limit))
     return [TerminalSessionRead.model_validate(item) for item in result.scalars().all()]

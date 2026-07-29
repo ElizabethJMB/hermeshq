@@ -40,3 +40,30 @@ export function useDeleteScheduledTask() {
     },
   });
 }
+
+export function useUpdateScheduledTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: Record<string, unknown> & { id: string }) => {
+      const { data } = await apiClient.put<ScheduledTask>(`/scheduled-tasks/${id}`, payload);
+      return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["scheduled-tasks"] });
+    },
+  });
+}
+
+export function useRunScheduledTaskNow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (scheduledTaskId: string) => {
+      const { data } = await apiClient.post<ScheduledTask>(`/scheduled-tasks/${scheduledTaskId}/run`);
+      return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["scheduled-tasks"] });
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+}

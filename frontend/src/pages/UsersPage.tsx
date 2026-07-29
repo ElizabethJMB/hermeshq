@@ -239,7 +239,7 @@ export function UsersPage() {
           <button className="panel-button-primary w-full" type="submit" disabled={createUser.isPending}>
             {createUser.isPending ? t("common.loading") : t("users.create")}
           </button>
-          {createError ? <p className="text-sm text-[var(--accent)]">{createError}</p> : null}
+          {createError ? <p className="text-sm text-[var(--danger)]">{createError}</p> : null}
           {createInfo ? <p className="text-sm text-[var(--success)]">{createInfo}</p> : null}
         </div>
       </form>
@@ -433,7 +433,7 @@ export function UsersPage() {
                   <div className="flex justify-end">
                     <button
                       type="button"
-                      className="panel-button-secondary border-[var(--accent)] text-[var(--accent)]"
+                      className="panel-button-secondary border-[var(--danger)] text-[var(--danger)]"
                       onClick={() => void onDeleteUser(user.id, user.username)}
                       disabled={currentUser?.id === user.id || (deleteUser.isPending && deleteUser.variables === user.id)}
                     >

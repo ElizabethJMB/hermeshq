@@ -33,6 +33,7 @@ _PUBLIC_ERROR_MAP = {
     "Origin not allowed": ("Access denied", 403),
     "Rate limit exceeded": ("Too many requests, please wait", 429),
     "Monthly request quota exceeded": ("Monthly request limit reached", 429),
+    "Monthly token quota exceeded": ("Monthly token limit reached", 429),
     "Too many active sessions": ("Too many active sessions", 429),
     "Session not found or inactive": ("Session unavailable", 400),
     "Session expired": ("Session expired", 400),
@@ -75,9 +76,7 @@ async def create_session(
     except ValueError as e:
         raise _public_error(e)
     try:
-        result = await service.create_session(
-            api_key, db, client_ip=client_ip
-        )
+        result = await service.create_session(api_key, db, client_ip=client_ip)
     except ValueError as e:
         raise _public_error(e)
     return result
@@ -125,7 +124,7 @@ async def send_message(
                 try:
                     event_type, data = await asyncio.wait_for(queue.get(), timeout=15)
                     keepalive_count = 0
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     keepalive_count += 1
                     if keepalive_count >= 8:
                         yield f"data: {json.dumps({'type': 'timeout'})}\n\n"

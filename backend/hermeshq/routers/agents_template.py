@@ -67,7 +67,9 @@ async def bootstrap_system_operator(
             status_code=400,
             detail="Configure a default secret ref first so HQ Operator can authenticate",
         )
-    local_runtime_result = await db.execute(select(Node).where(Node.name == "Local Runtime").order_by(Node.created_at.asc()))
+    local_runtime_result = await db.execute(
+        select(Node).where(Node.name == "Local Runtime").order_by(Node.created_at.asc())
+    )
     node = local_runtime_result.scalar_one_or_none()
     if not node:
         raise HTTPException(status_code=404, detail="Local Runtime node not found")
@@ -93,7 +95,8 @@ async def bootstrap_system_operator(
         existing.is_system_agent = True
         existing.system_scope = "admin"
         existing.team_tags = ["system", "control-plane", "operations"]
-        existing.enabled_toolsets = []
+        from hermeshq.services.runtime_profiles import STANDARD_ENABLED_TOOLSETS
+        existing.enabled_toolsets = list(STANDARD_ENABLED_TOOLSETS) + ["hermeshq_control", "hermeshq_comms"]
         existing.disabled_toolsets = []
         existing.can_send_tasks = True
         existing.can_receive_tasks = True
@@ -143,8 +146,8 @@ async def bootstrap_system_operator(
         can_receive_tasks=True,
     )
     _apply_runtime_profile_defaults(agent, "technical", overwrite_toolsets=True)
-    agent.enabled_toolsets = []
-    agent.disabled_toolsets = []
+    from hermeshq.services.runtime_profiles import STANDARD_ENABLED_TOOLSETS
+    agent.enabled_toolsets = list(STANDARD_ENABLED_TOOLSETS) + ["hermeshq_control", "hermeshq_comms"]
     db.add(agent)
     await db.flush()
     workspace_manager = request.app.state.workspace_manager

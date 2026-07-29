@@ -27,6 +27,7 @@ from hermeshq.services.runtime_profiles import get_runtime_profile, normalize_ru
 # Internal helpers (moved from agents.py)
 # ---------------------------------------------------------------------------
 
+
 def _normalize_integration_configs(value: dict | None) -> dict[str, dict]:
     """Normalise the raw ``integration_configs`` mapping."""
     if not isinstance(value, dict):
@@ -116,14 +117,8 @@ def _sync_agent_integration_toolsets(
         for package in list_available_integration_packages(enabled_integration_slugs)
         if package.get("plugin_slug")
     }
-    retained_enabled = [
-        toolset for toolset in (agent.enabled_toolsets or [])
-        if toolset not in known_toolsets
-    ]
-    retained_disabled = [
-        toolset for toolset in (agent.disabled_toolsets or [])
-        if toolset not in known_toolsets
-    ]
+    retained_enabled = [toolset for toolset in (agent.enabled_toolsets or []) if toolset not in known_toolsets]
+    retained_disabled = [toolset for toolset in (agent.disabled_toolsets or []) if toolset not in known_toolsets]
     for slug in agent.integration_configs or {}:
         integration = get_managed_integration(str(slug), enabled_integration_slugs)
         if integration and integration.get("plugin_slug"):
@@ -149,22 +144,17 @@ sync_agent_integration_toolsets = _sync_agent_integration_toolsets
 # Runtime defaults resolver
 # ---------------------------------------------------------------------------
 
+
 async def _resolve_runtime_defaults(db: AsyncSession, payload: AgentCreate) -> dict:
     """Resolve model/provider/api_key_ref/base_url defaults from app settings."""
     from hermeshq.models.app_settings import AppSettings
 
     app_settings = await db.get(AppSettings, "default")
     return {
-        "model": payload.model
-            or (app_settings.default_model if app_settings else None)
-            or "anthropic/claude-sonnet-4",
-        "provider": payload.provider
-            or (app_settings.default_provider if app_settings else None)
-            or "openrouter",
-        "api_key_ref": payload.api_key_ref
-            or (app_settings.default_api_key_ref if app_settings else None),
-        "base_url": payload.base_url
-            or (app_settings.default_base_url if app_settings else None),
+        "model": payload.model or (app_settings.default_model if app_settings else None) or "anthropic/claude-sonnet-4",
+        "provider": payload.provider or (app_settings.default_provider if app_settings else None) or "openrouter",
+        "api_key_ref": payload.api_key_ref or (app_settings.default_api_key_ref if app_settings else None),
+        "base_url": payload.base_url or (app_settings.default_base_url if app_settings else None),
         "hermes_version": getattr(app_settings, "default_hermes_version", None) if app_settings else None,
     }
 
@@ -174,11 +164,7 @@ async def _load_enabled_integration_slugs(db: AsyncSession) -> list[str]:
     from hermeshq.models.app_settings import AppSettings
 
     app_settings = await db.get(AppSettings, "default")
-    enabled = (
-        getattr(app_settings, "enabled_integration_packages", [])
-        if app_settings
-        else []
-    )
+    enabled = getattr(app_settings, "enabled_integration_packages", []) if app_settings else []
     return [slug for slug in enabled if isinstance(slug, str) and slug.strip()]
 
 
@@ -210,6 +196,7 @@ async def _validate_hermes_version(
 # ---------------------------------------------------------------------------
 # Core factory function
 # ---------------------------------------------------------------------------
+
 
 async def create_agent_from_config(
     *,
@@ -255,9 +242,7 @@ async def create_agent_from_config(
     # --- duplicate name check ---------------------------------------------
     name_candidate = (payload.friendly_name or payload.name or "").strip()
     if name_candidate:
-        existing = await db.execute(
-            select(Agent).where(Agent.name == name_candidate, Agent.is_archived.is_(False))
-        )
+        existing = await db.execute(select(Agent).where(Agent.name == name_candidate, Agent.is_archived.is_(False)))
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=409, detail=f"An agent named '{name_candidate}' already exists")
 
@@ -310,8 +295,7 @@ async def create_agent_from_config(
     _apply_runtime_profile_defaults(
         agent,
         payload.runtime_profile,
-        overwrite_toolsets=not payload.enabled_toolsets
-            and not payload.disabled_toolsets,
+        overwrite_toolsets=not payload.enabled_toolsets and not payload.disabled_toolsets,
     )
     if payload.enabled_toolsets is not None:
         agent.enabled_toolsets = list(payload.enabled_toolsets)

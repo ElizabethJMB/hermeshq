@@ -61,7 +61,11 @@ def _get_json(url: str, api_key: str) -> dict:
             timeout=30,
         )
         if response.status_code >= 400:
-            return {"success": False, "message": f"Gamma API returned {response.status_code}.", "details": {"body": response.text[:4000]}}
+            return {
+                "success": False,
+                "message": f"Gamma API returned {response.status_code}.",
+                "details": {"body": response.text[:4000]},
+            }
         payload = response.json() if response.text else {}
         return {"success": True, "data": payload}
     except Exception as exc:  # noqa: BLE001  # action catch-all

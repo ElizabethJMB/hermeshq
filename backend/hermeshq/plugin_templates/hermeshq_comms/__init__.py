@@ -11,7 +11,9 @@ def _api_request(method: str, path: str, payload: dict | None = None) -> str:
     agent_id = os.environ.get("HERMESHQ_AGENT_ID", "")
     agent_token = os.environ.get("HERMESHQ_AGENT_TOKEN", "")
     if not base_url or not agent_id or not agent_token:
-        return json.dumps({"success": False, "error": "HermesHQ internal communication is not configured in this runtime"})
+        return json.dumps(
+            {"success": False, "error": "HermesHQ internal communication is not configured in this runtime"}
+        )
 
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     request = urllib.request.Request(

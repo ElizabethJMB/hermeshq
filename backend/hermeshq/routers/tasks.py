@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import desc, false, or_, select
+from sqlalchemy import desc, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.core.security import ensure_agent_access, get_accessible_agent_ids, get_current_user, is_admin
@@ -20,12 +20,21 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 @router.get("", response_model=list[TaskRead])
 async def list_tasks(
+    agent_id: str | None = None,
+    limit: int = 200,
+    offset: int = 0,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> list[TaskRead]:
-    statement = select(Task).order_by(desc(Task.queued_at))
+    limit = max(1, min(limit, 500))
+    offset = max(0, offset)
+    statement = select(Task).order_by(desc(Task.queued_at)).limit(limit).offset(offset)
+    if agent_id:
+        statement = statement.where(Task.agent_id == agent_id)
     if not is_admin(current_user):
         accessible_ids = await get_accessible_agent_ids(db, current_user)
+        if agent_id and agent_id not in accessible_ids:
+            raise HTTPException(status_code=403, detail="Access denied")
         if not accessible_ids:
             statement = statement.where(false())
         else:
@@ -143,6 +152,8 @@ async def update_task_board(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     await ensure_agent_access(db, current_user, task.agent_id)
+    if not is_admin(current_user) and task.created_by_user_id and task.created_by_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
     if not is_valid_board_column(payload.board_column):
         raise HTTPException(status_code=400, detail="Invalid board column")
     task.board_column = payload.board_column
@@ -198,18 +209,22 @@ async def queue_state(
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
     accessible_ids = await get_accessible_agent_ids(db, current_user)
-    queued_statement = select(Task).where(Task.status == "queued")
-    running_statement = select(Task).where(Task.status == "running")
+    queued_statement = select(func.count()).select_from(Task).where(Task.status == "queued")
+    running_statement = select(func.count()).select_from(Task).where(Task.status == "running")
     if not is_admin(current_user):
         if not accessible_ids:
             queued_statement = queued_statement.where(false())
             running_statement = running_statement.where(false())
         else:
-            queued_statement = queued_statement.where(Task.agent_id.in_(accessible_ids), Task.created_by_user_id == current_user.id)
-            running_statement = running_statement.where(Task.agent_id.in_(accessible_ids), Task.created_by_user_id == current_user.id)
-    queued_result = await db.execute(queued_statement)
-    running_result = await db.execute(running_statement)
+            queued_statement = queued_statement.where(
+                Task.agent_id.in_(accessible_ids), Task.created_by_user_id == current_user.id
+            )
+            running_statement = running_statement.where(
+                Task.agent_id.in_(accessible_ids), Task.created_by_user_id == current_user.id
+            )
+    queued_count = (await db.execute(queued_statement)).scalar() or 0
+    running_count = (await db.execute(running_statement)).scalar() or 0
     return {
-        "queued": len(queued_result.scalars().all()),
-        "running": len(running_result.scalars().all()),
+        "queued": queued_count,
+        "running": running_count,
     }

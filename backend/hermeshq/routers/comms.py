@@ -61,14 +61,12 @@ async def broadcast(
         await ensure_agent_access(session, current_user, payload.from_agent_id)
         if not is_admin(current_user):
             result = await session.execute(select(Agent).where(Agent.is_archived.is_(False)))
-            target_ids = {
-                agent.id
-                for agent in result.scalars().all()
-                if payload.team_tag in (agent.team_tags or [])
-            }
+            target_ids = {agent.id for agent in result.scalars().all() if payload.team_tag in (agent.team_tags or [])}
             accessible_ids = await get_accessible_agent_ids(session, current_user)
             if any(target_id not in accessible_ids for target_id in target_ids):
-                raise HTTPException(status_code=403, detail="Broadcast target set includes agents outside this user's scope")
+                raise HTTPException(
+                    status_code=403, detail="Broadcast target set includes agents outside this user's scope"
+                )
     messages = await request.app.state.comms_router.broadcast(payload)
     return [MessageRead.model_validate(item) for item in messages]
 
@@ -82,7 +80,9 @@ async def history(
     if not is_admin(current_user):
         accessible_ids = await get_accessible_agent_ids(db, current_user)
         statement = (
-            statement.where(or_(AgentMessage.from_agent_id.in_(accessible_ids), AgentMessage.to_agent_id.in_(accessible_ids)))
+            statement.where(
+                or_(AgentMessage.from_agent_id.in_(accessible_ids), AgentMessage.to_agent_id.in_(accessible_ids))
+            )
             if accessible_ids
             else statement.where(false())
         )
@@ -99,9 +99,13 @@ async def topology(
     messages_statement = select(AgentMessage).order_by(desc(AgentMessage.created_at)).limit(300)
     if not is_admin(current_user):
         accessible_ids = await get_accessible_agent_ids(db, current_user)
-        agents_statement = agents_statement.where(Agent.id.in_(accessible_ids)) if accessible_ids else agents_statement.where(false())
+        agents_statement = (
+            agents_statement.where(Agent.id.in_(accessible_ids)) if accessible_ids else agents_statement.where(false())
+        )
         messages_statement = (
-            messages_statement.where(or_(AgentMessage.from_agent_id.in_(accessible_ids), AgentMessage.to_agent_id.in_(accessible_ids)))
+            messages_statement.where(
+                or_(AgentMessage.from_agent_id.in_(accessible_ids), AgentMessage.to_agent_id.in_(accessible_ids))
+            )
             if accessible_ids
             else messages_statement.where(false())
         )

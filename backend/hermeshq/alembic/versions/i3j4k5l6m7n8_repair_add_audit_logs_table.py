@@ -8,10 +8,11 @@ Repair migration for deployments where audit_logs was never created
 because the d4e5f6a7b8c9 migration was skipped in the applied chain.
 All operations are idempotent.
 """
+
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision: str = "i3j4k5l6m7n8"
 down_revision: str | None = "g1h2i3j4k5l6"
@@ -41,7 +42,11 @@ def upgrade() -> None:
             sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
             sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         )
-    existing_indexes = [idx["name"] for idx in inspector.get_indexes("audit_logs")] if "audit_logs" in inspector.get_table_names() else []
+    existing_indexes = (
+        [idx["name"] for idx in inspector.get_indexes("audit_logs")]
+        if "audit_logs" in inspector.get_table_names()
+        else []
+    )
     if "ix_audit_logs_actor_id" not in existing_indexes:
         op.create_index("ix_audit_logs_actor_id", "audit_logs", ["actor_id"])
     if "ix_audit_logs_action" not in existing_indexes:

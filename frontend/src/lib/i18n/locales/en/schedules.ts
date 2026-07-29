@@ -15,6 +15,9 @@ const ns: Record<string, string> = {
   "schedules.never": "never",
   "schedules.openAgent": "Open agent",
   "schedules.delete": "Delete schedule",
+  "schedules.enable": "Enable",
+  "schedules.disable": "Disable",
+  "schedules.runNow": "Run now",
   "schedules.empty": "[EMPTY] no recurring tasks configured for this scope",
   "schedules.invalidCron": "Invalid cron expression. Expected 5 space-separated fields (e.g. */15 * * * *)",
 };

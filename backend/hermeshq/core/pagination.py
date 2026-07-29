@@ -1,4 +1,5 @@
 """Reusable pagination helpers for list endpoints."""
+
 from __future__ import annotations
 
 from typing import Generic, TypeVar

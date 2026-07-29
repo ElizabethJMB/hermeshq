@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
 import type { ReactNode } from "react";
 
 import type { AppSettings, User } from "../types/api";
@@ -42,12 +42,14 @@ export function resolveEffectiveLocale(
 }
 
 export function I18nProvider({ locale, children }: { locale: Locale; children: ReactNode }) {
-  const dictionary = dictionaries[locale] ?? dictionaries.en;
-  const value: I18nContextValue = {
-    locale,
-    t: (key, vars) => interpolate(dictionary[key] ?? dictionaries.en[key] ?? key, vars),
-    formatDateTime: (input) => new Date(input).toLocaleString(locale === "es" ? "es-CL" : "en-US"),
-  };
+  const value: I18nContextValue = useMemo(() => {
+    const dictionary = dictionaries[locale] ?? dictionaries.en;
+    return {
+      locale,
+      t: (key, vars) => interpolate(dictionary[key] ?? dictionaries.en[key] ?? key, vars),
+      formatDateTime: (input) => new Date(input).toLocaleString(locale === "es" ? "es-CL" : "en-US"),
+    };
+  }, [locale]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 

@@ -5,11 +5,12 @@ Revises: d39fa7cf25af
 Create Date: 2026-05-25 20:49:42.453375
 
 """
+
 from collections.abc import Sequence
 
 # revision identifiers, used by Alembic.
-revision: str = '8cc23c178ece'
-down_revision: str | None = 'd39fa7cf25af'
+revision: str = "8cc23c178ece"
+down_revision: str | None = "d39fa7cf25af"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
