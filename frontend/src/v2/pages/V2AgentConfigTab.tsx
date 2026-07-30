@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 
 import type { Agent, ProviderDefinition, Secret, HermesVersion, AuxiliaryModelEntry } from "../../types/api";
 import type { UseMutationResult } from "@tanstack/react-query";
+import { useUploadAgentAvatar, useGenerateAgentAvatar, useGenerateAIAgentAvatar, useDeleteAgentAvatar } from "../../api/agents";
+import { AgentAvatar } from "../../components/AgentAvatar";
 import { v2toast, extractErrorMessage } from "../toast";
 import { useI18n } from "../../lib/i18n";
 
@@ -42,6 +44,10 @@ export function V2AgentConfigTab({
   const [auxDraft, setAuxDraft] = useState<Record<string, AuxiliaryModelEntry>>(
     agent.auxiliary_models ?? {},
   );
+  const uploadAvatar = useUploadAgentAvatar();
+  const generateAvatar = useGenerateAgentAvatar();
+  const generateAIAvatar = useGenerateAIAgentAvatar();
+  const removeAvatar = useDeleteAgentAvatar();
   const AUX_TASKS = [
     { key: "vision", label: t("v2.vision") },
     { key: "compression", label: t("v2.compression") },
@@ -54,6 +60,45 @@ export function V2AgentConfigTab({
     providers.find((p) => p.slug === agent.provider);
   const availableModels = agentProvider?.available_models ?? [];
   const fbProviderDef = providers.find((p) => p.runtime_provider === fbProvider && (p.available_models ?? []).length > 0);
+
+  async function handleAvatarUpload(file: File | null) {
+    if (!file) return;
+    try {
+      await uploadAvatar.mutateAsync({ agentId: agent.id, file });
+      v2toast.success(t("v2.avatarUpdated"));
+    } catch (error) {
+      v2toast.error(extractErrorMessage(error, t("v2.avatarGenerateFailed")));
+    }
+  }
+
+  async function handleGenerateAvatar() {
+    try {
+      await generateAvatar.mutateAsync(agent.id);
+      v2toast.success(t("v2.avatarGenerated"));
+    } catch (error) {
+      v2toast.error(extractErrorMessage(error, t("v2.avatarGenerateFailed")));
+    }
+  }
+
+  async function handleGenerateAIAvatar() {
+    try {
+      const result = await generateAIAvatar.mutateAsync(agent.id);
+      if (result.task_id) {
+        v2toast.info(t("v2.avatarAISubmitted", { taskId: result.task_id }));
+      }
+    } catch (error) {
+      v2toast.error(extractErrorMessage(error, t("v2.avatarGenerateFailed")));
+    }
+  }
+
+  async function handleRemoveAvatar() {
+    try {
+      await removeAvatar.mutateAsync(agent.id);
+      v2toast.success(t("v2.avatarRemoved"));
+    } catch (error) {
+      v2toast.error(extractErrorMessage(error, t("v2.avatarGenerateFailed")));
+    }
+  }
 
   function saveRuntimeConfig() {
     const payload: Record<string, unknown> = {
@@ -87,6 +132,30 @@ export function V2AgentConfigTab({
       <section className="v2-card">
         <div className="v2-card-header"><h2 className="v2-card-title">{t("v2.identity")}</h2></div>
         <div className="v2-card-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, paddingBottom: 14, borderBottom: "1px solid var(--v2-border)" }}>
+            <AgentAvatar agent={agent} sizeClass="h-20 w-20" />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <label className="v2-btn v2-btn-ghost" style={{ cursor: isAdmin ? "pointer" : "not-allowed", fontSize: 12.5 }}>
+                {t("v2.uploadAvatar")}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  style={{ display: "none" }}
+                  onChange={(e) => void handleAvatarUpload(e.target.files?.[0] ?? null)}
+                  disabled={!isAdmin}
+                />
+              </label>
+              <button className="v2-btn v2-btn-ghost" style={{ fontSize: 12.5 }} onClick={() => void handleGenerateAvatar()} disabled={!isAdmin || generateAvatar.isPending}>
+                {generateAvatar.isPending ? t("v2.generating") : t("v2.generateAvatar")}
+              </button>
+              <button className="v2-btn v2-btn-ghost" style={{ fontSize: 12.5 }} onClick={() => void handleGenerateAIAvatar()} disabled={!isAdmin || generateAIAvatar.isPending} title={t("v2.generateAvatarAIHint")}>
+                {generateAIAvatar.isPending ? t("v2.generating") : t("v2.generateAvatarAI")}
+              </button>
+              <button className="v2-btn v2-btn-danger" style={{ fontSize: 12.5 }} onClick={() => void handleRemoveAvatar()} disabled={!isAdmin || !agent.has_avatar || removeAvatar.isPending}>
+                {t("v2.removeAvatar")}
+              </button>
+            </div>
+          </div>
           <div className="v2-field">
             <label className="v2-field-label">{t("v2.friendlyName")}</label>
             <input className="v2-input" value={friendlyName} onChange={(e) => setFriendlyName(e.target.value)} disabled={!isAdmin} />
