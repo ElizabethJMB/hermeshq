@@ -38,7 +38,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hermeshq}:${POSTGRES_PASSWORD:-hermeshq}@postgres:5432/${POSTGRES_DB:-hermeshq}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://hermeshq:hermeshq@postgres:5432/hermeshq}
       JWT_SECRET: ${JWT_SECRET:-}
       FERNET_KEY: ${FERNET_KEY:-}
       TASK_TIMEOUT_SECONDS: ${TASK_TIMEOUT_SECONDS:-3600}
