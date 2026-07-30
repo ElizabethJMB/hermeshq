@@ -22,7 +22,7 @@ export default defineConfig([
   },
   {
     // Files that intentionally co-locate hooks/constants with components
-    files: ['src/lib/i18n.tsx', 'src/components/ChannelForm.tsx'],
+    files: ['src/lib/i18n.tsx', 'src/components/ChannelForm.tsx', 'src/components/ErrorBoundary.tsx', 'src/v2/charts.tsx', 'src/v2/components/V2Shell.tsx'],
     rules: {
       'react-refresh/only-export-components': 'off',
     },

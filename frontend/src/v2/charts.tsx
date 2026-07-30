@@ -41,7 +41,7 @@ export function AreaChart({
 }) {
   const [hover, setHover] = useState<number | null>(null);
 
-  const { paths, labels, max, gridLines, totals } = useMemo(() => {
+  const { paths, labels, gridLines, totals } = useMemo(() => {
     const labels = series[0]?.points.map((p) => p.label) ?? [];
     const maxSingle = Math.max(
       1,

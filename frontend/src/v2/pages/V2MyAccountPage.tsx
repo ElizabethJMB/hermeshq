@@ -85,7 +85,7 @@ export function V2MyAccountPage() {
           </div>
           <div className="v2-card-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <AgentAvatar agent={currentUser as any} sizeClass="h-13 w-13" roundedClass="rounded-lg" />
+              <AgentAvatar agent={{ friendly_name: currentUser.display_name, name: currentUser.username, avatar_url: currentUser.avatar_url, has_avatar: currentUser.has_avatar }} sizeClass="h-13 w-13" roundedClass="rounded-lg" />
               <div>
                 <div style={{ fontWeight: 620, fontSize: 16 }}>{currentUser.display_name || currentUser.username}</div>
                 <div className="v2-agent-meta">@{currentUser.username} · {currentUser.auth_source}</div>
