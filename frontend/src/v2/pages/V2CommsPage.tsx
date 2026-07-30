@@ -3,7 +3,6 @@ import { FormEvent, useMemo, useState } from "react";
 import { useAgents } from "../../api/agents";
 import { useBroadcast, useCommsHistory, useCommsTopology, useSendMessage } from "../../api/comms";
 import { v2toast, extractErrorMessage } from "../toast";
-import type { Agent } from "../../types/api";
 import { useI18n } from "../../lib/i18n";
 
 function agentLabel(agent: { friendly_name: string | null; name: string }) {

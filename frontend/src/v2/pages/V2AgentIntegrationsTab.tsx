@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { useSecrets } from "../../api/secrets";
 import { useManagedIntegrations } from "../../api/managedIntegrations";

@@ -2,11 +2,11 @@ import { Link } from "react-router-dom";
 import { useMemo } from "react";
 
 import { useAgents, useAgentAction } from "../../api/agents";
-import { useFleetHealth, useDashboardOverview, useTaskAnalytics } from "../../api/dashboard";
+import { useFleetHealth, useTaskAnalytics } from "../../api/dashboard";
 import { useTasks } from "../../api/tasks";
 import { v2toast, extractErrorMessage } from "../toast";
 import { AgentAvatar } from "../../components/AgentAvatar";
-import { AreaChart, DonutChart, HBarChart, Sparkline, formatDuration } from "../charts";
+import { AreaChart, DonutChart, HBarChart, formatDuration } from "../charts";
 import { useI18n } from "../../lib/i18n";
 
 function statusTone(status: string): "success" | "error" | "warn" | "neutral" {
@@ -32,7 +32,6 @@ function shortDate(iso: string): string {
 export function V2Dashboard() {
   const { t } = useI18n();
   const { data: agents, isLoading: agentsLoading } = useAgents();
-  const { data: overview } = useDashboardOverview();
   const { data: health } = useFleetHealth();
   const { data: analytics } = useTaskAnalytics(14);
   const { data: tasks } = useTasks();
@@ -41,7 +40,6 @@ export function V2Dashboard() {
 
   const running = (agents ?? []).filter((a) => a.status === "running").length;
   const errored = (agents ?? []).filter((a) => a.status === "error").length;
-  const stopped = (agents ?? []).filter((a) => a.status === "stopped").length;
   const recentTasks = (tasks ?? []).slice(0, 8);
 
   const trendSeries = useMemo(() => {

@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import { useMemo } from "react";
 
 import { useAgents } from "../../api/agents";
-import { AgentAvatar } from "../../components/AgentAvatar";
 import { useTasks } from "../../api/tasks";
 import { useRealtimeStore } from "../../stores/realtimeStore";
 

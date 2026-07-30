@@ -1,4 +1,4 @@
-import { FormEvent, lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useAgents } from "../../api/agents";
@@ -35,9 +35,7 @@ import {
   useUploadBrandAsset,
   useUploadTuiSkin,
 } from "../../api/settings";
-import { useTemplates } from "../../api/templates";
 import { useSessionStore } from "../../stores/sessionStore";
-import { v2toast, extractErrorMessage } from "../toast";
 import { useI18n } from "../../lib/i18n";
 
 const GeneralTab = lazy(() => import("../../components/settings/GeneralTab"));
@@ -114,7 +112,6 @@ export function V2SettingsPage() {
   const { data: hermesVersions } = useHermesVersions(isAdmin);
   const { data: integrationDrafts } = useIntegrationDrafts(isAdmin);
   const { data: mcpAccessTokens } = useMcpAccessTokens(isAdmin);
-  const { data: templates } = useTemplates(isAdmin);
   const { data: publicChatKeys } = usePublicChatKeys(isAdmin);
 
   const updateSettings = useUpdateSettings();

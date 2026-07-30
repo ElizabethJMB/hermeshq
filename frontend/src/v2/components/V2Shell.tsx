@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { useEffect, useState } from "react";
 
 import { useFleetHealth } from "../../api/dashboard";
@@ -17,7 +17,6 @@ const THEME_LABELS: Record<V2Theme, string> = {
 };
 
 export function V2Shell() {
-  const location = useLocation();
   const [theme, setTheme] = useState<V2Theme>(() => {
     return (localStorage.getItem("v2.theme") as V2Theme) || "enterprise";
   });
@@ -75,8 +74,7 @@ export function V2Shell() {
                 key={item.to}
                 to={item.to}
                 end={item.end}
-                className={({ isActive }) => "v2-nav-link"}
-                data-active={({ isActive }: { isActive: boolean }) => undefined}
+                className="v2-nav-link"
                 style={({ isActive }) => (isActive ? { color: "var(--v2-text)", background: "var(--v2-bg-sunken)", fontWeight: 600 } : undefined)}
               >
                 {item.label}
