@@ -125,7 +125,3 @@ export function V2Shell() {
     </div>
   );
 }
-
-export function useV2Location() {
-  return useLocation();
-}
