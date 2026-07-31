@@ -17,16 +17,24 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("public_chat_api_keys", sa.Column("widget_title", sa.String(255), nullable=True))
-    op.add_column(
-        "public_chat_api_keys", sa.Column("widget_theme", sa.String(10), server_default="auto", nullable=False)
-    )
-    op.add_column(
-        "public_chat_api_keys", sa.Column("widget_accent", sa.String(10), server_default="#6366f1", nullable=False)
-    )
-    op.add_column(
-        "public_chat_api_keys", sa.Column("widget_position", sa.String(10), server_default="right", nullable=False)
-    )
+    bind = op.get_bind()
+    existing_cols = {c["name"] for c in sa.inspect(bind).get_columns("public_chat_api_keys")}
+
+    if "widget_title" not in existing_cols:
+        op.add_column("public_chat_api_keys", sa.Column("widget_title", sa.String(255), nullable=True))
+    if "widget_theme" not in existing_cols:
+        op.add_column(
+            "public_chat_api_keys", sa.Column("widget_theme", sa.String(10), server_default="auto", nullable=False)
+        )
+    if "widget_accent" not in existing_cols:
+        op.add_column(
+            "public_chat_api_keys",
+            sa.Column("widget_accent", sa.String(10), server_default="#6366f1", nullable=False),
+        )
+    if "widget_position" not in existing_cols:
+        op.add_column(
+            "public_chat_api_keys", sa.Column("widget_position", sa.String(10), server_default="right", nullable=False)
+        )
 
 
 def downgrade() -> None:
