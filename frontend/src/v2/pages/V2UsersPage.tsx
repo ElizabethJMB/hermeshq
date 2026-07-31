@@ -1,6 +1,5 @@
 import { FormEvent, useState } from "react";
 
-import { useAgents } from "../../api/agents";
 import { useCreateUser, useDeleteUser, useUpdateUser, useUsers } from "../../api/users";
 import { useSessionStore } from "../../stores/sessionStore";
 import { v2toast, extractErrorMessage } from "../toast";
@@ -9,7 +8,6 @@ import { useI18n } from "../../lib/i18n";
 export function V2UsersPage() {
   const { t } = useI18n();
   const { data: users, isLoading } = useUsers();
-  const { data: agents } = useAgents();
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
   const deleteUser = useDeleteUser();

@@ -347,6 +347,18 @@ const v2: Record<string, string> = {
   "v2.apiKeyShort": "API key",
   "v2.defaultOption": "Por defecto",
   "v2.runtimeConfigSaved": "Config de runtime guardada",
+  "v2.avatar": "Avatar",
+  "v2.uploadAvatar": "Subir",
+  "v2.generateAvatar": "Generar",
+  "v2.generateAvatarAI": "Generar con IA",
+  "v2.generateAvatarAIHint": "Pedir al HQ Operator que cree un avatar único",
+  "v2.generating": "Generando…",
+  "v2.removeAvatar": "Quitar",
+  "v2.avatarUpdated": "Avatar actualizado",
+  "v2.avatarRemoved": "Avatar eliminado",
+  "v2.avatarGenerated": "Avatar generado",
+  "v2.avatarGenerateFailed": "Operación de avatar fallida",
+  "v2.avatarAISubmitted": "Generación de avatar enviada al HQ Operator (tarea {taskId})",
 };
 
 export default v2;
