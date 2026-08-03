@@ -171,7 +171,7 @@ class HermesInstallationManager:
         managed_env = await self._build_managed_env_map(agent) if include_channels else {}
         for key, value in managed_env.items():
             env[key] = value
-        # ── Auxiliary model env vars ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        # ── Auxiliary model env vars ────────────────────────────────────
         if agent.auxiliary_models:
             for task_name, aux_cfg in agent.auxiliary_models.items():
                 if not isinstance(aux_cfg, dict):
@@ -197,7 +197,7 @@ class HermesInstallationManager:
         env = await self.build_process_env(agent, include_channels=False)
         for key, value in (await self._build_managed_env_map(agent, platform)).items():
             env[key] = value
-        # ── Inject fallback provider env vars ─────────────────────────
+        # ── Inject fallback provider env vars ───────────────────────────
         # The gateway subprocess runs its own conversation loop and needs
         # the fallback credentials in its environment so that Hermes Agent
         # can retry with the secondary provider on a primary failure (429,
@@ -514,7 +514,7 @@ class HermesInstallationManager:
                     existing.update(values)
                 else:
                     config[section] = values
-        # ── Auxiliary models ──────────────────────────────────────────────────
+        # ── Auxiliary models ────────────────────────────────────────────
         aux_section = {}
         if agent.auxiliary_models:
             for task_name, aux_cfg in agent.auxiliary_models.items():
@@ -555,7 +555,7 @@ class HermesInstallationManager:
                     }
         if aux_section:
             config["auxiliary"] = aux_section
-        # ── Plugins: enable plugins installed in HERMES_HOME/plugins/ ────────────────
+        # ── Plugins: enable plugins installed in HERMES_HOME/plugins/ ───────
         # Hermes requires an explicit plugins.enabled list in config.yaml to
         # load plugins from the plugins/ directory; without it, plugins are
         # discovered but skipped. We include every plugin slug in enabled_toolsets
@@ -903,25 +903,27 @@ class HermesInstallationManager:
                 "If asked which skills are available, do not guess. Use `skills_list` to verify installed skills. "
                 "If none are installed, say that no agent-specific skills are currently installed."
             )
+        memory_header = [
+            f"{app_name} gives you persistent memory across sessions for this agent, backed by the platform "
+            "(visible and editable from the admin dashboard).",
+            "`hq_memory_list`, `hq_memory_read`, `hq_memory_write`, and `hq_memory_delete` are your ONLY memory "
+            "tools. If a tool literally named `memory` is also available, do NOT use it for anything durable — "
+            "it is not tracked by the platform and is not visible to the user or admins. Always use the "
+            "`hq_memory_*` tools instead for any persistent note, preference, or piece of context you want to "
+            "recall in a future session.",
+            "Use `hq_memory_list`/`hq_memory_read` to recall notes from previous conversations, and "
+            "`hq_memory_write` to save durable user preferences, project context, or feedback you should "
+            "remember later. Never store secrets or credentials in memory.",
+        ]
         if memory_index:
-            lines = [
-                f"{app_name} gives you persistent memory across sessions for this agent.",
-                "Use `hq_memory_list`/`hq_memory_read` to recall notes from previous conversations, and "
-                "`hq_memory_write` to save durable user preferences, project context, or feedback you should "
-                "remember later. Never store secrets or credentials in memory.",
-                "Existing notes:",
-            ]
+            lines = [*memory_header, "Existing notes:"]
             lines.extend(
                 f"- {entry['memory_key']}: {entry['title']}" + (f" ({entry['category']})" if entry["category"] else "")
                 for entry in memory_index
             )
             parts.append("\n".join(lines))
         else:
-            parts.append(
-                f"{app_name} gives you persistent memory across sessions for this agent, currently empty. "
-                "Use `hq_memory_write` to save durable user preferences, project context, or feedback you should "
-                "remember later. Never store secrets or credentials in memory."
-            )
+            parts.append("\n".join([*memory_header, "No notes are saved yet."]))
         enabled_integrations = self._describe_enabled_integrations(agent, enabled_integration_slugs or [])
         if enabled_integrations:
             lines = [
@@ -959,7 +961,7 @@ class HermesInstallationManager:
                     f"- {item['display_name']} | slug={item['slug'] or 'unset'} | status={item['status']} | "
                     f"receives_tasks={'yes' if item['can_receive_tasks'] else 'no'} | "
                     f"sends_tasks={'yes' if item['can_send_tasks'] else 'no'} | supervisor={supervisor} | "
-                    f"tags={tag_text} | role={role} | delegate={route_label(item['delegate_route'])}"
+                    f"tags={tag_text} | role={route_label(item['delegate_route'])}"
                 )
             parts.append("\n".join(lines))
         return "\n\n".join(part for part in parts if part).strip()
