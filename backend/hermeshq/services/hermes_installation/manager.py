@@ -15,6 +15,7 @@ from hermeshq.models.agent import Agent
 from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.provider import ProviderDefinition
+from hermeshq.services import agent_memory_service
 from hermeshq.services.agent_hierarchy import delegate_route, route_label
 from hermeshq.services.auxiliary_models import resolve_auxiliary_api_key
 from hermeshq.services.credentials import require_secret_value
@@ -170,7 +171,7 @@ class HermesInstallationManager:
         managed_env = await self._build_managed_env_map(agent) if include_channels else {}
         for key, value in managed_env.items():
             env[key] = value
-        # ── Auxiliary model env vars ────────────────────────────────────
+        # ── Auxiliary model env vars ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         if agent.auxiliary_models:
             for task_name, aux_cfg in agent.auxiliary_models.items():
                 if not isinstance(aux_cfg, dict):
@@ -196,7 +197,7 @@ class HermesInstallationManager:
         env = await self.build_process_env(agent, include_channels=False)
         for key, value in (await self._build_managed_env_map(agent, platform)).items():
             env[key] = value
-        # ── Inject fallback provider env vars ───────────────────────────
+        # ── Inject fallback provider env vars ─────────────────────────
         # The gateway subprocess runs its own conversation loop and needs
         # the fallback credentials in its environment so that Hermes Agent
         # can retry with the secondary provider on a primary failure (429,
@@ -513,7 +514,7 @@ class HermesInstallationManager:
                     existing.update(values)
                 else:
                     config[section] = values
-        # ── Auxiliary models ────────────────────────────────────────────
+        # ── Auxiliary models ──────────────────────────────────────────────────
         aux_section = {}
         if agent.auxiliary_models:
             for task_name, aux_cfg in agent.auxiliary_models.items():
@@ -554,7 +555,7 @@ class HermesInstallationManager:
                     }
         if aux_section:
             config["auxiliary"] = aux_section
-        # ── Plugins: enable plugins installed in HERMES_HOME/plugins/ ───────
+        # ── Plugins: enable plugins installed in HERMES_HOME/plugins/ ────────────────
         # Hermes requires an explicit plugins.enabled list in config.yaml to
         # load plugins from the plugins/ directory; without it, plugins are
         # discovered but skipped. We include every plugin slug in enabled_toolsets
@@ -808,7 +809,15 @@ class HermesInstallationManager:
     async def _build_system_prompt(self, agent: Agent, installed_skills: list[dict], app_name: str) -> str:
         roster = await self._load_agent_roster(agent)
         enabled_integrations = await self._load_enabled_integration_slugs()
-        return self._compose_system_prompt(agent, installed_skills, roster, app_name, enabled_integrations)
+        memory_index = await self._load_agent_memory_index(agent)
+        return self._compose_system_prompt(agent, installed_skills, roster, app_name, enabled_integrations, memory_index)
+
+    async def _load_agent_memory_index(self, agent: Agent) -> list[dict]:
+        async with self.session_factory() as session:
+            entries = await agent_memory_service.list_memories(session, agent.id)
+        return [
+            {"memory_key": entry.memory_key, "title": entry.title, "category": entry.category} for entry in entries
+        ]
 
     async def _load_agent_roster(self, agent: Agent) -> list[dict]:
         async with self.session_factory() as session:
@@ -846,6 +855,7 @@ class HermesInstallationManager:
         roster: list[dict],
         app_name: str,
         enabled_integration_slugs: list[str] | None = None,
+        memory_index: list[dict] | None = None,
     ) -> str:
         parts = [agent.system_prompt.strip()] if agent.system_prompt and agent.system_prompt.strip() else []
         profile = get_runtime_profile(agent.runtime_profile)
@@ -892,6 +902,25 @@ class HermesInstallationManager:
             parts.append(
                 "If asked which skills are available, do not guess. Use `skills_list` to verify installed skills. "
                 "If none are installed, say that no agent-specific skills are currently installed."
+            )
+        if memory_index:
+            lines = [
+                f"{app_name} gives you persistent memory across sessions for this agent.",
+                "Use `hq_memory_list`/`hq_memory_read` to recall notes from previous conversations, and "
+                "`hq_memory_write` to save durable user preferences, project context, or feedback you should "
+                "remember later. Never store secrets or credentials in memory.",
+                "Existing notes:",
+            ]
+            lines.extend(
+                f"- {entry['memory_key']}: {entry['title']}" + (f" ({entry['category']})" if entry["category"] else "")
+                for entry in memory_index
+            )
+            parts.append("\n".join(lines))
+        else:
+            parts.append(
+                f"{app_name} gives you persistent memory across sessions for this agent, currently empty. "
+                "Use `hq_memory_write` to save durable user preferences, project context, or feedback you should "
+                "remember later. Never store secrets or credentials in memory."
             )
         enabled_integrations = self._describe_enabled_integrations(agent, enabled_integration_slugs or [])
         if enabled_integrations:
