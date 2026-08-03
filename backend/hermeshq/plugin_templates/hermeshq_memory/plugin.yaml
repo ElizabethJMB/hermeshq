@@ -1,0 +1,9 @@
+name: hermeshq-memory
+version: "1.0.0"
+description: HermesHQ persistent per-agent memory tools
+author: HermesHQ
+provides_tools:
+  - hq_memory_list
+  - hq_memory_read
+  - hq_memory_write
+  - hq_memory_delete
