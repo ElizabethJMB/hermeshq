@@ -15,7 +15,6 @@ from starlette.websockets import WebSocketState
 
 from hermeshq.config import get_settings
 from hermeshq.core.events import EventBroker
-from hermeshq.core.public_chat_cors import PublicChatCORSMiddleware
 from hermeshq.core.security import get_accessible_agent_ids, get_websocket_user, hash_password, is_admin
 from hermeshq.database import AsyncSessionLocal, init_database
 from hermeshq.models import ActivityLog, Agent, AppSettings, Node, ProviderDefinition, TerminalSession, User
@@ -33,6 +32,7 @@ from hermeshq.routers import (
     integration_packages,
     internal_agents,
     internal_control,
+    internal_memory,
     logs,
     m365,
     managed_integrations,
@@ -200,7 +200,7 @@ async def bootstrap_defaults(secret_vault: SecretVault | None = None) -> None:
                 if aux_changed:
                     agent.auxiliary_models = migrated_aux
 
-            # ── Inherit new standard toolsets ──────────────────────────
+            # ── Inherit new standard toolsets ────────────────────────────────────────
             # Any toolset added to STANDARD_ENABLED_TOOLSETS is automatically
             # inherited by existing agents on upgrade. This is additive only —
             # it never removes toolsets an agent already has, and respects
@@ -381,8 +381,6 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"],
 )
 
-app.add_middleware(PublicChatCORSMiddleware)
-
 app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(nodes.router, prefix=settings.api_prefix)
 app.include_router(providers.router, prefix=settings.api_prefix)
@@ -399,6 +397,7 @@ app.include_router(dashboard.router, prefix=settings.api_prefix)
 app.include_router(comms.router, prefix=settings.api_prefix)
 app.include_router(internal_agents.router, prefix=settings.api_prefix)
 app.include_router(internal_control.router, prefix=settings.api_prefix)
+app.include_router(internal_memory.router, prefix=settings.api_prefix)
 app.include_router(secrets.router, prefix=settings.api_prefix)
 app.include_router(settings_router.router, prefix=settings.api_prefix)
 app.include_router(backup.router, prefix=settings.api_prefix)
