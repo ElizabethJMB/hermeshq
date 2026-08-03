@@ -1,4 +1,4 @@
-name: hermeshq-memory
+name: hermeshq_memory
 version: "1.0.0"
 description: HermesHQ persistent per-agent memory tools
 author: HermesHQ
