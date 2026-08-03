@@ -1,7 +1,7 @@
 """add agent_memories table
 
 Revision ID: df8701c01bc9
-Revises: l6m7n8o9p0q1
+Revises: n8o9p0q1r2s3
 Create Date: 2026-08-03 00:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 from sqlalchemy import inspect
 
 revision: str = "df8701c01bc9"
-down_revision: str | None = "l6m7n8o9p0q1"
+down_revision: str | None = "n8o9p0q1r2s3"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
