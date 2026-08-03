@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect
 
 revision = "k5l6m7n8o9p0"
 down_revision = "j4k5l6m7n8o9"
@@ -16,7 +17,16 @@ branch_labels = None
 depends_on = None
 
 
+def _column_exists(table_name: str, column_name: str) -> bool:
+    bind = op.get_bind()
+    insp = inspect(bind)
+    return column_name in {col["name"] for col in insp.get_columns(table_name)}
+
+
 def upgrade() -> None:
+    if _column_exists("public_chat_api_keys", "widget_title"):
+        return
+
     op.add_column("public_chat_api_keys", sa.Column("widget_title", sa.String(255), nullable=True))
     op.add_column(
         "public_chat_api_keys", sa.Column("widget_theme", sa.String(10), server_default="auto", nullable=False)

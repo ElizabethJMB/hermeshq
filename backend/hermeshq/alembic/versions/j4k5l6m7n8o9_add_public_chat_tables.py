@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect
 from sqlalchemy.dialects import postgresql
 
 revision = "j4k5l6m7n8o9"
@@ -17,7 +18,16 @@ branch_labels = None
 depends_on = None
 
 
+def _table_exists(table_name: str) -> bool:
+    bind = op.get_bind()
+    insp = inspect(bind)
+    return table_name in insp.get_table_names()
+
+
 def upgrade() -> None:
+    if _table_exists("public_chat_api_keys"):
+        return
+
     op.create_table(
         "public_chat_api_keys",
         sa.Column("id", sa.String(36), primary_key=True),

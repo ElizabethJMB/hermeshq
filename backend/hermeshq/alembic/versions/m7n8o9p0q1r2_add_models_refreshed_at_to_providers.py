@@ -8,6 +8,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect
 
 revision: str = "m7n8o9p0q1r2"
 down_revision: str | Sequence[str] | None = "l6m7n8o9p0q1"
@@ -15,7 +16,16 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+def _column_exists(table_name: str, column_name: str) -> bool:
+    bind = op.get_bind()
+    insp = inspect(bind)
+    return column_name in {col["name"] for col in insp.get_columns(table_name)}
+
+
 def upgrade() -> None:
+    if _column_exists("providers", "models_refreshed_at"):
+        return
+
     op.add_column(
         "providers",
         sa.Column("models_refreshed_at", sa.DateTime(timezone=True), nullable=True),
