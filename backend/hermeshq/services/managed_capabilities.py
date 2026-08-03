@@ -35,6 +35,12 @@ CORE_MANAGED_PLUGIN_CATALOG: list[dict] = [
         "toolset": "hermeshq_audio",
         "standard_compatible": True,
     },
+    {
+        "slug": "hermeshq_memory",
+        "template_dir": "hermeshq_memory",
+        "toolset": "hermeshq_memory",
+        "standard_compatible": True,
+    },
 ]
 
 

@@ -22,6 +22,10 @@ PLATFORM_PLUGIN_CATALOG: dict[str, dict[str, str]] = {
         "name": "HermesHQ Comms",
         "description": "Built-in HermesHQ plugin exposing inter-agent roster, direct messaging, and delegation tools.",
     },
+    "hermeshq_memory": {
+        "name": "HermesHQ Memory",
+        "description": "Built-in HermesHQ plugin exposing persistent per-agent memory notes (write/read/list/delete) across sessions.",
+    },
 }
 
 

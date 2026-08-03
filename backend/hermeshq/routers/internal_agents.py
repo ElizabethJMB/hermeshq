@@ -1,16 +1,14 @@
-import hmac
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from hermeshq.core.security import create_agent_service_token
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
 from hermeshq.models.task import Task
-from hermeshq.routers.agents_shared import _load_agent_map
+from hermeshq.routers.agents_shared import _load_agent_map, get_internal_agent
 from hermeshq.schemas.internal_agent import InternalDelegateRead, InternalDirectRead, InternalRosterRead
 from hermeshq.schemas.message import MessageCreate
 from hermeshq.services.agent_hierarchy import delegate_route, route_label, validate_delegate_hierarchy
@@ -32,20 +30,7 @@ class InternalDelegateRequest(BaseModel):
     metadata: dict[str, Any] = {}
 
 
-async def _get_internal_agent(
-    db: AsyncSession = Depends(get_db_session),
-    agent_id: str | None = Header(default=None, alias="X-HermesHQ-Agent-ID"),
-    agent_token: str | None = Header(default=None, alias="X-HermesHQ-Agent-Token"),
-) -> Agent:
-    if not agent_id or not agent_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing agent credentials")
-    expected = create_agent_service_token(agent_id)
-    if not hmac.compare_digest(agent_token, expected):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid agent credentials")
-    agent = await db.get(Agent, agent_id)
-    if not agent or agent.is_archived:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unknown agent")
-    return agent
+_get_internal_agent = get_internal_agent
 
 
 def _display_name(agent: Agent) -> str:
