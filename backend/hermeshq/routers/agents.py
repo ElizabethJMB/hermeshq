@@ -8,6 +8,7 @@ The original monolithic module has been split into focused sub-modules:
   - agents_bulk.py      → bulk task dispatch, bulk message send
   - agents_template.py  → create from template, system operator bootstrap
   - agents_managed.py   → managed integration test / actions
+  - internal_memory.py  → per-agent persistent memory (admin/dashboard CRUD)
 
 Shared constants and helper functions live in agents_shared.py.
 """
@@ -23,6 +24,7 @@ from hermeshq.routers.agents_managed import router as managed_router
 from hermeshq.routers.agents_runtime import router as runtime_router
 from hermeshq.routers.agents_template import router as template_router
 from hermeshq.routers.agents_workspace import router as workspace_router
+from hermeshq.routers.internal_memory import admin_router as memory_router
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["agents"])
@@ -34,3 +36,4 @@ router.include_router(workspace_router)
 router.include_router(bulk_router)
 router.include_router(template_router)
 router.include_router(managed_router)
+router.include_router(memory_router)

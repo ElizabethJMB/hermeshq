@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import hmac
 import logging
 from pathlib import Path
 
-from fastapi import HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import false, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.config import get_settings
-from hermeshq.core.security import get_accessible_agent_ids, is_admin
+from hermeshq.core.security import create_agent_service_token, get_accessible_agent_ids, is_admin
+from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
 from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.conversation_thread import ConversationThread
@@ -58,6 +60,23 @@ async def _load_agent_map(db: AsyncSession) -> dict[str, Agent]:
     """Load all non-archived agents as a dict keyed by ID."""
     result = await db.execute(select(Agent).where(Agent.is_archived.is_(False)).order_by(Agent.created_at.asc()))
     return {agent.id: agent for agent in result.scalars().all()}
+
+
+async def get_internal_agent(
+    db: AsyncSession = Depends(get_db_session),
+    agent_id: str | None = Header(default=None, alias="X-HermesHQ-Agent-ID"),
+    agent_token: str | None = Header(default=None, alias="X-HermesHQ-Agent-Token"),
+) -> Agent:
+    """Resolve and authenticate the calling agent for internal (agent-to-platform) API routes."""
+    if not agent_id or not agent_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing agent credentials")
+    expected = create_agent_service_token(agent_id)
+    if not hmac.compare_digest(agent_token, expected):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid agent credentials")
+    agent = await db.get(Agent, agent_id)
+    if not agent or agent.is_archived:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unknown agent")
+    return agent
 
 
 def _active_agent_clause():

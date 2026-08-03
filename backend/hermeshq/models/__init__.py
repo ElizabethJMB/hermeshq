@@ -1,6 +1,7 @@
 from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
 from hermeshq.models.agent_assignment import AgentAssignment
+from hermeshq.models.agent_memory import AgentMemory
 from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.audit_log import AuditLog
 from hermeshq.models.base import Base
@@ -33,6 +34,7 @@ __all__ = [
     "ActivityLog",
     "Agent",
     "AgentAssignment",
+    "AgentMemory",
     "AgentMessage",
     "AgentTemplate",
     "AppSettings",
