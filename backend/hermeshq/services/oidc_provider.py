@@ -122,7 +122,7 @@ def verify_oidc_state(state: str, jwt_secret: str) -> dict | None:
 
         raw = base64.b64decode(decoded["data"])
         return json.loads(raw)
-    except (jwt.JWTError, KeyError, ValueError, TypeError):
+    except (jwt.PyJWTError, KeyError, ValueError, TypeError):
         logger.warning("Invalid OIDC state token", exc_info=True)
         return None
 
@@ -228,7 +228,7 @@ async def _validate_id_token(id_token: str, provider: OidcProvider, discovery: d
         logger.warning("No jwks_uri in discovery for %s; skipping validation", provider.slug)
         try:
             return jwt.decode(id_token, options={"verify_signature": False})
-        except jwt.JWTError:
+        except jwt.PyJWTError:
             return {}
 
     keys = await _fetch_jwks(jwks_uri)
@@ -255,7 +255,7 @@ async def _validate_id_token(id_token: str, provider: OidcProvider, discovery: d
             )
         except jwt.ExpiredSignatureError:
             raise
-        except (jwt.JWTError, jwt.InvalidTokenError):
+        except jwt.PyJWTError:
             continue
     logger.warning("Could not validate id_token for provider %s", provider.slug)
     return {}
