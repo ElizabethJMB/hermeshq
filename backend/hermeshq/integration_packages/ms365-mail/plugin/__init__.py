@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import mimetypes
 import os
 import re
+import time
 import unicodedata
 import urllib.error
 import urllib.parse
@@ -796,6 +798,286 @@ def _get_emails_tool(args: dict, **_kwargs) -> str:
     return json.dumps(payload, ensure_ascii=False)
 
 
+_APPROVAL_TTL_SECONDS = 1800
+
+
+_MAX_DOWNLOAD_ATTACHMENTS = 10
+
+
+_MAX_DOWNLOAD_ATTACHMENT_BYTES = 10 * 1024 * 1024
+
+
+def _current_task_id() -> str:
+    raw = os.environ.get("HERMESHQ_TASK_PAYLOAD", "")
+    try:
+        return str(json.loads(raw).get("task_id") or "") if raw else ""
+    except (ValueError, AttributeError):
+        return ""
+
+
+def _previews_path() -> Path:
+    return Path(os.environ.get("HERMES_SESSION_CWD") or os.getcwd()) / "work" / ".mail_previews.json"
+
+
+def _load_previews() -> dict:
+    try:
+        data = json.loads(_previews_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    limit = time.time() - _APPROVAL_TTL_SECONDS
+    return {k: v for k, v in data.items() if isinstance(v, dict) and float(v.get("ts") or 0) >= limit}
+
+
+def _save_previews(previews: dict) -> None:
+    try:
+        path = _previews_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(previews), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _action_fingerprint(user_id: str, *parts) -> str:
+    return hashlib.sha256(
+        "|".join([user_id, *[json.dumps(p, sort_keys=True, default=str) for p in parts]]).encode()
+    ).hexdigest()
+
+
+def _approval_gate(args: dict, fingerprint: str, preview: dict) -> str | None:
+    """Devuelve la respuesta de vista previa si todavía no hay una aprobación real (el usuario respondió tras verla)."""
+    previews = _load_previews()
+    entry = previews.get(fingerprint)
+    current = _current_task_id()
+    real = bool(
+        args.get("aprobado_por_el_usuario") and entry and current and entry.get("task") and entry["task"] != current
+    )
+    if real:
+        return None
+    previews[fingerprint] = {"task": current, "ts": time.time()}
+    _save_previews(previews)
+    result = {
+        "success": False,
+        "requiere_aprobacion": True,
+        "vista_previa": preview,
+        "siguiente": "Muéstrale al usuario esta vista previa y pregunta si lo envías; termina tu respuesta ahí y espera "
+        "su siguiente mensaje. Cuando diga que sí, vuelve a llamar con aprobado_por_el_usuario=true y EXACTAMENTE "
+        "los mismos datos.",
+    }
+    if args.get("aprobado_por_el_usuario"):
+        result["error"] = (
+            "No se envió: esta vista previa aún no se le mostró al usuario en un mensaje anterior. No puedes aprobar "
+            "por él en la misma respuesta."
+        )
+    return json.dumps(result, ensure_ascii=False)
+
+
+def _consume_approval(fingerprint: str) -> None:
+    previews = _load_previews()
+    previews.pop(fingerprint, None)
+    _save_previews(previews)
+
+
+def _list_attachments(token: str, message_id: str) -> tuple[list[dict] | None, str | None]:
+    result = _graph(
+        "GET", f"/me/messages/{message_id}/attachments?$select=id,name,size,isInline,contentType&$top=50", token
+    )
+    if "error" in result:
+        return None, str(result["error"])
+    return result.get("value", []), None
+
+
+def _attachment_summary(item: dict) -> dict:
+    return {
+        "nombre": item.get("name"),
+        "tamano_kb": round(int(item.get("size") or 0) / 1024),
+        "incrustado": bool(item.get("isInline")),
+        "tipo": item.get("contentType"),
+    }
+
+
+def _message_for_action(token: str, message_id: str) -> tuple[dict | None, str | None]:
+    message = _graph(
+        "GET",
+        f"/me/messages/{message_id}?$select=subject,from,toRecipients,receivedDateTime,hasAttachments",
+        token,
+    )
+    if "error" in message:
+        return None, str(message["error"])
+    return message, None
+
+
+def _forward_email_tool(args: dict, **_kwargs) -> str:
+    user_id = _task_user_id()
+    if not user_id:
+        return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
+    token, err = _get_m365_token(user_id)
+    if not token:
+        return _auth_error(err)
+    message_id = _resolve_message_id(str(args.get("message_id") or "").strip())
+    to, invalid_to = _parse_recipients(args.get("to"))
+    cc, invalid_cc = _parse_recipients(args.get("cc"))
+    comment = str(args.get("comment") or "").strip()
+    if not message_id or not to or invalid_to or invalid_cc:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "Se requiere message_id y to (correos válidos). "
+                + (f"Direcciones inválidas: {invalid_to + invalid_cc}. " if invalid_to or invalid_cc else "")
+                + "Si solo tienes el nombre, búscalo con ms365_find_person y confírmalo con el usuario.",
+            },
+            ensure_ascii=False,
+        )
+    message, error = _message_for_action(token, message_id)
+    if message is None:
+        return json.dumps({"success": False, "error": error}, ensure_ascii=False)
+    attachments, _ = _list_attachments(token, message_id)
+    preview = {
+        "accion": "reenviar",
+        "asunto": message.get("subject"),
+        "de": ((message.get("from") or {}).get("emailAddress") or {}).get("address"),
+        "fecha": message.get("receivedDateTime"),
+        "para": [r["emailAddress"]["address"] for r in to],
+        "cc": [r["emailAddress"]["address"] for r in cc],
+        "comentario": comment or None,
+        "adjuntos_e_imagenes_que_viajan": [_attachment_summary(a) for a in attachments or []],
+        "nota": "Se reenvía el correo ORIGINAL completo: conserva sus adjuntos e imágenes incrustadas.",
+    }
+    fingerprint = _action_fingerprint(
+        user_id, "forward", message_id, [r["emailAddress"]["address"] for r in to + cc], comment
+    )
+    gate = _approval_gate(args, fingerprint, preview)
+    if gate is not None:
+        return gate
+    if cc:
+        draft = _graph(
+            "POST", f"/me/messages/{message_id}/createForward", token, {"toRecipients": to, "comment": comment}
+        )
+        if "error" in draft:
+            detail = str(draft["error"])
+            if "403" in detail:
+                detail += " Para reenviar con copia falta el permiso Mail.ReadWrite: el usuario debe reconectar su cuenta Microsoft 365."
+            return json.dumps({"success": False, "error": detail}, ensure_ascii=False)
+        patched = _graph("PATCH", f"/me/messages/{draft.get('id')}", token, {"ccRecipients": cc})
+        sent = _graph("POST", f"/me/messages/{draft.get('id')}/send", token) if "error" not in patched else patched
+    else:
+        sent = _graph("POST", f"/me/messages/{message_id}/forward", token, {"toRecipients": to, "comment": comment})
+    if "error" in sent:
+        return json.dumps({"success": False, "error": sent["error"]}, ensure_ascii=False)
+    _consume_approval(fingerprint)
+    return json.dumps(
+        {"success": True, "reenviado_a": preview["para"], "cc": preview["cc"], "asunto": preview["asunto"]},
+        ensure_ascii=False,
+    )
+
+
+def _reply_email_tool(args: dict, **_kwargs) -> str:
+    user_id = _task_user_id()
+    if not user_id:
+        return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
+    token, err = _get_m365_token(user_id)
+    if not token:
+        return _auth_error(err)
+    message_id = _resolve_message_id(str(args.get("message_id") or "").strip())
+    comment = str(args.get("comment") or "").strip()
+    reply_all = bool(args.get("reply_all"))
+    if not message_id or not comment:
+        return json.dumps({"success": False, "error": "Se requiere message_id y comment (el texto de la respuesta)."})
+    message, error = _message_for_action(token, message_id)
+    if message is None:
+        return json.dumps({"success": False, "error": error}, ensure_ascii=False)
+    preview = {
+        "accion": "responder a todos" if reply_all else "responder",
+        "asunto": message.get("subject"),
+        "responde_a": ((message.get("from") or {}).get("emailAddress") or {}).get("address"),
+        "tambien_a": [((r or {}).get("emailAddress") or {}).get("address") for r in message.get("toRecipients") or []]
+        if reply_all
+        else [],
+        "texto": comment,
+    }
+    fingerprint = _action_fingerprint(user_id, "reply", message_id, reply_all, comment)
+    gate = _approval_gate(args, fingerprint, preview)
+    if gate is not None:
+        return gate
+    sent = _graph(
+        "POST", f"/me/messages/{message_id}/{'replyAll' if reply_all else 'reply'}", token, {"comment": comment}
+    )
+    if "error" in sent:
+        return json.dumps({"success": False, "error": sent["error"]}, ensure_ascii=False)
+    _consume_approval(fingerprint)
+    return json.dumps(
+        {"success": True, "respondido": preview["accion"], "asunto": preview["asunto"]}, ensure_ascii=False
+    )
+
+
+def _graph_get_bytes(path: str, token: str) -> tuple[bytes | None, str]:
+    req = urllib.request.Request(
+        _encode_url(f"{GRAPH_BASE}{path}"), headers={"Authorization": f"Bearer {token}"}, method="GET"
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = resp.read(_MAX_DOWNLOAD_ATTACHMENT_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        return None, f"Error {exc.code} al descargar el adjunto."
+    except (urllib.error.URLError, TimeoutError) as exc:
+        return None, f"No se pudo descargar el adjunto: {exc}"
+    if len(data) > _MAX_DOWNLOAD_ATTACHMENT_BYTES:
+        return None, f"Supera el máximo de {_MAX_DOWNLOAD_ATTACHMENT_BYTES // (1024 * 1024)} MB."
+    return data, ""
+
+
+def _mail_attachments_tool(args: dict, **_kwargs) -> str:
+    user_id = _task_user_id()
+    if not user_id:
+        return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
+    token, err = _get_m365_token(user_id)
+    if not token:
+        return _auth_error(err)
+    message_id = _resolve_message_id(str(args.get("message_id") or "").strip())
+    if not message_id:
+        return json.dumps({"success": False, "error": "Se requiere message_id."})
+    items, error = _list_attachments(token, message_id)
+    if items is None:
+        return json.dumps({"success": False, "error": error}, ensure_ascii=False)
+    result: dict = {"success": True, "count": len(items), "adjuntos": [_attachment_summary(i) for i in items]}
+    if not args.get("download"):
+        result["siguiente"] = (
+            "Con download=true los guardo en el workspace (incluye imágenes incrustadas con include_inline=true)."
+        )
+        return json.dumps(result, ensure_ascii=False)
+    folder = (
+        Path(os.environ.get("HERMES_SESSION_CWD") or os.getcwd())
+        / "mail_attachments"
+        / re.sub(r"\W", "", message_id)[-12:]
+    )
+    folder.mkdir(parents=True, exist_ok=True)
+    saved, skipped = [], []
+    for item in items:
+        name = str(item.get("name") or "adjunto")
+        if item.get("isInline") and not args.get("include_inline"):
+            skipped.append({"nombre": name, "motivo": "imagen incrustada (usa include_inline=true)"})
+            continue
+        if len(saved) >= _MAX_DOWNLOAD_ATTACHMENTS:
+            skipped.append({"nombre": name, "motivo": f"máximo {_MAX_DOWNLOAD_ATTACHMENTS} archivos"})
+            continue
+        data, derr = _graph_get_bytes(f"/me/messages/{message_id}/attachments/{item.get('id')}/$value", token)
+        if data is None:
+            skipped.append({"nombre": name, "motivo": derr})
+            continue
+        safe = re.sub(r"[^\w.\- ]", "_", name).strip(" .") or "adjunto"
+        target = folder / safe
+        target.write_bytes(data)
+        saved.append(
+            {
+                "nombre": name,
+                "tamano_kb": round(len(data) / 1024),
+                "local_path": str(target.relative_to(folder.parents[1])),
+            }
+        )
+    result.update({"descargados": saved, "omitidos": skipped})
+    result["hint"] = "Archivos en el workspace; para reenviar el correo con todo su contenido usa ms365_mail_forward."
+    return json.dumps(result, ensure_ascii=False)
+
+
 _NEEDS_MAIL_READWRITE = (
     "Para adjuntar archivos de más de 2,8 MB falta el permiso Mail.ReadWrite en la cuenta Microsoft del usuario "
     "(un administrador debe habilitarlo y el usuario reconectar su cuenta M365). Mientras tanto: comparte el "
@@ -1494,6 +1776,107 @@ def register(ctx):
         handler=_get_email_tool,
         description="Obtener correo M365 por ID",
         emoji="📧",
+    )
+    ctx.register_tool(
+        name="ms365_mail_forward",
+        toolset=TOOLSET,
+        schema={
+            "name": "ms365_mail_forward",
+            "description": (
+                "REENVÍA un correo recibido a otras personas conservando TODO su contenido: cuerpo, adjuntos e imágenes "
+                "incrustadas (capturas, logos). Úsala siempre que pidan «reenvía el correo de X a Y»; NO intentes sacar "
+                "los adjuntos ni armar un correo nuevo con ms365_mail_send. La primera llamada devuelve una vista previa "
+                "(asunto, de quién es, adjuntos que viajan, destinatarios) sin enviar: muéstrasela al usuario y espera "
+                "su respuesta; solo con aprobado_por_el_usuario=true y los mismos datos, en un mensaje posterior, se envía."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message_id": {
+                        "type": "string",
+                        "description": "ID del correo (de ms365_mail_list o ms365_mail_search).",
+                    },
+                    "to": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Destinatarios (correos exactos).",
+                    },
+                    "cc": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Copia (opcional; requiere Mail.ReadWrite).",
+                    },
+                    "comment": {
+                        "type": "string",
+                        "description": "Texto que se agrega arriba del correo reenviado (opcional).",
+                    },
+                    "aprobado_por_el_usuario": {
+                        "type": "boolean",
+                        "description": "true SOLO si el usuario ya vio la vista previa y dijo que sí.",
+                    },
+                },
+                "required": ["message_id", "to"],
+            },
+        },
+        handler=_forward_email_tool,
+        description="Reenviar un correo recibido con sus adjuntos (con aprobación)",
+        emoji="↪️",
+    )
+    ctx.register_tool(
+        name="ms365_mail_reply",
+        toolset=TOOLSET,
+        schema={
+            "name": "ms365_mail_reply",
+            "description": (
+                "RESPONDE un correo recibido (al remitente o a todos) dentro del mismo hilo, con el texto citado debajo. "
+                "La primera llamada devuelve una vista previa sin enviar; solo con aprobado_por_el_usuario=true y los "
+                "mismos datos, en un mensaje posterior del usuario, se envía."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message_id": {"type": "string", "description": "ID del correo a responder."},
+                    "comment": {"type": "string", "description": "Texto de la respuesta."},
+                    "reply_all": {"type": "boolean", "description": "true: responder a todos."},
+                    "aprobado_por_el_usuario": {
+                        "type": "boolean",
+                        "description": "true SOLO si el usuario ya vio la vista previa y dijo que sí.",
+                    },
+                },
+                "required": ["message_id", "comment"],
+            },
+        },
+        handler=_reply_email_tool,
+        description="Responder un correo recibido (con aprobación)",
+        emoji="↩️",
+    )
+    ctx.register_tool(
+        name="ms365_mail_attachments",
+        toolset=TOOLSET,
+        schema={
+            "name": "ms365_mail_attachments",
+            "description": (
+                "Lista los adjuntos y las imágenes incrustadas de un correo RECIBIDO (nombre, peso, tipo) y, con "
+                "download=true, los guarda en el workspace (hasta 10 archivos de 10 MB) para leerlos, analizarlos con "
+                "vision_analyze o adjuntarlos a otro correo. Si lo que quieren es reenviar el correo, usa mejor "
+                "ms365_mail_forward."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message_id": {"type": "string", "description": "ID del correo."},
+                    "download": {"type": "boolean", "description": "true: descargar al workspace."},
+                    "include_inline": {
+                        "type": "boolean",
+                        "description": "true: incluir también las imágenes incrustadas.",
+                    },
+                },
+                "required": ["message_id"],
+            },
+        },
+        handler=_mail_attachments_tool,
+        description="Ver y descargar los adjuntos de un correo recibido",
+        emoji="📎",
     )
     ctx.register_tool(
         name="ms365_mail_send",

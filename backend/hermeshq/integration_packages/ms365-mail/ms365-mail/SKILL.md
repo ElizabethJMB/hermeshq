@@ -16,6 +16,9 @@ Usa esta skill cuando el usuario necesite consultar, buscar o enviar correos de 
 - `ms365_mail_get_many` — Obtiene hasta 10 correos por sus IDs en UNA llamada (en paralelo); úsala siempre que necesites leer más de uno
 - `ms365_mail_get` — Obtiene un correo por su ID; el cuerpo llega en texto plano y recortado (admite `max_chars`; `format=html` solo si necesitas el HTML original)
 - `ms365_mail_send` — Envía un correo en nombre del usuario con varios destinatarios (`to`, `cc`, `bcc`), archivos adjuntos (`attachments`) e imágenes incrustadas (`inline_images`)
+- `ms365_mail_forward` — REENVÍA un correo recibido conservando su cuerpo, adjuntos e imágenes incrustadas. Úsala para «reenvía el correo de X a Y»; no intentes sacar los adjuntos ni armar otro correo. Primero devuelve una vista previa (qué viaja y a quién): muéstrala, termina tu respuesta y espera el «sí» del usuario; la aprobación solo vale si el usuario respondió entre la vista previa y el envío
+- `ms365_mail_reply` — Responde un correo recibido (al remitente o a todos con `reply_all`) dentro del mismo hilo, con la misma vista previa y aprobación
+- `ms365_mail_attachments` — Lista los adjuntos e imágenes incrustadas de un correo recibido y, con `download=true`, los guarda en el workspace (hasta 10 archivos de 10 MB)
 - `ms365_mail_search` — Busca correos en todo el buzón o en una carpeta: palabras clave más filtros `from`, `subject`, `since`, `until`, `has_attachments` y `folder`; devuelve los más recientes primero
 
 ## Uso correcto
