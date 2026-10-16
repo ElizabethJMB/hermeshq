@@ -114,6 +114,7 @@ class HermesInstallationManager:
         active_skin = await self._sync_global_skin(hermes_home)
         app_name = await self._get_instance_app_name()
         installed_skills = await self._sync_managed_skills(agent, hermes_home, enabled_integrations)
+        self._sync_shared_library(hermes_home)
         system_prompt = await self._build_system_prompt(agent, installed_skills, app_name)
         messaging_channels = await self._load_messaging_channels(agent.id)
         self._sync_whatsapp_bridge_assets(hermes_home)
@@ -726,6 +727,25 @@ class HermesInstallationManager:
             agent.soul_md or f"# Soul\n\n{app_name} managed agent.",
             encoding="utf-8",
         )
+
+    @staticmethod
+    def _sync_shared_library(hermes_home: Path) -> None:
+        """Copia las skills que los usuarios compartieron (ya aprobadas) a la carpeta 'biblioteca' de este agente."""
+        try:
+            origen = get_settings().workspaces_root / "_biblioteca" / "skills"
+            destino_raiz = hermes_home / "skills" / "biblioteca"
+            publicadas = {p.name for p in origen.iterdir() if (p / "SKILL.md").is_file()} if origen.is_dir() else set()
+            if destino_raiz.is_dir():
+                for existente in destino_raiz.iterdir():
+                    if existente.is_dir() and existente.name not in publicadas:
+                        shutil.rmtree(existente)
+            for nombre in publicadas:
+                destino = destino_raiz / nombre
+                if destino.exists():
+                    shutil.rmtree(destino)
+                shutil.copytree(origen / nombre, destino, ignore=shutil.ignore_patterns("__pycache__"))
+        except OSError:
+            logger.warning("No se pudo sincronizar la biblioteca compartida", exc_info=True)
 
     async def _sync_managed_skills(
         self, agent: Agent, hermes_home: Path, enabled_integration_slugs: list[str]

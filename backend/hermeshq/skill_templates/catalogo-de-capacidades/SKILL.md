@@ -38,6 +38,14 @@ description: "Mapa en lenguaje simple de lo que sabes hacer y con qué herramien
 | Analizar una imagen | `vision_analyze`, una imagen por llamada |
 | Crear una imagen | La skill `generador-imagenes` |
 
+## Datos y skills
+| Si piden… | Haz esto |
+|---|---|
+| Analizar o responder sobre datos de Excel/CSV | `hq_datos_extraer` (una vez) y luego `hq_datos_consultar` (filtros, conteos, listas; varias consultas en una llamada). Sin `execute_code` |
+| Entregar el detalle de filas en un Excel (con año, mes, categoría, resumen, sin repetidos) | `hq_datos_exportar`. Sin `openpyxl` ni `execute_code` |
+| Saber qué cambió entre dos versiones (dos HTML o dos Excel/CSV) | `hq_comparar(antes, despues, clave?)` y cita su `resumen` |
+| Crear, ajustar o compartir una skill propia | `hq_skill_crear` (valida antes de guardar); la skill `crear-skill` guía la entrevista |
+
 ## Tareas programadas y coordinación
 | Si piden… | Haz esto |
 |---|---|
