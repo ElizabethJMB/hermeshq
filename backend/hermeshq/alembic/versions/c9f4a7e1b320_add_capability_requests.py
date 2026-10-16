@@ -29,7 +29,7 @@ def upgrade() -> None:
         sa.Column("description", sa.Text(), nullable=False),
         sa.Column("example", sa.Text(), nullable=True),
         sa.Column("attempts", sa.Text(), nullable=True),
-        sa.Column("files_json", sa.JSON(), nullable=True),
+        sa.Column("files_json", sa.JSON(), nullable=False),
         sa.Column("status", sa.String(length=16), nullable=False, server_default="nuevo"),
         sa.Column("fingerprint", sa.String(length=80), nullable=False),
         sa.Column("me_too_count", sa.Integer(), nullable=False, server_default="1"),
