@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     public_chat_task_timeout_seconds: int = 540
     model_call_timeout_seconds: int = 120
     model_context_length: int = 0
+    enrollment_llm_proxy: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",
