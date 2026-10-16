@@ -101,7 +101,7 @@ class TestSendWithAttachments(unittest.TestCase):
         self.assertTrue(out["success"])
 
     def test_oversized_attachments_are_refused_with_alternatives(self):
-        Path(self.dir.name, "grande.pptx").write_bytes(b"x" * 19_000_000)
+        Path(self.dir.name, "grande.pptx").write_bytes(b"x" * 26_000_000)
         out = self._send({"to": ["a@x.cl"], "subject": "s", "body": "b", "attachments": [{"path": "grande.pptx"}]})
         self.assertFalse(out["success"])
         self.assertIn("SharePoint", out["error"])
@@ -209,6 +209,33 @@ class TestLargeAttachments(unittest.TestCase):
         self.assertFalse(out["success"])
         self.assertIn(("DELETE", "/me/messages/DRAFT1", None), self.calls)
         self.assertNotIn("send", [p.split("/")[-1] for _, p, _ in self.calls])
+
+
+class TestAttachmentLimit(unittest.TestCase):
+    def setUp(self):
+        self.mod = _load()
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        entorno = patch.dict(os.environ, {"HERMES_SESSION_CWD": self.dir.name})
+        entorno.start()
+        self.addCleanup(entorno.stop)
+
+    def _archivo(self, nombre, megas):
+        ruta = Path(self.dir.name) / nombre
+        with open(ruta, "wb") as handle:
+            handle.truncate(int(megas * 1_000_000))
+        return nombre
+
+    def test_the_total_limit_is_25_mb_and_a_single_file_can_use_all_of_it(self):
+        self.assertEqual(self.mod._MAX_LARGE_ATTACHMENTS_TOTAL_BYTES, 25_000_000)
+        adjuntos, _, error = self.mod._load_file_attachments([self._archivo("grande.bin", 24.5)], 0)
+        self.assertIsNone(error)
+        self.assertEqual(len(adjuntos), 1)
+
+    def test_over_the_limit_is_rejected_with_the_size_and_the_alternative(self):
+        _, _, error = self.mod._load_file_attachments([self._archivo("a.bin", 15), self._archivo("b.bin", 11)], 0)
+        self.assertIn("25 MB", error)
+        self.assertIn("enlace", error)
 
 
 class TestOneDriveFallback(unittest.TestCase):

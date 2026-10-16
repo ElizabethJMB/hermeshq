@@ -16,7 +16,7 @@ description: "Mapa en lenguaje simple de lo que sabes hacer y con qué herramien
 | Buscar correos por palabra | `ms365_mail_search` |
 | El correo de una persona dado su nombre | `ms365_find_person` (busca en su historial de correos y reuniones, no en el directorio de la empresa). **Muestra el correo encontrado y pide confirmación** |
 | Enviar un correo | `ms365_mail_send`: varios destinatarios en `to`, `cc` y `bcc` (listas, todos en un solo correo) |
-| Adjuntar archivos | `attachments` en `ms365_mail_send`: hasta 10 archivos y 18 MB. Hasta 2,8 MB sale directo; por encima sale como adjunto real si la cuenta tiene `Mail.ReadWrite`, y si no, como enlace de OneDrive (avísale al usuario) |
+| Adjuntar archivos | `attachments` en `ms365_mail_send`: hasta 10 archivos y 25 MB. Hasta 2,8 MB sale directo; por encima sale como adjunto real si la cuenta tiene `Mail.ReadWrite`, y si no, como enlace de OneDrive (avísale al usuario) |
 | Imágenes dentro del cuerpo (firma) | `inline_images` (1,5 MB cada una) con `cid:` en el HTML. Nunca pegues base64 |
 
 ## Calendario y reuniones

@@ -80,7 +80,7 @@ def _load_inline_images(items) -> tuple[list[dict], str | None]:
 
 _MAX_FILE_ATTACHMENTS = 10
 _MAX_ATTACHMENTS_TOTAL_BYTES = 2_800_000
-_MAX_LARGE_ATTACHMENTS_TOTAL_BYTES = 18_000_000
+_MAX_LARGE_ATTACHMENTS_TOTAL_BYTES = 25_000_000
 _SINGLE_POST_ATTACHMENT_BYTES = 2_800_000
 _UPLOAD_CHUNK_BYTES = 327_680 * 10
 
@@ -1533,7 +1533,7 @@ def register(ctx):
                         "type": "array",
                         "description": (
                             "Archivos adjuntos (PDF, Excel, Word, PowerPoint, imágenes, etc.): máx. 10 archivos y "
-                            "18 MB en total. Hasta 2,8 MB se envía directo; por encima se envía por borrador y requiere "
+                            "25 MB en total. Hasta 2,8 MB se envía directo; por encima se envía por borrador y requiere "
                             "el permiso Mail.ReadWrite. Cada uno es un archivo del directorio de trabajo del agente."
                         ),
                         "items": {
