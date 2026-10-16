@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import mimetypes
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -342,6 +344,56 @@ def _find_direct_chat(token: str, person_id: str) -> str | None:
     return None
 
 
+_APPROVAL_TTL_SECONDS = 1800
+
+
+def _current_task_id() -> str:
+    raw = os.environ.get("HERMESHQ_TASK_PAYLOAD", "")
+    try:
+        return str(json.loads(raw).get("task_id") or "") if raw else ""
+    except (ValueError, AttributeError):
+        return ""
+
+
+def _previews_path() -> Path:
+    return Path(os.environ.get("HERMES_SESSION_CWD") or os.getcwd()) / "work" / ".teams_previews.json"
+
+
+def _load_previews() -> dict:
+    try:
+        data = json.loads(_previews_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    limit = time.time() - _APPROVAL_TTL_SECONDS
+    return {k: v for k, v in data.items() if isinstance(v, dict) and float(v.get("ts") or 0) >= limit}
+
+
+def _save_previews(previews: dict) -> None:
+    try:
+        path = _previews_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(previews), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _message_fingerprint(user_id: str, person_id: str, message: str, file_path: str) -> str:
+    return hashlib.sha256(f"{user_id}|{person_id}|{message}|{file_path}".encode()).hexdigest()
+
+
+def _remember_preview(fingerprint: str) -> None:
+    previews = _load_previews()
+    previews[fingerprint] = {"task": _current_task_id(), "ts": time.time()}
+    _save_previews(previews)
+
+
+def _approval_is_real(fingerprint: str) -> bool:
+    """La aprobación vale solo si la vista previa idéntica se mostró en una tarea ANTERIOR (el usuario respondió después)."""
+    entry = _load_previews().get(fingerprint)
+    current = _current_task_id()
+    return bool(entry and current and entry.get("task") and entry["task"] != current)
+
+
 def _send_to_person_tool(args: dict, **_kwargs) -> str:
     user_id = _task_user_id()
     if not user_id:
@@ -365,17 +417,23 @@ def _send_to_person_tool(args: dict, **_kwargs) -> str:
     if persona is None:
         return json.dumps({"success": False, "error": error}, ensure_ascii=False)
     para = {"nombre": persona.get("displayName"), "correo": persona.get("mail") or email}
-    if not args.get("aprobado_por_el_usuario"):
-        return json.dumps(
-            {
-                "success": False,
-                "requiere_aprobacion": True,
-                "vista_previa": {"para": para, "mensaje": message, "archivo": file_path or None},
-                "siguiente": "Muéstrale al usuario esta vista previa (a quién y qué texto) y pregunta si lo envías. "
-                "Cuando diga que sí, vuelve a llamar con aprobado_por_el_usuario=true y los mismos datos.",
-            },
-            ensure_ascii=False,
-        )
+    fingerprint = _message_fingerprint(user_id, str(persona.get("id")), message, file_path)
+    if not args.get("aprobado_por_el_usuario") or not _approval_is_real(fingerprint):
+        _remember_preview(fingerprint)
+        resultado = {
+            "success": False,
+            "requiere_aprobacion": True,
+            "vista_previa": {"para": para, "mensaje": message, "archivo": file_path or None},
+            "siguiente": "Muéstrale al usuario esta vista previa (a quién y qué texto) y pregunta si lo envías; "
+            "termina tu respuesta ahí y espera su siguiente mensaje. Cuando diga que sí, vuelve a llamar con "
+            "aprobado_por_el_usuario=true y EXACTAMENTE los mismos datos.",
+        }
+        if args.get("aprobado_por_el_usuario"):
+            resultado["error"] = (
+                "No se envió: esta vista previa aún no se le mostró al usuario en un mensaje anterior. No puedes "
+                "aprobar por él en la misma respuesta."
+            )
+        return json.dumps(resultado, ensure_ascii=False)
     chat_id = _find_direct_chat(token, str(persona.get("id")))
     creado = False
     if not chat_id:
@@ -418,6 +476,9 @@ def _send_to_person_tool(args: dict, **_kwargs) -> str:
             {"success": False, "error": enviado.get("error"), "chat_id": chat_id, "chat_creado": creado},
             ensure_ascii=False,
         )
+    consumida = _load_previews()
+    consumida.pop(fingerprint, None)
+    _save_previews(consumida)
     return json.dumps(
         {"success": True, "enviado_a": para, "chat_id": chat_id, "chat_creado": creado, "id": enviado.get("id")},
         ensure_ascii=False,
