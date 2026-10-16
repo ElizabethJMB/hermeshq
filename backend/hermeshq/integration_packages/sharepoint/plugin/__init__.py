@@ -5,6 +5,9 @@ import json
 import mimetypes
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -190,8 +193,113 @@ def _with_hint(error: str) -> str:
     return text
 
 
+_MAX_TREE_ITEMS = 300
+
+
+def _fetch_children(base: str, folder: str, token: str) -> tuple[list | None, str | None]:
+    path: str | None = f"{base}:/{folder}:/children" if folder else f"{base}/children"
+    items: list = []
+    while path and len(items) < 200:
+        result = _graph("GET", path, token)
+        if "error" in result:
+            return None, result["error"]
+        items.extend(result.get("value", []))
+        next_link: str = result.get("@odata.nextLink") or ""
+        path = next_link if (next_link and len(items) < 200) else None
+    return items, None
+
+
+def _site_bases(site_url: str, folder_path: str, token: str) -> list[tuple[str, str, str | None]]:
+    """Candidatos (base, carpeta, nombre de biblioteca): prueba la biblioteca nombrada en la ruta y luego todas las del sitio."""
+    parsed = urllib.parse.urlparse(site_url)
+    hostname = parsed.netloc
+    site_path = parsed.path.rstrip("/") or "/"
+    default = (f"/sites/{hostname}:{site_path}:/drive/root", folder_path, None)
+    site = _graph("GET", f"/sites/{hostname}:{site_path}?$select=id", token)
+    if "error" in site or not site.get("id"):
+        return [default]
+    drives = _graph("GET", f"/sites/{site['id']}/drives?$select=id,name", token).get("value", [])
+    partes = [p for p in folder_path.split("/") if p]
+    candidatos: list[tuple[str, str, str | None]] = []
+    if partes:
+        for drive in drives:
+            if _fold_name(drive.get("name")) == _fold_name(partes[0]):
+                candidatos.append((f"/drives/{drive['id']}/root", "/".join(partes[1:]), drive.get("name")))
+    candidatos.append(default)
+    for drive in drives:
+        candidatos.append((f"/drives/{drive['id']}/root", folder_path, drive.get("name")))
+    return candidatos
+
+
+def _fold_name(value) -> str:
+    import unicodedata
+
+    texto = unicodedata.normalize("NFKD", str(value or "")).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "", texto.lower())
+
+
+def _simplify_item(i: dict) -> dict:
+    return {
+        "id": i.get("id"),
+        "name": i.get("name"),
+        "type": "folder" if "folder" in i else "file",
+        "size": i.get("size"),
+        "url": i.get("webUrl"),
+        "modified": i.get("lastModifiedDateTime"),
+    }
+
+
+def _build_tree(base: str, folder: str, token: str, depth: int, budget: list[int]) -> list[dict]:
+    items, error = _fetch_children(base, folder, token)
+    if items is None:
+        return [{"name": f"(no se pudo leer: {str(error)[:60]})", "type": "error"}]
+    nodes: list[dict] = []
+    for item in items:
+        if budget[0] <= 0:
+            nodes.append({"name": "… (se omitió el resto por tamaño)", "type": "nota"})
+            break
+        budget[0] -= 1
+        node = {"name": item.get("name"), "type": "folder" if "folder" in item else "file"}
+        if node["type"] == "file":
+            node["size"] = item.get("size")
+        elif depth > 1:
+            sub = f"{folder}/{item.get('name')}" if folder else str(item.get("name"))
+            node["children"] = _build_tree(base, sub, token, depth - 1, budget)
+        nodes.append(node)
+    return nodes
+
+
+def _build_folder_tree(
+    base: str, folder: str, token: str, depth: int, budget: list[int]
+) -> tuple[list[dict], int | None]:
+    items, error = _fetch_children(base, folder, token)
+    if items is None:
+        return [{"name": f"(no se pudo leer: {str(error)[:60]})", "type": "error"}], None
+    nodes: list[dict] = []
+    for item in items:
+        if "folder" not in item:
+            continue
+        if budget[0] <= 0:
+            nodes.append(
+                {
+                    "name": "… (se omitieron más carpetas por tamaño; pide una subcarpeta o sube max_items)",
+                    "type": "nota",
+                }
+            )
+            break
+        budget[0] -= 1
+        node = {"name": item.get("name"), "type": "folder"}
+        if depth > 1:
+            sub = f"{folder}/{item.get('name')}" if folder else str(item.get("name"))
+            node["children"], archivos = _build_folder_tree(base, sub, token, depth - 1, budget)
+            if archivos is not None:
+                node["archivos"] = archivos
+        nodes.append(node)
+    return nodes, sum(1 for i in items if "folder" not in i)
+
+
 def _list_files_tool(args: dict, **_kwargs) -> str:
-    """List files using Files.Read.All - works with OneDrive and SharePoint."""
+    """Lista archivos con Files.Read.All en OneDrive o SharePoint; depth 2-3 devuelve el árbol de subcarpetas en una sola llamada."""
     user_id = _task_user_id()
     if not user_id:
         return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
@@ -199,44 +307,51 @@ def _list_files_tool(args: dict, **_kwargs) -> str:
     if not token:
         return _auth_error(err)
 
-    # Use arg site_url, fallback to user-configured site, fallback to OneDrive
     site_url = str(args.get("site_url") or user_site_url or "").strip().rstrip("/")
     folder_path = str(args.get("folder_path") or "").strip().strip("/")
+    solo_carpetas = bool(args.get("solo_carpetas"))
+    try:
+        depth = max(1, min(4 if solo_carpetas else 3, int(args.get("depth") or 1)))
+    except (TypeError, ValueError):
+        depth = 1
+    try:
+        max_items = max(50, min(800, int(args.get("max_items") or _MAX_TREE_ITEMS)))
+    except (TypeError, ValueError):
+        max_items = _MAX_TREE_ITEMS
+    if not site_url and folder_path:
+        folder_path, folder_error = _normalize_drive_folder(folder_path)
+        if folder_error:
+            return json.dumps({"success": False, "error": folder_error}, ensure_ascii=False)
 
-    if site_url:
-        # Access a specific SharePoint site by URL
-        # GET /sites/{hostname}:/{site-path}
-        parsed = urllib.parse.urlparse(site_url)
-        hostname = parsed.netloc
-        site_path = parsed.path.rstrip("/") or "/"
-        base_path = f"/sites/{hostname}:{site_path}:/drive/root"
-    else:
-        # Default: user's OneDrive root
-        base_path = "/me/drive/root"
-
-    path: str | None = f"{base_path}:/{folder_path}:/children" if folder_path else f"{base_path}/children"
-
-    raw_items: list = []
-    while path and len(raw_items) < 200:
-        result = _graph("GET", path, token)
-        if "error" in result:
-            return json.dumps({"success": False, "error": _with_hint(result["error"])}, ensure_ascii=False)
-        raw_items.extend(result.get("value", []))
-        next_link: str = result.get("@odata.nextLink") or ""
-        path = next_link if (next_link and len(raw_items) < 200) else None
-
-    simplified = [
-        {
-            "id": i.get("id"),
-            "name": i.get("name"),
-            "type": "folder" if "folder" in i else "file",
-            "size": i.get("size"),
-            "url": i.get("webUrl"),
-            "modified": i.get("lastModifiedDateTime"),
-        }
-        for i in raw_items
-    ]
-    return json.dumps({"success": True, "count": len(simplified), "items": simplified}, ensure_ascii=False)
+    candidatos = _site_bases(site_url, folder_path, token) if site_url else [("/me/drive/root", folder_path, None)]
+    raw_items: list | None = None
+    last_error = "No se pudo listar la carpeta."
+    usado: tuple[str, str, str | None] | None = None
+    for base, carpeta, nombre in candidatos:
+        raw_items, error = _fetch_children(base, carpeta, token)
+        if raw_items is not None:
+            usado = (base, carpeta, nombre)
+            break
+        last_error = error or last_error
+    if raw_items is None or usado is None:
+        return json.dumps({"success": False, "error": _with_hint(last_error)}, ensure_ascii=False)
+    base, carpeta, nombre = usado
+    resultado: dict = {"success": True}
+    if nombre:
+        resultado["biblioteca"] = nombre
+    if depth > 1:
+        presupuesto = [max_items]
+        if solo_carpetas:
+            arbol, archivos_raiz = _build_folder_tree(base, carpeta, token, depth, presupuesto)
+            resultado["tree"] = arbol
+            resultado["archivos_en_la_raiz"] = archivos_raiz
+        else:
+            resultado["tree"] = _build_tree(base, carpeta, token, depth, presupuesto)
+        resultado["count"] = max_items - presupuesto[0]
+        return json.dumps(resultado, ensure_ascii=False)
+    simplified = [_simplify_item(i) for i in raw_items]
+    resultado.update({"count": len(simplified), "items": simplified})
+    return json.dumps(resultado, ensure_ascii=False)
 
 
 def _get_file_tool(args: dict, **_kwargs) -> str:
@@ -446,6 +561,45 @@ def _extract_pdf(data: bytes, limit: int) -> tuple[str, int]:
     return "\n".join(parts), total_pages
 
 
+_LEGACY_FORMATS = {
+    ".doc": ".docx",
+    ".rtf": ".docx",
+    ".odt": ".docx",
+    ".xls": ".xlsx",
+    ".xlsb": ".xlsx",
+    ".ods": ".xlsx",
+    ".ppt": ".pptx",
+    ".odp": ".pptx",
+}
+
+
+def _convert_legacy(name: str, data: bytes) -> tuple[str, bytes] | str:
+    ext = os.path.splitext(name.lower())[1]
+    target = _LEGACY_FORMATS[ext]
+    office = shutil.which("soffice") or shutil.which("libreoffice")
+    if not office:
+        return f"No hay conversor instalado para leer archivos {ext}."
+    with tempfile.TemporaryDirectory() as folder:
+        source = os.path.join(folder, "origen" + ext)
+        with open(source, "wb") as handle:
+            handle.write(data)
+        try:
+            subprocess.run(
+                [office, "--headless", "--convert-to", target.lstrip("."), "--outdir", folder, source],
+                capture_output=True,
+                timeout=120,
+                env=dict(os.environ, HOME=folder),
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return f"La conversión del archivo {ext} tardó más de 2 minutos."
+        converted = os.path.join(folder, "origen" + target)
+        if not os.path.isfile(converted):
+            return f"No se pudo convertir el archivo {ext} para leerlo (¿está dañado o protegido con contraseña?)."
+        with open(converted, "rb") as handle:
+            return os.path.splitext(name)[0] + target, handle.read()
+
+
 def _extract_text(name: str, data: bytes, limit: int) -> tuple[str | None, str, dict]:
     ext = os.path.splitext(name.lower())[1]
     extra: dict = {}
@@ -468,6 +622,13 @@ def _extract_text(name: str, data: bytes, limit: int) -> tuple[str | None, str, 
         return None, f"Falta una librería para leer archivos {ext}: {exc}", extra
     except Exception as exc:  # noqa: BLE001  # parser catch-all
         return None, f"No se pudo leer el contenido del archivo {ext}: {exc}", extra
+    if ext in _LEGACY_FORMATS:
+        converted = _convert_legacy(name, data)
+        if isinstance(converted, str):
+            return None, converted, extra
+        text, error, extra = _extract_text(converted[0], converted[1], limit)
+        extra["convertido_desde"] = ext
+        return text, error, extra
     return None, f"Formato {ext or 'desconocido'} no soportado para lectura de contenido.", extra
 
 
@@ -577,6 +738,103 @@ def _put_binary(url: str, data: bytes, token: str | None = None, content_range: 
         return {"error": f"Error {exc.code} subiendo el archivo: {detail}"}
     except (urllib.error.URLError, TimeoutError) as exc:
         return {"error": f"No se pudo subir el archivo: {exc}"}
+
+
+def _resolve_local_file(raw_path: str) -> tuple[Path | None, str | None]:
+    base = Path(os.environ.get("HERMES_SESSION_CWD") or os.getcwd()).resolve()
+    candidate = Path(raw_path)
+    path = (candidate if candidate.is_absolute() else base / candidate).resolve()
+    if base != path and base not in path.parents:
+        return None, f"El archivo '{raw_path}' está fuera del directorio de trabajo."
+    if not path.is_file():
+        return None, f"No existe el archivo '{raw_path}'."
+    size = path.stat().st_size
+    if size > _MAX_SHARE_BYTES:
+        return None, f"El archivo pesa {size / 1_000_000:.1f} MB; el máximo es {_MAX_SHARE_BYTES // 1_000_000} MB."
+    return path, None
+
+
+def _safe_drive_name(display: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._ -]", "_", display).strip(" .")[:120] or "archivo"
+
+
+def _upload_local_file(token: str, path: Path, remote_dir: str, safe_name: str) -> tuple[dict | None, str | None]:
+    size = path.stat().st_size
+    data = path.read_bytes()
+    remote = f"/me/drive/root:/{remote_dir}/{safe_name}" if remote_dir else f"/me/drive/root:/{safe_name}"
+    if size <= _SIMPLE_UPLOAD_MAX_BYTES:
+        item = _put_binary(
+            _encode_url(f"{GRAPH_BASE}{remote}:/content?@microsoft.graph.conflictBehavior=rename"), data, token
+        )
+    else:
+        session = _graph(
+            "POST", f"{remote}:/createUploadSession", token, {"item": {"@microsoft.graph.conflictBehavior": "rename"}}
+        )
+        if "error" in session:
+            return None, session["error"]
+        upload_url = session.get("uploadUrl")
+        if not upload_url:
+            return None, "OneDrive no entregó la dirección de subida."
+        item = {}
+        for start in range(0, size, _UPLOAD_CHUNK_BYTES):
+            chunk = data[start : start + _UPLOAD_CHUNK_BYTES]
+            item = _put_binary(upload_url, chunk, None, f"bytes {start}-{start + len(chunk) - 1}/{size}")
+            if "error" in item:
+                break
+    if "error" in item:
+        return None, item["error"]
+    return item, None
+
+
+_WINDOWS_ONEDRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]+Users[\\/]+[^\\/]+[\\/]+OneDrive[^\\/]*[\\/]*(.*)$", re.I)
+
+
+def _normalize_drive_folder(raw: str) -> tuple[str | None, str | None]:
+    """Convierte una ruta de Windows o de OneDrive en una ruta relativa segura a la raíz del OneDrive."""
+    text = str(raw or "").strip()
+    match = _WINDOWS_ONEDRIVE_RE.match(text)
+    if match:
+        text = match.group(1)
+    parts = [p.strip() for p in re.split(r"[\\/]+", text) if p.strip()]
+    if len(parts) > 10:
+        return None, "La carpeta tiene demasiados niveles (máximo 10)."
+    for part in parts:
+        if part in (".", "..") or re.search(r'[<>:"|?*\x00-\x1f]', part):
+            return None, f"Nombre de carpeta no válido: '{part}'."
+    return "/".join(parts), None
+
+
+def _upload_file_tool(args: dict, **_kwargs) -> str:
+    user_id = _task_user_id()
+    if not user_id:
+        return json.dumps({"success": False, "error": "No se pudo determinar el usuario de esta tarea."})
+    token, _site, err = _get_m365_token(user_id)
+    if not token:
+        return _auth_error(err)
+    raw_path = str(args.get("file_path") or "").strip()
+    if not raw_path:
+        return json.dumps({"success": False, "error": "Se requiere file_path (archivo del directorio de trabajo)."})
+    folder, folder_error = _normalize_drive_folder(args.get("folder"))
+    if folder_error:
+        return json.dumps({"success": False, "error": folder_error}, ensure_ascii=False)
+    path, path_error = _resolve_local_file(raw_path)
+    if path_error:
+        return json.dumps({"success": False, "error": path_error}, ensure_ascii=False)
+    display = str(args.get("name") or path.name).strip() or path.name
+    item, upload_error = _upload_local_file(token, path, folder, _safe_drive_name(display))
+    if upload_error:
+        return json.dumps({"success": False, "error": upload_error}, ensure_ascii=False)
+    return json.dumps(
+        {
+            "success": True,
+            "name": item.get("name"),
+            "folder": folder or "(raíz de OneDrive)",
+            "size": path.stat().st_size,
+            "url": item.get("webUrl"),
+            "note": "Si OneDrive está sincronizado en su equipo, el archivo aparece solo en esa carpeta. Si ya existía uno con el mismo nombre, se guardó con otro nombre; nada se sobrescribe.",
+        },
+        ensure_ascii=False,
+    )
 
 
 def _share_file_tool(args: dict, **_kwargs) -> str:
@@ -707,7 +965,14 @@ def register(ctx):
         toolset=TOOLSET,
         schema={
             "name": "sharepoint_list_files",
-            "description": "Lista archivos y carpetas en OneDrive o en un sitio SharePoint específico.",
+            "description": (
+                "Lista archivos y carpetas en OneDrive o en un sitio SharePoint. Con site_url y folder_path prueba solo las "
+                "bibliotecas del sitio hasta encontrar la carpeta (no hace falta adivinar el nombre de la biblioteca). "
+                "Con depth=2 o 3 devuelve el ÁRBOL de subcarpetas en una sola llamada: úsalo para mapear o entender cómo "
+                "está estructurada una carpeta, en vez de buscar con sharepoint_search una y otra vez. Para «mostrar todas "
+                "las carpetas a las que tengo acceso» llama UNA vez con solo_carpetas=true y depth=4 (devuelve solo carpetas, "
+                "con cuántos archivos tiene cada una); NO llames carpeta por carpeta."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -717,7 +982,19 @@ def register(ctx):
                     },
                     "folder_path": {
                         "type": "string",
-                        "description": "Ruta de carpeta (opcional, ej: 'Documents/Projects')",
+                        "description": "Ruta de carpeta (opcional, ej: 'Gerencia/TI/10. SGSI' o 'Documentos/Proyectos')",
+                    },
+                    "depth": {
+                        "type": "integer",
+                        "description": "Niveles de subcarpetas a devolver como árbol (1 a 3, default 1; hasta 4 con solo_carpetas)",
+                    },
+                    "solo_carpetas": {
+                        "type": "boolean",
+                        "description": "true: el árbol trae solo carpetas (con el número de archivos de cada una), mucho más corto; ideal para mapear todo.",
+                    },
+                    "max_items": {
+                        "type": "integer",
+                        "description": "Máximo de elementos del árbol (50 a 800, default 300).",
                     },
                 },
             },
@@ -837,6 +1114,39 @@ def register(ctx):
         handler=_share_file_tool,
         description="Subir archivo a OneDrive y obtener enlace",
         emoji="🔗",
+    )
+    ctx.register_tool(
+        name="sharepoint_upload_file",
+        toolset=TOOLSET,
+        schema={
+            "name": "sharepoint_upload_file",
+            "description": (
+                "Guarda un archivo del directorio de trabajo del agente (máx. 50 MB) en una carpeta del OneDrive "
+                "del propio usuario, por ejemplo Escritorio/Proyectos/IA. Acepta una ruta de Windows como "
+                "C:\\Users\\x\\OneDrive - Contoso\\Escritorio\\Proyectos (se traduce sola). Crea las carpetas "
+                "que falten y NUNCA sobrescribe: si ya existe un archivo con ese nombre, lo guarda con otro. "
+                "Si el OneDrive está sincronizado, el archivo aparece en el equipo del usuario. Úsala cuando el "
+                "usuario pida guardar o dejar un archivo en una carpeta suya; para solo un enlace usa sharepoint_share_file."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Ruta del archivo dentro del directorio de trabajo (ej. outputs/informe.docx)",
+                    },
+                    "folder": {
+                        "type": "string",
+                        "description": "Carpeta de destino en el OneDrive del usuario (ej. Escritorio/Usuario/Proyectos/IA) o su ruta de Windows",
+                    },
+                    "name": {"type": "string", "description": "Nombre con que se guarda (opcional)"},
+                },
+                "required": ["file_path", "folder"],
+            },
+        },
+        handler=_upload_file_tool,
+        description="Guardar archivo en una carpeta del OneDrive del usuario",
+        emoji="📤",
     )
     ctx.register_tool(
         name="sharepoint_download_file",

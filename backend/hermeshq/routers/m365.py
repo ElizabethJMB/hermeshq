@@ -306,6 +306,7 @@ class AgentScopesUpdate(BaseModel):
 # Mapping: which scopes activate which delegated integration
 # Keys must match the actual Azure AD granted permissions
 _SCOPE_TO_INTEGRATION: dict[str, str] = {
+    "User.ReadBasic.All": "ms365-mail",
     "Mail.Read": "ms365-mail",
     "Mail.Send": "ms365-mail",
     "Mail.ReadWrite": "ms365-mail",
@@ -427,7 +428,9 @@ async def get_agent_m365_token(
     """Called by managed integration plugins running inside an agent runtime.
     Validates agent credentials, verifies the agent is assigned to the user,
     checks allowed scopes, and returns a fresh access token."""
-    from hermeshq.core.security import verify_agent_service_token
+    import hmac as _hmac
+
+    from hermeshq.core.security import create_agent_service_token
     from hermeshq.models.agent import Agent
     from hermeshq.models.agent_assignment import AgentAssignment
 
@@ -435,11 +438,12 @@ async def get_agent_m365_token(
     agent_token = request.headers.get("X-HermesHQ-Agent-Token", "").strip()
     if not agent_id or not agent_token:
         raise HTTPException(status_code=401, detail="Missing agent credentials")
+    expected = create_agent_service_token(agent_id)
+    if not _hmac.compare_digest(agent_token, expected):
+        raise HTTPException(status_code=401, detail="Invalid agent credentials")
     agent = await db.get(Agent, agent_id)
     if not agent or agent.is_archived:
         raise HTTPException(status_code=401, detail="Unknown agent")
-    if not verify_agent_service_token(agent_token, agent_id, agent.service_token_version or 1):
-        raise HTTPException(status_code=401, detail="Invalid agent credentials")
 
     assignment_result = await db.execute(
         select(AgentAssignment).where(

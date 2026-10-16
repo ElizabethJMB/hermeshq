@@ -11,10 +11,12 @@ Usa esta skill cuando el usuario necesite consultar, buscar o enviar correos de 
 
 - `ms365_mail_list` — Lista los correos de una carpeta (inbox, sentitems, drafts, deleteditems o cualquier carpeta/subcarpeta propia por nombre o ruta, ej. `Informaciones`); admite `since`, `unread_only` y `preview_chars`
 - `ms365_mail_folders` — Lista todas las carpetas y subcarpetas del buzón con su ruta y cantidad de correos; úsala cuando el usuario nombre una carpeta propia
-- `ms365_find_person` — Busca el correo de una persona por nombre en el historial de correos y reuniones del usuario (no en el directorio de la empresa); devuelve candidatos y SIEMPRE se debe pedir confirmación al usuario antes de usarlos
+- `ms365_find_person` — Busca el correo de una persona por nombre en el historial de correos y reuniones del usuario y en el directorio de toda la empresa (con cargo y área; si responde `directorio_no_disponible`, el usuario debe reconectar su cuenta M365 para dar el permiso User.ReadBasic.All); devuelve candidatos y SIEMPRE se debe pedir confirmación al usuario antes de usarlos
+- `ms365_inbox_estado` — Mantiene el estado del informe horario de correos y entrega los datos del informe (críticos, nuevos, backlog) en UNA llamada; no escribas scripts ni edites work/cron_inbox_estado.json
+- `ms365_mail_get_many` — Obtiene hasta 10 correos por sus IDs en UNA llamada (en paralelo); úsala siempre que necesites leer más de uno
 - `ms365_mail_get` — Obtiene un correo por su ID; el cuerpo llega en texto plano y recortado (admite `max_chars`; `format=html` solo si necesitas el HTML original)
 - `ms365_mail_send` — Envía un correo en nombre del usuario con varios destinatarios (`to`, `cc`, `bcc`), archivos adjuntos (`attachments`) e imágenes incrustadas (`inline_images`)
-- `ms365_mail_search` — Busca correos por palabras clave
+- `ms365_mail_search` — Busca correos en todo el buzón o en una carpeta: palabras clave más filtros `from`, `subject`, `since`, `until`, `has_attachments` y `folder`; devuelve los más recientes primero
 
 ## Uso correcto
 
@@ -51,3 +53,8 @@ trabajo. Si algún `content_id` no aparece como `cid:` en el HTML, la respuesta 
 Para "los correos de la última hora" o "desde las 08:00" usa `ms365_mail_list` con `since` (fecha ISO 8601 en UTC,
 por ejemplo `2026-10-06T20:00:00Z`) y, si solo importan los pendientes, `unread_only: true`. Así el filtro lo hace
 Microsoft y no traes 50 correos para descartar la mayoría: la tarea responde antes y gasta menos.
+
+## Buscar correos rápido (una sola búsqueda bien hecha)
+Cada llamada tarda segundos y cada vuelta del agente cuesta más: **no pruebes variantes de palabras una por una**. Haz UNA búsqueda combinando filtros: `ms365_mail_search(query="cuentas", from="Servantis", since="2026-10-07", count=20)`. Las palabras de `query` deben aparecer todas: usa 1 o 2 palabras clave, no frases largas. Si el usuario da un remitente, una fecha o una carpeta, ponlos como `from`, `since`/`until` o `folder`. Si no aparece, amplía UNA vez (quita una palabra o usa `ms365_mail_list` con `since`) y si sigue sin aparecer, dilo y pide un dato más; no encadenes más de 3 búsquedas.
+
+**Leer varios correos:** nunca llames `ms365_mail_get` uno por uno; junta los IDs y usa `ms365_mail_get_many(message_ids=[...], max_chars=1500)`: una vuelta en vez de diez.
