@@ -10,7 +10,7 @@ from tests.test_ms365_mail_get import _load
 MENSAJE = {
     "subject": "Ticket 4521: acceso USB",
     "from": {"emailAddress": {"address": "marcelo@example.com"}},
-    "toRecipients": [{"emailAddress": {"address": "enzo@example.com"}}],
+    "toRecipients": [{"emailAddress": {"address": "usuario@example.com"}}],
     "receivedDateTime": "2026-10-16T18:00:00Z",
     "hasAttachments": True,
 }
