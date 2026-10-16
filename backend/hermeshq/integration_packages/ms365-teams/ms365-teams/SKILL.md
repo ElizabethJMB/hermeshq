@@ -26,7 +26,7 @@ Usa esta skill cuando el usuario necesite consultar o interactuar con sus chats 
 
 1. Si tienes solo el nombre, `ms365_find_person` y confirma con el usuario cuál es.
 2. Llama `teams_send_to_person(email, message)`: la primera vez devuelve una **vista previa** sin enviar.
-3. Muéstrale al usuario a quién y qué texto, y pregunta si lo envías. Con su «sí», repite la llamada con `aprobado_por_el_usuario=true`.
+3. Muéstrale al usuario a quién y qué texto, y pregunta si lo envías. Con su «sí», repite la llamada con `aprobado_por_el_usuario=true`. Termina ahí tu respuesta y espera su siguiente mensaje: la herramienta rechaza la aprobación si el usuario no respondió entre la vista previa y el envío.
 4. Nunca envíes sin esa aprobación ni inventes el texto. Informa el resultado tal cual (si el chat era nuevo o ya existía).
 
 ## Notas

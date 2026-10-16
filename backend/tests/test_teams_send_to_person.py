@@ -1,5 +1,7 @@
 import importlib.util
 import json
+import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -23,8 +25,15 @@ class TestSendToPerson(unittest.TestCase):
     def setUp(self):
         self.mod = _cargar()
         self.llamadas = []
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        entorno = patch.dict(os.environ, {"HERMES_SESSION_CWD": self.tmp.name})
+        entorno.start()
+        self.addCleanup(entorno.stop)
 
-    def _ejecutar(self, args, usuarios=None, chats=None, crear_error=None, envio_error=None):
+    def _ejecutar(
+        self, args, usuarios=None, chats=None, crear_error=None, envio_error=None, vista_previa=True, tarea="tarea-2"
+    ):
         def graph(method, path, token, payload=None):
             self.llamadas.append((method, path, payload))
             if path.startswith("/users?"):
@@ -39,12 +48,18 @@ class TestSendToPerson(unittest.TestCase):
                 return {"error": crear_error} if crear_error else {"id": "chat-nuevo"}
             raise AssertionError(path)
 
+        def correr(argumentos, tarea_actual):
+            with patch.object(self.mod, "_current_task_id", return_value=tarea_actual):
+                return json.loads(self.mod._send_to_person_tool(argumentos))
+
         with (
             patch.object(self.mod, "_task_user_id", return_value="u1"),
             patch.object(self.mod, "_get_m365_token", return_value=("tok", "")),
             patch.object(self.mod, "_graph", side_effect=graph),
         ):
-            return json.loads(self.mod._send_to_person_tool(args))
+            if args.get("aprobado_por_el_usuario") and vista_previa:
+                correr({k: v for k, v in args.items() if k != "aprobado_por_el_usuario"}, "tarea-1")
+            return correr(args, tarea)
 
     def _enviados(self):
         return [c for c in self.llamadas if c[0] == "POST" and c[1].endswith("/messages")]
@@ -113,6 +128,44 @@ class TestSendToPerson(unittest.TestCase):
         self._ejecutar({"email": "o'brien@x.cl", "message": "Hola"})
         ruta = next(c[1] for c in self.llamadas if c[1].startswith("/users?"))
         self.assertIn("o%27%27brien", ruta)
+
+    def _datos(self):
+        return {"email": PERSONA["mail"], "message": "Aviso de prueba", "aprobado_por_el_usuario": True}
+
+    def test_an_approval_without_a_previous_preview_is_refused_and_sends_nothing(self):
+        r = self._ejecutar(self._datos(), vista_previa=False)
+        self.assertFalse(r["success"])
+        self.assertTrue(r["requiere_aprobacion"])
+        self.assertIn("No se envió", r["error"])
+        self.assertEqual(self._enviados(), [])
+
+    def test_the_agent_cannot_approve_in_the_same_task_that_showed_the_preview(self):
+        r = self._ejecutar(self._datos(), tarea="tarea-1")
+        self.assertFalse(r["success"])
+        self.assertEqual(self._enviados(), [])
+
+    def test_changing_the_text_after_the_preview_needs_a_new_preview(self):
+        self._ejecutar({**self._datos(), "message": "Texto distinto"}, vista_previa=False)
+        r = self._ejecutar(self._datos(), vista_previa=False)
+        self.assertFalse(r["success"])
+        self.assertEqual(self._enviados(), [])
+
+    def test_an_expired_preview_does_not_count(self):
+        with patch.object(self.mod.time, "time", return_value=1_000_000.0):
+            self._ejecutar({k: v for k, v in self._datos().items() if k != "aprobado_por_el_usuario"})
+        with patch.object(self.mod.time, "time", return_value=1_000_000.0 + 3600):
+            r = self._ejecutar(self._datos(), vista_previa=False)
+        self.assertFalse(r["success"])
+        self.assertEqual(self._enviados(), [])
+
+    def test_a_preview_is_used_once(self):
+        primero = self._ejecutar(self._datos(), chats=[{"id": "c1", "members": [{"userId": "u-jon"}]}])
+        self.assertTrue(primero["success"], primero)
+        segundo = self._ejecutar(
+            self._datos(), vista_previa=False, chats=[{"id": "c1", "members": [{"userId": "u-jon"}]}]
+        )
+        self.assertFalse(segundo["success"])
+        self.assertEqual(len(self._enviados()), 1)
 
     def test_the_tool_is_registered_and_listed_in_the_manifest(self):
         class Ctx:
