@@ -49,24 +49,24 @@ class TestFindPerson(unittest.TestCase):
 
     def test_filters_by_name_and_ignores_accents(self):
         out = self._run(
-            {"name": "carla rios"},
+            {"name": "ana torres"},
             mail=[
-                _msg(("Carla Rios", "crios@example.com"), to=[("Ana Lopez", "d@example.com")]),
+                _msg(("Ana Torres", "atorres@example.com"), to=[("Maria", "m@example.com")]),
                 _msg(("Otra Persona", "otra@x.cl")),
             ],
         )
-        self.assertEqual([c["address"] for c in out["candidates"]], ["crios@example.com"])
+        self.assertEqual([c["address"] for c in out["candidates"]], ["atorres@example.com"])
         self.assertIn("confirma", out["note"].lower())
 
     def test_counts_and_merges_sources_across_mail_sent_and_meetings(self):
-        person = ("Gabriel Mena", "gmena@example.com")
+        person = ("Luis Rojas", "lrojas@example.com")
         out = self._run(
-            {"name": "mena"},
+            {"name": "rojas"},
             mail=[_msg(person)],
-            sent=[_msg(("Ana Lopez", "d@x.cl"), to=[person])],
+            sent=[_msg(("Maria", "d@x.cl"), to=[person])],
             events=[
                 {
-                    "organizer": {"emailAddress": {"name": "Ana Lopez", "address": "d@x.cl"}},
+                    "organizer": {"emailAddress": {"name": "Maria", "address": "d@x.cl"}},
                     "attendees": [{"emailAddress": {"name": person[0], "address": person[1]}}],
                     "start": {"dateTime": "2026-10-07T11:00:00"},
                 }

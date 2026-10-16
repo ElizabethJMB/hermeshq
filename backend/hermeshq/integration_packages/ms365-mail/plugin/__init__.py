@@ -1425,7 +1425,7 @@ def register(ctx):
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string", "description": "Nombre o apellido a buscar (ej. 'Carla Rios')"},
+                    "name": {"type": "string", "description": "Nombre o apellido a buscar (ej. 'Ana Torres')"},
                     "max_results": {"type": "integer", "description": "Máximo de candidatos (default 8, máx 20)"},
                 },
                 "required": ["name"],
