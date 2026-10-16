@@ -1,7 +1,7 @@
 """add bound_user_id to public_chat_api_keys
 
 Revision ID: b4c5d6e7f8a9
-Revises: aa11bb22cc33
+Revises: bb22cc33dd44
 Create Date: 2026-09-30
 """
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "b4c5d6e7f8a9"
-down_revision: str | Sequence[str] | None = "aa11bb22cc33"
+down_revision: str | Sequence[str] | None = "bb22cc33dd44"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
