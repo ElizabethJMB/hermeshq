@@ -1409,6 +1409,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enrollment/llm/v1/chat/completions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Llm Proxy Chat */
+        post: operations["llm_proxy_chat_api_enrollment_llm_v1_chat_completions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/hermes-versions": {
         parameters: {
             query?: never;
@@ -9864,6 +9881,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeviceRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    llm_proxy_chat_api_enrollment_llm_v1_chat_completions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-HermesHQ-Device-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
