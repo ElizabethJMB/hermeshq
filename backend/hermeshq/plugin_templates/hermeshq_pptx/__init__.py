@@ -209,7 +209,12 @@ DESC_FROM_TEMPLATE = (
     "un 'layout' (nombre o índice) y trae title, subtitle, bullets (texto o {text, level}), text, image_path, "
     "table {headers, rows}, notes y, si hace falta, fields {marcador: texto}. Las láminas de ejemplo de la plantilla "
     "se descartan (keep_template_slides=true las conserva). Los marcadores vacíos se eliminan para que no quede "
-    "'Haga clic para agregar texto'. Revisa 'avisos' en la respuesta. NO armes presentaciones con python-pptx y "
+    "'Haga clic para agregar texto'. Si la plantilla trae láminas ya diseñadas (portadas, agendas, bloques con "
+    "gráficos corporativos) que hay que duplicar en vez de armar desde un diseño, la inspección lista las formas de "
+    "cada lámina (nombre, texto actual, posición, tamaño) y la lámina se pide con 'base' (número de lámina de la "
+    "plantilla) y 'replace' {nombre de la forma o texto actual: texto nuevo}, más 'boxes' [{x, y, w, h en pulgadas, "
+    "text|bullets, size, bold, color, font}] para cuerpos de texto nuevos; los logos, ondas e imágenes de la lámina "
+    "base se conservan. Revisa 'avisos' en la respuesta. NO armes presentaciones con python-pptx y "
     "execute_code ni las revises lámina por lámina con vision_analyze salvo que el usuario lo pida."
 )
 
@@ -230,7 +235,8 @@ def register(ctx):
                         "type": "array",
                         "items": {"type": "object"},
                         "description": (
-                            "Láminas en orden: [{layout, title, subtitle, bullets, text, image_path, table, notes, fields}]."
+                            "Láminas en orden: [{layout, title, subtitle, bullets, text, image_path, table, notes, fields}] "
+                            "o, para duplicar una lámina de la plantilla: [{base, replace, boxes, notes}]."
                         ),
                     },
                     "filename": {"type": "string", "description": "Nombre del archivo de salida."},

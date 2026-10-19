@@ -141,5 +141,96 @@ class PptxTemplateTests(unittest.TestCase):
             self.assertIn(nombre, manifiesto)
 
 
+class PptxBaseSlideTests(unittest.TestCase):
+    def setUp(self):
+        from PIL import Image
+        from pptx import Presentation
+        from pptx.util import Inches, Pt
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+        entorno = patch.dict(os.environ, {"HERMES_SESSION_CWD": self.tmp.name})
+        entorno.start()
+        self.addCleanup(entorno.stop)
+        Image.new("RGB", (200, 100), (0, 51, 93)).save(self.dir / "logo.png")
+        base = Presentation()
+        for etiqueta in ("PORTADA", "CONTENIDO"):
+            lamina = base.slides.add_slide(base.slide_layouts[6])
+            caja = lamina.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(1))
+            caja.name = "Titulo"
+            caja.text_frame.text = f"TITULO {etiqueta}"
+            caja.text_frame.paragraphs[0].runs[0].font.size = Pt(40)
+            lamina.shapes.add_picture(str(self.dir / "logo.png"), Inches(8), Inches(0.2), Inches(1.5))
+            pie = lamina.shapes.add_textbox(Inches(1), Inches(6), Inches(4), Inches(0.5))
+            pie.text_frame.text = "MES AÑO"
+        base.save(str(self.dir / "plantilla.pptx"))
+
+    def _llamar(self, **args):
+        return json.loads(plugin._handle_from_template({"template": "plantilla.pptx", **args}))
+
+    def _abrir(self, salida):
+        from pptx import Presentation
+
+        return Presentation(salida["path"])
+
+    def test_inspecting_lists_the_shapes_of_each_template_slide(self):
+        r = self._llamar(inspect=True)
+        formas = r["laminas_existentes"][0]["formas"]
+        self.assertEqual(len(formas), 2)
+        self.assertEqual(formas[0]["nombre"], "Titulo")
+        self.assertEqual(formas[0]["texto"], "TITULO PORTADA")
+        self.assertEqual(formas[0]["pt"], 40)
+
+    def test_a_template_slide_is_duplicated_with_its_graphics_and_new_text(self):
+        r = self._llamar(
+            slides=[
+                {"base": 1, "replace": {"Titulo": "Resumen 2026", "MES AÑO": "Octubre 2026"}},
+                {"base": 2, "replace": {"TITULO CONTENIDO": "Detalle"}},
+                {"base": 2, "replace": {"Titulo": "Otro\nen dos líneas"}},
+            ]
+        )
+        self.assertTrue(r["success"], r)
+        prs = self._abrir(r)
+        self.assertEqual(len(prs.slides), 3)
+        textos = [[f.text_frame.text for f in lamina.shapes if f.has_text_frame] for lamina in prs.slides]
+        self.assertEqual(textos[0], ["Resumen 2026", "Octubre 2026"])
+        self.assertEqual(textos[1][0], "Detalle")
+        self.assertIn("Otro", textos[2][0])
+        self.assertIn("en dos líneas", textos[2][0])
+        self.assertNotIn("\x0b", textos[0][0])
+        for lamina in prs.slides:
+            imagenes = [f for f in lamina.shapes if f.shape_type == 13]
+            self.assertEqual(len(imagenes), 1)
+            self.assertGreater(len(imagenes[0].image.blob), 100)
+        self.assertEqual(prs.slides[0].shapes[0].text_frame.paragraphs[0].runs[0].font.size.pt, 40)
+
+    def test_boxes_add_new_text_and_must_fit_in_the_slide(self):
+        caja = {"x": 1, "y": 2.5, "w": 6, "h": 2, "bullets": ["Uno", "Dos"], "size": 20, "color": "#123456"}
+        r = self._llamar(slides=[{"base": 1, "boxes": [caja]}])
+        self.assertTrue(r["success"], r)
+        textos = [f.text_frame.text for f in self._abrir(r).slides[0].shapes if f.has_text_frame]
+        self.assertIn("Uno\nDos", textos)
+        fuera = self._llamar(slides=[{"base": 1, "boxes": [{**caja, "x": 9.5}]}])
+        self.assertFalse(fuera["success"])
+        self.assertIn("se sale", fuera["error"])
+
+    def test_wrong_keys_and_bases_are_explained(self):
+        r = self._llamar(slides=[{"base": 1, "replace": {"INEXISTENTE": "x"}}])
+        self.assertFalse(r["success"])
+        self.assertIn("Disponibles", r["error"])
+        self.assertIn("TITULO PORTADA", r["error"])
+        r = self._llamar(slides=[{"base": 9}])
+        self.assertFalse(r["success"])
+        self.assertIn("1 a 2", r["error"])
+        r = self._llamar(slides=[{"base": 0}])
+        self.assertFalse(r["success"])
+
+    def test_layout_slides_and_base_slides_can_be_mixed(self):
+        r = self._llamar(slides=[{"base": 1, "replace": {"Titulo": "Portada"}}, {"layout": 1, "title": "Nueva"}])
+        self.assertTrue(r["success"], r)
+        self.assertEqual(len(self._abrir(r).slides), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
