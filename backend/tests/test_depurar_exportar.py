@@ -133,5 +133,18 @@ class TestExportarExcel(unittest.TestCase):
         self.assertIn("hq_datos_extraer", json.loads(plugin._exportar_datos({"tema": "otro", "hoja": "x"}))["error"])
 
 
+class TestColumnaNoEncontrada(unittest.TestCase):
+    def test_it_suggests_close_names_and_flags_pivot_tables(self):
+        with self.assertRaises(ValueError) as parecida:
+            plugin._columna_real("Descripcion evento", ["Tipo", "Descripción del evento", "Fecha"])
+        self.assertIn("Quisiste decir", str(parecida.exception))
+        with self.assertRaises(ValueError) as pivote:
+            plugin._columna_real("Año", ["Etiquetas de fila", "Cuenta de Operación"])
+        self.assertIn("tabla dinámica", str(pivote.exception))
+        with self.assertRaises(ValueError) as comun:
+            plugin._columna_real("Zzz", ["Tipo", "Fecha"])
+        self.assertNotIn("tabla dinámica", str(comun.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

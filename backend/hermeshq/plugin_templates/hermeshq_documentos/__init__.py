@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import datetime
+import difflib
 import hashlib
 import importlib.util
 import json
@@ -418,7 +419,17 @@ def _columna_real(nombre, columnas):
     parecidas = [c for c in columnas if buscada and buscada in _sin_acentos(c)]
     if len(parecidas) == 1:
         return parecidas[0]
-    raise ValueError(f"no encuentro la columna '{nombre}'. Columnas: {columnas}")
+    cercanas = difflib.get_close_matches(buscada, [_sin_acentos(c) for c in columnas], n=3, cutoff=0.6)
+    sugerencia = [c for c in columnas if _sin_acentos(c) in cercanas]
+    mensaje = f"no encuentro la columna '{nombre}'. Columnas: {columnas}"
+    if sugerencia:
+        mensaje += f". ¿Quisiste decir {sugerencia}?"
+    if any(_sin_acentos(c).startswith(("etiquetas de fila", "row labels")) for c in columnas):
+        mensaje += (
+            ". Esta hoja parece una tabla dinámica ya resumida: sus columnas son totales, no los datos originales. "
+            "Busca la hoja con los registros sin resumir (o pídela al usuario) antes de consultar por esas columnas."
+        )
+    raise ValueError(mensaje)
 
 
 def _numero(valor):
